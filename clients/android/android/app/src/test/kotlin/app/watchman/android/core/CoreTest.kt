@@ -259,6 +259,28 @@ class CoreTest {
     }
 
     @Test
+    fun scrollPredictorKeepsMovingBetweenEventsAndEasesOut() {
+        val p = ScrollPredictor()
+        // First event of a gesture: 100 px, taken as 100 ms of travel (1 px per ms).
+        assertEquals(100, p.onEvent(100, 1_000))
+        assertTrue(p.active)
+        // Frames at 120 Hz keep moving about 8 px each.
+        var predicted = 0
+        var t = 1_000L
+        repeat(12) { t += 8; predicted += p.onFrame(t) }
+        assertTrue(predicted in 90..100)
+        // The next real event says 100 px: only the difference is applied.
+        val correction = p.onEvent(100, 1_100)
+        assertEquals(100 - predicted, correction)
+        // No more events: the speed eases to a stop within a second.
+        t = 1_100L
+        var tail = 0
+        repeat(120) { t += 8; tail += p.onFrame(t) }
+        assertFalse(p.active)
+        assertTrue(tail in 100..400)
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

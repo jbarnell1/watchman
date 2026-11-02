@@ -8,6 +8,22 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-042 - Blurs that follow a scroll are predicted between Android's scroll events
+**2026-11-02.** Blurs that follow a scroll (ADR-032, a setting since ADR-040) jumped behind the
+finger. Cause: a view sends its accessibility scroll event at most every 100 ms, with the distance
+since the last one, so on a 120 Hz screen the blur moved once every 12 frames, after the content.
+Better signals are closed to an app: an accessibility service that asks for touchscreen motion
+events takes them away from the app under the finger (the observe-only form is a hidden test
+API); an overlay that lets touches through gets no coordinates for other apps' touches; a
+launcher controls only the home screen; frame-rate screenshots need MediaProjection and its
+recording indicator (ADR-026). So the phone predicts: each real event sets the speed and corrects
+the blur to where the content is; between events the blur moves every display frame at that
+speed, never more than one event's travel ahead; with no event the speed eases out like a fling.
+While moving, each blur is stretched along the scroll by 60 ms of travel each side (at most 240
+px). Metrics `scroll_event_gap_ms`, `scroll_events` and `scroll_unknown_delta` measure what apps
+really send. Still behind `follow_scroll`, off by default. Not pursued yet: shell-level input
+access through Shizuku or ADB (raw touch at full rate), which needs pairing after every reboot.
+
 ### ADR-040 - Scroll-following is a setting; strict mode covers new pictures until judged
 **2026-11-02.** The owner found blurs that move with a scroll (ADR-032) not effective enough to
 keep on unconditionally: the app's reported distance often lags the picture. `follow_scroll`, a

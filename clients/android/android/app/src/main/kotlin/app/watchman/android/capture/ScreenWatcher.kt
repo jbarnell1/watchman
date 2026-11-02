@@ -355,7 +355,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
     /** The page scrolled by (dx, dy) inside [area]: patches move with it now, the next pass confirms. */
     fun shiftPatches(dx: Int, dy: Int, area: Rect?) {
-        val moved = overlay.shift(dx, dy, area)
+        val moved = overlay.scrolled(dx, dy, area)
         if (moved > 0) metrics.count("patches_scrolled", moved.toLong())
         // The pictures the timed tick re-checks moved too.
         lastRegions = lastRegions?.let { (p, u, r) ->

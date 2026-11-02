@@ -32,6 +32,8 @@ class WatchAccessibilityService : AccessibilityService() {
     }
 
     private var lastBlockedAt = 0L
+    private var lastScrollPkg = ""
+    private var lastScrollAt = 0L
     private var watcher: ScreenWatcher? = null
 
     override fun onServiceConnected() {
@@ -60,6 +62,13 @@ class WatchAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
             val dx = event.scrollDeltaX
             val dy = event.scrollDeltaY
+            // How often apps really report a scroll, and with what distance (ADR-042).
+            val metrics = app.watchman.android.core.Metrics.shared
+            val now = android.os.SystemClock.uptimeMillis()
+            if (pkg == lastScrollPkg && now - lastScrollAt < 1000) metrics.time("scroll_event_gap_ms", (now - lastScrollAt).toDouble())
+            lastScrollPkg = pkg
+            lastScrollAt = now
+            metrics.count(if (ScrollShift.known(dx, dy)) "scroll_events" else "scroll_unknown_delta")
             // Only when the household turned scroll-following on; off by default (ADR-040).
             if (ScrollShift.known(dx, dy) && AppState.get(this).policy?.followScroll == true) {
                 val area = android.graphics.Rect()
