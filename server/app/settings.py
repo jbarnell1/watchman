@@ -61,6 +61,9 @@ class Settings(BaseModel):
         "com.duckduckgo.mobile.android", "com.sec.android.app.sbrowser",
     ])
     protected_browser: str = "org.mozilla.firefox"
+    # Not watched (ADR-030): while one of these apps is in front nothing is judged, covered or
+    # reported. Adding one is loosening, so with locks on it needs a partner code.
+    exempt_apps: list[str] = Field(default_factory=list)
     sample_interval_s: int = 180
     whole_screen_interval_s: int = 5
     # Per-person protection settings: person id to {key: value} for keys in PERSON_KEYS. A person
@@ -84,18 +87,20 @@ class Settings(BaseModel):
 
 LOCKED_KEYS = frozenset({
     "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
-    "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on",
+    "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s",
     "whole_screen_interval_s", "max_pause_minutes", "heartbeat_gap_minutes",
 })
 
 POLICY_KEYS = frozenset({
+    "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s", "whole_screen_interval_s",
 })
 
 # The protection keys a person may have their own values for.
 PERSON_KEYS = frozenset({
+    "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "risky_apps", "blocked_apps",
     "protected_browser", "sample_interval_s", "whole_screen_interval_s",
 })

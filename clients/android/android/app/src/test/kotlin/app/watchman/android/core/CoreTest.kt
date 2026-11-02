@@ -121,6 +121,19 @@ class CoreTest {
     }
 
     @Test
+    fun picturesAreImageViewsOrSquareDescribedLeaves() {
+        // YouTube reports a channel avatar as a described Button with no text.
+        assertTrue(RegionRule.isPicture("android.widget.Button", true, false, 0, false, 216, 216))
+        assertTrue(RegionRule.isPicture("android.widget.ImageView", false, false, 0, false, 72, 72))
+        assertFalse(RegionRule.isPicture("android.view.ViewGroup", true, false, 0, false, 984, 90))   // a text row
+        assertFalse(RegionRule.isPicture("android.widget.Button", true, true, 0, false, 216, 216))    // has text
+        assertFalse(RegionRule.isPicture("android.widget.Button", false, false, 0, false, 216, 216))  // no description
+        assertFalse(RegionRule.isPicture("android.view.ViewGroup", true, false, 3, false, 216, 216))  // not a leaf
+        assertFalse(RegionRule.isPicture("android.widget.EditText", true, false, 0, true, 216, 216))
+        assertFalse(RegionRule.isPicture("android.widget.ImageView", false, false, 0, false, 12, 12))
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

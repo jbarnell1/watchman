@@ -8,6 +8,22 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-030 - Pictures the accessibility tree does not call images; apps a household does not watch
+**2026-11-02.** On a YouTube channel list the avatars are reported as `Button` nodes with a
+description and no text, so the region rule (image views, image buttons, described `View` leaves)
+never handed them to the model; measured on the owner's phone, three of the six skipped avatars
+scored 0.89 to 0.93 or tripped the detector and would have been covered at once. The rule now also
+takes any leaf with a description and no text whose sides are within a factor of two of each other
+(`RegionRule`); text rows and toolbars stay out because they are wide and short. A real region
+finder over the pixels for apps that report nothing useful remains the next step.
+Households also need to leave some apps alone, a photo library for example: `exempt_apps` (Not
+watched) stops judging, covering and reporting while one of them is in front. It is a lock-group
+setting where adding an app is loosening, so with locks on it needs a partner code, and the list
+reaches partners through the digest's settings changes. Android applies it today.
+Rejected: treating every leaf as a picture (thousands of crops on a busy screen at today's
+classifier speed), an exempt list that needs no code (an exemption is exactly what a partner should
+see).
+
 ### ADR-029 - Partners see a medium blur, and a light one when they peek
 **2026-11-02.** The first real event, a 54 px avatar the phone scored 0.89 and the second opinion
 0.07, was unreadable on the review page: the default view squeezed every crop to a few pixels before

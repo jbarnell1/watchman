@@ -86,6 +86,7 @@ Response 200:
                      "ANUS_EXPOSED", "BUTTOCKS_EXPOSED"],
  "risky_apps": ["com.google.android.youtube", "org.mozilla.firefox"],
  "blocked_apps": ["com.android.chrome"],
+ "exempt_apps": [],
  "protected_browser": "org.mozilla.firefox",
  "sample_interval_s": 180,
  "whole_screen_interval_s": 5,
@@ -100,6 +101,9 @@ means, which clients use instead of the manifest's list when present (ADR-021).
 (ADR-022). Both default to true when absent. The policy is per person: the server merges the
 household's settings with that person's own values before answering, so two people on one server
 can run different postures.
+
+`exempt_apps` are apps not watched at all (ADR-030): while one is in front nothing is judged,
+covered or reported. Android applies it today.
 
 App identifiers are platform specific (Android package names, Windows process names, iOS bundle
 IDs); clients ignore entries that are not theirs. `known_bad_hashes` are 64-bit dHash hex strings.

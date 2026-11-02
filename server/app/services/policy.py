@@ -40,6 +40,7 @@ def policy_for(ctx: Context, person_id: str) -> dict:
         "explicit_labels": explicit_labels(s.coverage),
         "risky_apps": s.risky_apps,
         "blocked_apps": s.blocked_apps,
+        "exempt_apps": s.exempt_apps,
         "protected_browser": s.protected_browser,
         "sample_interval_s": s.sample_interval_s,
         "whole_screen_interval_s": s.whole_screen_interval_s,

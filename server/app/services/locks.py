@@ -21,7 +21,8 @@ from app.settings import PERSON_KEYS, Settings, effective
 LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "protection": ("Thresholds, coverage and posture",
                    ("thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides")),
-    "apps": ("Blocked and risky apps, protected browser", ("blocked_apps", "risky_apps", "protected_browser")),
+    "apps": ("Blocked, risky and not-watched apps, protected browser",
+             ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser")),
     "timing": ("Timing and silence alerts", ("sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes")),
     "pauses": ("Pauses and peeks", ("max_pause_minutes", "peek_seconds", "peek_cooldown_hours")),
     "retention": ("How long blurred images are kept", ("image_retention_days",)),
@@ -76,6 +77,9 @@ def loosens(key: str, old: Any, new: Any, current: Settings | None = None) -> bo
         return bool(old) and not bool(new)
     if key in LISTS:
         return bool(set(old or []) - set(new or []))
+    if key == "exempt_apps":
+        # The opposite list: every app added is one less app watched.
+        return bool(set(new or []) - set(old or []))
     if key in LOWER_IS_STRONGER:
         return float(new) > float(old)
     if key in HIGHER_IS_STRONGER:
@@ -111,7 +115,8 @@ LABELS = {
     "thresholds": "thresholds", "strict_mode": "strict mode", "coverage": "coverage",
     "cover_on_device": "blur on the device", "ask_server": "asking the server",
     "person_overrides": "a person's own values", "blocked_apps": "blocked apps", "risky_apps": "risky apps",
-    "protected_browser": "the protected browser", "sample_interval_s": "the sample interval",
+    "protected_browser": "the protected browser", "exempt_apps": "apps not watched",
+    "sample_interval_s": "the sample interval",
     "whole_screen_interval_s": "the whole-screen interval", "heartbeat_gap_minutes": "the silence alert",
     "max_pause_minutes": "the longest pause", "peek_seconds": "peek length", "peek_cooldown_hours": "peek cooldown",
     "image_retention_days": "image retention", "unlocked_groups": "the locks", "locks_on": "turning locks off",

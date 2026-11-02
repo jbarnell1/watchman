@@ -27,7 +27,6 @@ class WatchAccessibilityService : AccessibilityService() {
         private val browserPackages = setOf("org.mozilla.firefox", "com.android.chrome", "com.brave.browser", "com.microsoft.emmx",
             "com.opera.browser", "com.duckduckgo.mobile.android", "com.sec.android.app.sbrowser", "org.mozilla.fenix")
         private const val OWN_PACKAGE = "app.watchman.android"
-        private val imageClasses = setOf("android.widget.ImageView", "android.widget.ImageButton", "android.view.View")
     }
 
     private var lastBlockedAt = 0L
@@ -47,10 +46,14 @@ class WatchAccessibilityService : AccessibilityService() {
             foregroundPackage = pkg
             if (isBlocked(pkg)) { block(pkg); return }
         }
+        // Apps the household marked Not watched: nothing is judged while they are in front (ADR-030).
+        if (isExempt(pkg)) return
         if (pkg in browserPackages) lastUrl = readUrl(rootInActiveWindow) ?: lastUrl
         val regions = imageRegions(rootInActiveWindow)
         if (regions.isNotEmpty()) watcher?.judgeRegions(pkg, lastUrl, regions)
     }
+
+    private fun isExempt(pkg: String): Boolean = AppState.get(this).policy?.exemptApps?.contains(pkg) == true
 
     private fun isBlocked(pkg: String): Boolean {
         val policy = AppState.get(this).policy ?: return false
@@ -72,13 +75,13 @@ class WatchAccessibilityService : AccessibilityService() {
         root ?: return emptyList()
         val out = ArrayList<Rect>()
         walk(root, 0) { node ->
-            val cls = node.className?.toString() ?: ""
-            val looksLikeImage = cls.endsWith("ImageView") || cls.endsWith("ImageButton") || cls in imageClasses && node.contentDescription != null && node.childCount == 0
-            if (looksLikeImage && node.isVisibleToUser) {
-                val r = Rect()
-                node.getBoundsInScreen(r)
-                if (r.width() >= 20 && r.height() >= 20) out.add(r)
-            }
+            if (!node.isVisibleToUser) return@walk
+            val r = Rect()
+            node.getBoundsInScreen(r)
+            val picture = app.watchman.android.core.RegionRule.isPicture(
+                node.className?.toString() ?: "", !node.contentDescription.isNullOrEmpty(), !node.text.isNullOrEmpty(),
+                node.childCount, node.isEditable, r.width(), r.height())
+            if (picture) out.add(r)
         }
         return out.sortedByDescending { it.width() * it.height() }.take(40)
     }
