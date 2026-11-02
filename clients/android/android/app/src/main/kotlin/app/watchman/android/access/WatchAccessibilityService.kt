@@ -60,7 +60,8 @@ class WatchAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
             val dx = event.scrollDeltaX
             val dy = event.scrollDeltaY
-            if (ScrollShift.known(dx, dy)) {
+            // Only when the household turned scroll-following on; off by default (ADR-040).
+            if (ScrollShift.known(dx, dy) && AppState.get(this).policy?.followScroll == true) {
                 val area = android.graphics.Rect()
                 event.source?.getBoundsInScreen(area)
                 watcher?.shiftPatches(ScrollShift.of(dx), ScrollShift.of(dy), if (area.isEmpty) null else area)

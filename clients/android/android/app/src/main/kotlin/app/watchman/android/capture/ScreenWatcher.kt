@@ -324,7 +324,17 @@ class ScreenWatcher(private val service: AccessibilityService) {
     /** Called by the accessibility service with image rectangles in screen pixels; one pass per [REGION_COALESCE_MS] with the latest set. */
     fun judgeRegions(pkg: String, url: String?, regions: List<RegionTracker.Region>) {
         handler.post {
-            if (state.policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
+            val policy = state.policy
+            if (policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
+            // Strict mode in risky apps: new pictures are covered now, from their position alone,
+            // and the region pass below lifts the ones judged safe (ADR-040).
+            if (policy != null && policy.strictMode && policy.coverOnDevice != false && pkg in policy.riskyApps) {
+                val fresh = tracker.fresh(regions)
+                if (fresh.isNotEmpty()) {
+                    metrics.count("strict_covers", fresh.size.toLong())
+                    overlay.coverPending(fresh.map { rectOf(it) })
+                }
+            }
             pendingRegions = Triple(pkg, url, regions)
             if (regionPassScheduled) return@post
             regionPassScheduled = true

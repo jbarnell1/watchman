@@ -345,3 +345,15 @@ def test_watch_levels_reach_the_policy_and_lighter_levels_loosen(ctx, client, ho
     with ctx.conn:
         ctx.settings.set("exempt_apps", ["com.google.android.apps.photos"], "owner")
     assert not locks.loosens("checked_apps", [], ["com.google.android.apps.photos"], ctx.settings.load())
+
+
+def test_follow_scroll_is_off_by_default_and_can_be_turned_on(ctx, client, household, device):
+    from app.services import locks
+    assert locks.loosens("follow_scroll", True, False)
+    _, headers = device
+    assert client.get("/api/v1/policy", headers=headers).json()["follow_scroll"] is False
+    r = client.post("/settings/protection", data=dict(PROTECTION_FORM, follow_scroll="on"), headers=as_login(ADMIN),
+                    follow_redirects=False)
+    assert "saved=1" in r.headers["location"]
+    policy = client.get("/api/v1/policy", headers=headers).json()
+    assert policy["follow_scroll"] is True and policy["strict_mode"] is True

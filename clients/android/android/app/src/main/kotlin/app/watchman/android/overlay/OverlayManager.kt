@@ -22,6 +22,8 @@ import app.watchman.android.core.Pixels
 class OverlayManager(private val context: Context) {
     companion object {
         /** A patch outlives the pass that drew it by this much; the timed re-check refreshes it sooner. */
+        /** A strict-mode cover waits this long for its judgement at most. */
+        const val PENDING_MS = 5_000L
         const val HOLD_MS = 30_000L
     }
 
@@ -31,7 +33,10 @@ class OverlayManager(private val context: Context) {
     private val patches = ArrayList<Patch>()
 
     /** [solid] patches blank an app switcher thumbnail; region passes never lift them. */
-    private class Patch(val region: Rect, val bitmap: Bitmap, var until: Long, val solid: Boolean = false)
+    /** A patch with no bitmap is a plain cover for a picture not judged yet (strict mode, ADR-040). */
+    private class Patch(val region: Rect, val bitmap: Bitmap?, var until: Long, val solid: Boolean = false)
+
+    private val pendingPaint = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#26333A") }
 
     private inner class PatchView(context: Context) : View(context) {
         override fun onDraw(canvas: Canvas) {
@@ -40,7 +45,10 @@ class OverlayManager(private val context: Context) {
             synchronized(patches) {
                 for (p in patches) {
                     if (p.until < now) continue
-                    canvas.drawBitmap(p.bitmap, (p.region.left - loc[0]).toFloat(), (p.region.top - loc[1]).toFloat(), null)
+                    val x = (p.region.left - loc[0]).toFloat()
+                    val y = (p.region.top - loc[1]).toFloat()
+                    if (p.bitmap != null) canvas.drawBitmap(p.bitmap, x, y, null)
+                    else canvas.drawRect(x, y, x + p.region.width(), y + p.region.height(), pendingPaint)
                 }
             }
         }
@@ -123,6 +131,20 @@ class OverlayManager(private val context: Context) {
                 bmp.eraseColor(android.graphics.Color.parseColor("#0B1114"))
                 patches.add(Patch(Rect(r), bmp, now + holdMillis, solid = true))
             }
+        }
+        main.post { if (patches.isEmpty()) hide() else show() }
+    }
+
+    /**
+     * Strict mode (ADR-040): cover pictures that just appeared, from their position alone, until a
+     * region pass judges them. A replacing pass lifts the ones judged safe and swaps the rest for
+     * real patches; any left over expire after [holdMillis].
+     */
+    fun coverPending(rects: List<Rect>, holdMillis: Long = PENDING_MS) {
+        if (rects.isEmpty() || !Settings.canDrawOverlays(context)) return
+        val now = System.currentTimeMillis()
+        synchronized(patches) {
+            for (r in rects) if (patches.none { it.region == r }) patches.add(Patch(Rect(r), null, now + holdMillis))
         }
         main.post { if (patches.isEmpty()) hide() else show() }
     }

@@ -77,6 +77,7 @@
     <div class="pair" style="display:none">
     </div>
     <label class="check"><input type="checkbox" name="strict_mode" {% if settings.strict_mode %}checked{% endif %}> Strict mode in risky apps: cover new images until each one scores safe {{ lock('strict_mode') }}</label>
+    <label class="check"><input type="checkbox" name="follow_scroll" {% if settings.follow_scroll %}checked{% endif %}> Blurs follow a scroll as it happens. Off leaves them in place until the next check moves them. {{ lock('follow_scroll') }}</label>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Coverage {{ lock('coverage') }}</h2><p>How much skin counts. The classifier judges every image for pornography at the thresholds above; this decides which body parts the detector also covers.</p></div><div class="spanel">
     <label for="coverage">Cover</label>
