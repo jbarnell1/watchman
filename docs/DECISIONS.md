@@ -11,9 +11,12 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 ### ADR-034 - A small sorter model on the phone; the classifier on XNNPACK with four threads
 **2026-11-02.** On the owner's Pixel the crop classifier took about 250 ms a picture through NNAPI
 on two threads, so a screen of a dozen new pictures took seconds and covers appeared in screen
-order. Two changes. First, ONNX Runtime now runs every phone model on its XNNPACK backend with
-four threads (plain CPU with four threads if XNNPACK will not load); NNAPI ran few of these models'
-operators. Each model is warmed up at load and the steady times go to the metrics. Second, a small
+order. Two changes. First, NNAPI is dropped (it ran few of these models' operators) and each model
+is opened at load on both ONNX Runtime's XNNPACK backend and the plain CPU backend, four threads
+each, timed on a plain picture, and kept on the faster one; the times go to the metrics. On the
+Pixel, XNNPACK made the int8 classifier slower (290 ms a picture), because XNNPACK cannot run its
+quantized operators and they fall back to one CPU thread, so no one fixed backend suits every
+model. Second, a small
 MobileNetV4 NSFW classifier (`crop_gate`, about 10 MB, Apache-2.0, pinned upstream revision) scores
 every new picture first, and the real classifier then judges them most suspicious first, with each
 cover drawn the moment it is decided (`first_cover_ms` measures it). Measured on four real

@@ -137,8 +137,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
         return try {
             val gateFile = state.gateFile(service)?.takeIf { it.exists() }
             val s = OnnxScorer(classifier, state.classifierFile(service).absolutePath, state.detector, state.detectorFile(service)?.absolutePath,
-                state.gate.takeIf { gateFile != null }, gateFile?.absolutePath)
-            s.warmUp(metrics)
+                state.gate.takeIf { gateFile != null }, gateFile?.absolutePath, metrics)
             scorer = s
             pipeline = Pipeline(s, metrics = metrics)
             provider = s.provider

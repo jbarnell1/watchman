@@ -28,12 +28,14 @@ class FakeScorer(var classifierScore: Double = 0.0, var boxes: List<Box> = empty
 }
 
 /**
- * ONNX Runtime on its XNNPACK backend with [THREADS] threads, else plain CPU (ADR-034). NNAPI was
- * dropped: on the Pixel it ran few of these models' operators and fell back to the CPU anyway.
+ * ONNX Runtime with the faster of two backends per model, measured at load (ADR-034): XNNPACK with
+ * [THREADS] threads, or plain CPU with [THREADS] threads. XNNPACK is quick for float models but
+ * cannot run the int8 classifier's quantized operators, which then fall back to one CPU thread.
+ * NNAPI was dropped: on the Pixel it ran few of these models' operators.
  * Models come verified from the household server.
  */
 class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: ModelEntry?, detectorPath: String?,
-                 gate: ModelEntry? = null, gatePath: String? = null) : Scorer, AutoCloseable {
+                 gate: ModelEntry? = null, gatePath: String? = null, private val metrics: Metrics? = null) : Scorer, AutoCloseable {
     private val env = OrtEnvironment.getEnvironment()
     private val classifierEntry = classifier
     private val detectorEntry = detector
@@ -41,29 +43,53 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
     private val classifierSession: OrtSession
     private val detectorSession: OrtSession?
     private val gateSession: OrtSession?
+    /** The backend each model ended up on, with its time on a plain picture. */
     val provider: String
 
     init {
-        val (options, p) = options()
-        classifierSession = env.createSession(classifierPath, options)
-        detectorSession = if (detector != null && detectorPath != null) env.createSession(detectorPath, options().first) else null
-        gateSession = if (gate != null && gatePath != null) env.createSession(gatePath, options().first) else null
-        provider = p
+        val plain = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GRAY) }
+        val chosen = ArrayList<String>()
+        classifierSession = fastest("classify", classifierPath, chosen) { softmaxRun(it, classifier, plain) }
+        detectorSession = if (detector != null && detectorPath != null) fastest("detect", detectorPath, chosen) { detectRun(it, detector, plain) } else null
+        gateSession = if (gate != null && gatePath != null) fastest("gate", gatePath, chosen) { softmaxRun(it, gate, plain) } else null
+        provider = chosen.joinToString(", ")
+        plain.recycle()
     }
 
-    private fun options(): Pair<OrtSession.SessionOptions, String> {
-        val o = OrtSession.SessionOptions()
-        return try {
-            // XNNPACK keeps its own thread pool; ORT's own pool stays at one thread and does not spin.
-            o.addXnnpack(mapOf("intra_op_num_threads" to THREADS.toString()))
-            o.setIntraOpNumThreads(1)
-            o.addConfigEntry("session.intra_op.allow_spinning", "0")
-            o to "xnnpack x$THREADS"
-        } catch (_: Throwable) {
-            val cpu = OrtSession.SessionOptions()
-            cpu.setIntraOpNumThreads(THREADS)
-            cpu to "cpu x$THREADS"
+    /** Open [path] on each backend, time [WARM_RUNS] runs after a first one, keep the faster session. */
+    private fun fastest(name: String, path: String, chosen: MutableList<String>, run: (OrtSession) -> Unit): OrtSession {
+        var best: OrtSession? = null
+        var bestMs = Double.MAX_VALUE
+        var bestName = ""
+        for ((label, options) in backends()) {
+            val session = try { env.createSession(path, options) } catch (_: Throwable) { continue }
+            try {
+                run(session)  // the first run of a session is slow
+                val t0 = System.nanoTime()
+                repeat(WARM_RUNS) { run(session) }
+                val ms = (System.nanoTime() - t0) / 1_000_000.0 / WARM_RUNS
+                metrics?.time("warm_${name}_${label.substringBefore(' ')}_ms", ms)
+                if (ms < bestMs) { best?.close(); best = session; bestMs = ms; bestName = label } else session.close()
+            } catch (_: Throwable) {
+                session.close()
+            }
         }
+        chosen.add("$name $bestName ${"%.0f".format(bestMs)} ms")
+        return best ?: throw IllegalStateException("$name: no backend could run the model")
+    }
+
+    private fun backends(): List<Pair<String, OrtSession.SessionOptions>> {
+        val out = ArrayList<Pair<String, OrtSession.SessionOptions>>()
+        try {
+            val x = OrtSession.SessionOptions()
+            // XNNPACK keeps its own thread pool; ORT's own pool stays at one thread and does not spin.
+            x.addXnnpack(mapOf("intra_op_num_threads" to THREADS.toString()))
+            x.setIntraOpNumThreads(1)
+            x.addConfigEntry("session.intra_op.allow_spinning", "0")
+            out.add("xnnpack x$THREADS" to x)
+        } catch (_: Throwable) { }
+        out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply { setIntraOpNumThreads(THREADS) })
+        return out
     }
 
     override val detectorOutput: ModelOutput? get() = detectorEntry?.output
@@ -74,6 +100,11 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
     override fun gate(crop: Bitmap): Double {
         val session = gateSession ?: return 0.0
         return softmaxRun(session, gateEntry!!, crop)
+    }
+
+    override fun detect(crop: Bitmap): List<Box> {
+        val session = detectorSession ?: return emptyList()
+        return detectRun(session, detectorEntry!!, crop)
     }
 
     private fun softmaxRun(session: OrtSession, entry: ModelEntry, crop: Bitmap): Double {
@@ -93,9 +124,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
         }
     }
 
-    override fun detect(crop: Bitmap): List<Box> {
-        val session = detectorSession ?: return emptyList()
-        val entry = detectorEntry!!
+    private fun detectRun(session: OrtSession, entry: ModelEntry, crop: Bitmap): List<Box> {
         val (tensor, lb) = Pixels.letterboxTensor(crop, entry.input)
         val size = entry.input.size.toLong()
         OnnxTensor.createTensor(env, FloatBuffer.wrap(tensor), longArrayOf(1, 3, size, size)).use { t ->
@@ -109,20 +138,6 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
                 return Yolo.decode(flat, intArrayOf(1, rows, anchors), entry.output, lb)
             }
         }
-    }
-
-    /**
-     * Run each model a few times on a plain picture: the first run of a session is slow, and the
-     * steady times go to the metrics so the Devices page shows what this phone really does.
-     */
-    fun warmUp(metrics: Metrics) {
-        val plain = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GRAY) }
-        repeat(WARM_RUNS) {
-            metrics.timed("warm_classify_ms") { classify(plain) }
-            if (gateSession != null) metrics.timed("warm_gate_ms") { gate(plain) }
-            if (detectorSession != null) metrics.timed("warm_detect_ms") { detect(plain) }
-        }
-        plain.recycle()
     }
 
     override fun close() {
