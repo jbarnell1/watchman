@@ -21,6 +21,10 @@ class Thresholds(BaseModel):
     # Below cover but at or above ask, a device covers the image and asks the server's bigger model;
     # the server answers in memory and stores nothing unless the answer is explicit (ADR-022).
     ask: float = 0.60
+    # At or above cover but below sure, a device still covers first and asks the server, lifting the
+    # blur on a safe answer; only at sure or above (or a known-bad hash) does it report without asking.
+    # On the first day of real use the phone and the server disagreed on 18 of 63 covers (ADR-033).
+    sure: float = 0.97
     detector_cover: float = 0.55
     second_opinion: float = 0.70
 

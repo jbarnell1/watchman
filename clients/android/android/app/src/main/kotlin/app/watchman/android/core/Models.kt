@@ -9,7 +9,7 @@ import com.google.gson.annotations.SerializedName
 val gson: Gson = GsonBuilder().disableHtmlEscaping().create()
 
 data class Thresholds(val cover: Double, val flag: Double, @SerializedName("detector_cover") val detectorCover: Double,
-                      val ask: Double? = null)
+                      val ask: Double? = null, val sure: Double? = null)
 
 data class Policy(
     val version: Int,

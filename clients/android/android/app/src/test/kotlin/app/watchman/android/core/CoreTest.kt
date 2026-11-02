@@ -54,7 +54,10 @@ class CoreTest {
         val t = Thresholds(0.85, 0.85, 0.55, ask = 0.6)
         assertTrue(Decide.shouldAsk(0.7, t, askServer = true))
         assertFalse(Decide.shouldAsk(0.7, t, askServer = false))
-        assertFalse(Decide.shouldAsk(0.9, t, askServer = true))
+        assertFalse(Decide.shouldAsk(0.9, t, askServer = true))                    // no sure line: cover is the end
+        val sure = Thresholds(0.85, 0.85, 0.55, ask = 0.6, sure = 0.97)
+        assertTrue(Decide.shouldAsk(0.9, sure, askServer = true))                  // covered, and asked (ADR-033)
+        assertFalse(Decide.shouldAsk(0.98, sure, askServer = true))
         assertFalse(Decide.shouldAsk(0.7, Thresholds(0.85, 0.85, 0.55), askServer = true)) // no ask line
         assertEquals(Decision.FLAG, Decide.settle(Decision.COVER, coverOnDevice = false))
         assertEquals(Decision.COVER, Decide.settle(Decision.COVER, coverOnDevice = true))
@@ -141,6 +144,15 @@ class CoreTest {
         assertTrue(ScrollShift.known(-1, 120))
         assertEquals(0, ScrollShift.of(-1))
         assertEquals(-35, ScrollShift.of(-35))
+    }
+
+    @Test
+    fun switcherTilesMatchCoveredAppsByName() {
+        val covered = listOf("YouTube", "Instagram")
+        assertTrue(SwitcherMatch.matches("YouTube", covered))
+        assertTrue(SwitcherMatch.matches("youtube, 2 minutes ago", covered))
+        assertFalse(SwitcherMatch.matches("Gmail", covered))
+        assertFalse(SwitcherMatch.matches("", covered))
     }
 
     @Test

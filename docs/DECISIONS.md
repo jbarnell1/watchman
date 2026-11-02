@@ -8,6 +8,21 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-033 - Ask the server about every cover that is not sure; blank the app switcher's thumbnails
+**2026-11-02.** On the first day of real use the phone and the server disagreed on 18 of 63 crops
+the phone covered, so a phone cover at 0.85 to 0.97 is often a false alarm, and it stayed blurred
+for as long as the picture was on screen. A new `sure` line (default 0.97) extends the ask band
+(ADR-022): from `ask` up to `sure` the device covers first and asks; a safe answer lifts the blur
+within about a second on the tailnet and nothing is reported. At `sure` or above, or on a
+known-bad hash, it covers and reports as before. Raising `sure` is loosening under ADR-028.
+The app switcher showed covered pictures: it is drawn by the launcher from snapshots of each app's
+own window, which never include another app's overlay. While the launcher is in front, the phone
+finds the thumbnails (`:id/snapshot` views) and blanks the thumbnail of any app that had covered
+pictures in the last 15 minutes. Scroll events now arrive about every frame (16 ms) instead of
+every 100 ms, so patches step less while following a scroll.
+Rejected: lifting phone covers on a timer (a timer does not know whether the picture is explicit),
+a solid overlay over the whole switcher (it would hide every app, not only the risky ones).
+
 ### ADR-032 - Phone patches move with the scroll the app reports
 **2026-11-02.** On the phone a patch stayed where the picture had been until the next pass found
 the picture again, which at today's model speed could be several seconds, so a scrolled picture

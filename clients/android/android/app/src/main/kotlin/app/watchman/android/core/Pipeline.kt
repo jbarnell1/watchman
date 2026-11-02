@@ -55,7 +55,7 @@ class Pipeline(private val scorer: Scorer, private val cache: DecisionCache = De
             var decision = Decide.settle(Decide.combine(classifier, detectorScore, thresholds), coverOnDevice)
             val score = maxOf(classifier, detectorScore ?: 0.0)
             // Unsure: cover now, remember nothing yet; the server's answer resolves it (ADR-022).
-            if (decision != Decision.COVER && coverOnDevice && Decide.shouldAsk(score, thresholds, askServer)) {
+            if (coverOnDevice && Decide.shouldAsk(score, thresholds, askServer)) {
                 metrics.count("asks_started")
                 out.add(Finding(r, Decision.COVER, score, hash, labels, Pixels.jpeg(crop), ask = true))
                 continue

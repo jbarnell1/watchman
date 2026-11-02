@@ -99,6 +99,12 @@ def test_a_malformed_event_is_rejected_alone(ctx, client, device):
     assert body["rejected"][0]["reason"] == "missing id, type, occurred_at"
 
 
+def test_policy_carries_the_sure_line(ctx, client, device):
+    _, headers = device
+    t = client.get("/api/v1/policy", headers=headers).json()["thresholds"]
+    assert t["sure"] == 0.97 and t["ask"] < t["cover"] < t["sure"]
+
+
 def test_policy_version_is_cheap_and_follows_settings(ctx, client, device):
     _, headers = device
     v1 = client.get("/api/v1/policy/version", headers=headers).json()

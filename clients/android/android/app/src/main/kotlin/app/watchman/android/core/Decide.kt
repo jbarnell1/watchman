@@ -17,11 +17,11 @@ object Decide {
 
     fun isKnownBad(hash: String, knownBad: List<String>): Boolean = knownBad.any { DHash.matches(it, hash) }
 
-    /** Between ask and cover the device covers first and asks the server (ADR-022), when the policy allows. */
+    /** From ask up to sure the device covers first and asks the server (ADR-022, ADR-033). */
     fun shouldAsk(score: Double, t: Thresholds, askServer: Boolean): Boolean {
         if (!askServer) return false
         val ask = t.ask ?: return false
-        return score >= ask && score < t.cover
+        return score >= ask && score < (t.sure ?: t.cover)
     }
 
     /** Report only (cover_on_device off): nothing is covered, what would have been is flagged. */

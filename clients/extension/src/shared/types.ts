@@ -7,6 +7,7 @@ export interface Thresholds {
   flag: number;
   detector_cover: number;
   ask?: number;
+  sure?: number;
 }
 
 export interface Policy {

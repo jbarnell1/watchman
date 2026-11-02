@@ -332,7 +332,7 @@ AREAS: dict[str, list[str]] = {
 
 def _parse_setting(key: str, form) -> object:
     if key == "thresholds":
-        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask")
+        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure")
         return {k: float(form.get(f"thresholds.{k}", 0)) for k in keys}
     if key == "smtp":
         return {

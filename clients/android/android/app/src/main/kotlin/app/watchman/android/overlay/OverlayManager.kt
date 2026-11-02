@@ -30,7 +30,8 @@ class OverlayManager(private val context: Context) {
     private var view: PatchView? = null
     private val patches = ArrayList<Patch>()
 
-    private class Patch(val region: Rect, val bitmap: Bitmap, var until: Long)
+    /** [solid] patches blank an app switcher thumbnail; region passes never lift them. */
+    private class Patch(val region: Rect, val bitmap: Bitmap, var until: Long, val solid: Boolean = false)
 
     private inner class PatchView(context: Context) : View(context) {
         override fun onDraw(canvas: Canvas) {
@@ -61,7 +62,7 @@ class OverlayManager(private val context: Context) {
         }
         synchronized(patches) {
             patches.removeAll { it.until < now }
-            if (replace) patches.removeAll { old -> fresh.none { it.region == old.region } }
+            if (replace) patches.removeAll { old -> !old.solid && fresh.none { it.region == old.region } }
             for (p in fresh) {
                 patches.removeAll { it.region == p.region }
                 patches.add(p)
@@ -97,12 +98,33 @@ class OverlayManager(private val context: Context) {
                 if (area != null && !Rect.intersects(area, p.region)) continue
                 val r = Rect(p.region).apply { offset(-dx, -dy) }
                 if (area != null && !Rect.intersects(area, r)) { it.remove(); continue }
-                it.set(Patch(r, p.bitmap, p.until))
+                it.set(Patch(r, p.bitmap, p.until, p.solid))
                 moved++
             }
         }
         if (moved > 0) main.post { view?.invalidate() }
         return moved
+    }
+
+    /**
+     * Blank these rectangles (app switcher thumbnails) in Watchman's ink for a few seconds; the next
+     * switcher event refreshes them, and leaving the switcher lets them lapse. Old solid patches that
+     * are not in [rects] go at once.
+     */
+    fun coverSolid(rects: List<Rect>, holdMillis: Long = 3000) {
+        if (!Settings.canDrawOverlays(context)) return
+        val now = System.currentTimeMillis()
+        synchronized(patches) {
+            patches.removeAll { it.solid && rects.none { r -> r == it.region } }
+            for (r in rects) {
+                val existing = patches.firstOrNull { it.solid && it.region == r }
+                if (existing != null) { existing.until = now + holdMillis; continue }
+                val bmp = Bitmap.createBitmap(maxOf(1, r.width()), maxOf(1, r.height()), Bitmap.Config.ARGB_8888)
+                bmp.eraseColor(android.graphics.Color.parseColor("#0B1114"))
+                patches.add(Patch(Rect(r), bmp, now + holdMillis, solid = true))
+            }
+        }
+        main.post { if (patches.isEmpty()) hide() else show() }
     }
 
     /** Lift the patch over one region: the server said the picture is safe. */
