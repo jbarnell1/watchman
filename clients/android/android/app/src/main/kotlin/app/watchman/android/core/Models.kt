@@ -26,6 +26,7 @@ data class Policy(
     @SerializedName("known_bad_hashes") val knownBadHashes: List<String>,
     @SerializedName("cover_on_device") val coverOnDevice: Boolean? = null,
     @SerializedName("ask_server") val askServer: Boolean? = null,
+    @SerializedName("exempt_apps") val exemptApps: List<String>? = null,
 ) {
     fun isPaused(nowMillis: Long = System.currentTimeMillis()): Boolean =
         pausedUntil != null && Iso.parse(pausedUntil) > nowMillis

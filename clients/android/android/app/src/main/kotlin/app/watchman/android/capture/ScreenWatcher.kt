@@ -259,6 +259,11 @@ class ScreenWatcher(private val service: AccessibilityService) {
         when {
             policy.isPaused() -> { overlay.clear(); scheduleTick(interval) }
             screenOff -> scheduleTick(interval)
+            policy.exemptApps?.contains(app.watchman.android.access.WatchAccessibilityService.foregroundPackage) == true -> {
+                metrics.count("exempt_ticks")
+                overlay.clear()
+                scheduleTick(interval)
+            }
             else -> takeDisplay { frame ->
                 if (frame != null && frameSeq != judgedSeq) {
                     judgedSeq = frameSeq

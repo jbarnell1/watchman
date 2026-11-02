@@ -86,6 +86,8 @@
     <label for="protected_browser">Protected browser</label><input id="protected_browser" name="protected_browser" value="{{ settings.protected_browser }}">
     <label for="risky_apps">Risky apps (strict mode applies)</label><textarea id="risky_apps" name="risky_apps" rows="4">{{ settings.risky_apps|join('\n') }}</textarea>
     <label for="blocked_apps">Blocked apps</label><textarea id="blocked_apps" name="blocked_apps" rows="6">{{ settings.blocked_apps|join('\n') }}</textarea>
+    <label for="exempt_apps">Not watched</label><textarea id="exempt_apps" name="exempt_apps" rows="3" placeholder="com.google.android.apps.photos">{{ settings.exempt_apps|join('\n') }}</textarea>
+    <p class="t2">Nothing is judged, covered or reported while one of these is in front. Partners see this list in the digest; with locks on, adding to it needs a partner code. Android only for now.</p>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Timing {{ lock('sample_interval_s') }}</h2><p>Seconds between accountability samples and whole-screen passes; minutes of silence before a device counts as tampered with.</p></div><div class="spanel">
     <div class="pair three">

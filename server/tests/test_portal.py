@@ -302,3 +302,20 @@ def test_locks_start_off_turn_on_free_and_off_needs_a_code(ctx, client, househol
     off = {k: v for k, v in on.items() if k != "locks_on"}
     r = client.post("/settings/protection", data=off, headers=as_login(ADMIN), follow_redirects=False)
     assert "turning locks off" in unquote(r.headers["location"]) and ctx.settings.load().locks_on is True
+
+def test_exempt_apps_reach_the_policy_and_adding_one_loosens(ctx, client, household, device):
+    from app.services import locks
+    assert locks.loosens("exempt_apps", [], ["com.google.android.apps.photos"])
+    assert not locks.loosens("exempt_apps", ["com.google.android.apps.photos"], [])
+    r = client.post("/settings/protection", data=dict(PROTECTION_FORM, exempt_apps="com.google.android.apps.photos",
+                    **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")}),
+                    headers=as_login(ADMIN), follow_redirects=False)
+    assert "saved=1" in r.headers["location"]                 # locks are off while testing
+    _, headers = device
+    assert client.get("/api/v1/policy", headers=headers).json()["exempt_apps"] == ["com.google.android.apps.photos"]
+    with ctx.conn:
+        ctx.settings.set("locks_on", True, "owner")
+    form = dict(PROTECTION_FORM, exempt_apps="com.google.android.apps.photos\ncom.example.more", locks_on="on",
+                **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")})
+    r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
+    assert "apps not watched" in unquote(r.headers["location"])
