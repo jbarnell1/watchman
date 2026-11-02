@@ -62,6 +62,7 @@ class WatchmanService : Service() {
         while (true) {
             try {
                 flush()
+                checkPolicy()
                 val current = currentState()
                 val due = System.currentTimeMillis() - lastHeartbeatAt > 5 * 60 * 1000
                 if (due || current != lastReported) heartbeat(force = true)
@@ -119,6 +120,18 @@ class WatchmanService : Service() {
                 lastError = e.message
                 Log.w(TAG, "heartbeat", e)
             }
+        }
+    }
+
+    /** Settings changed on the portal reach the phone within about 30 s (ADR-031). */
+    private fun checkPolicy() {
+        val api = state.api() ?: return
+        try {
+            val v = api.policyVersion()
+            val policy = state.policy
+            if (policy == null || policy.version != v.policyVersion || policy.pausedUntil != v.pausedUntil) state.policy = api.policy()
+        } catch (e: Exception) {
+            Log.w(TAG, "policy check", e)
         }
     }
 

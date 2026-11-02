@@ -24,6 +24,7 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
             try
             {
                 await FlushAsync(ct);
+                await CheckPolicyAsync();
                 var reported = CurrentState();
                 var due = state.Clock.Now - _lastHeartbeat >= HeartbeatEvery;
                 if (due || reported != _lastReported) await HeartbeatAsync(force: true, ct);
@@ -33,6 +34,23 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
                 log.LogWarning(ex, "worker loop");
             }
             await Task.Delay(FlushEvery, ct);
+        }
+    }
+
+    /// <summary>Settings changed on the portal reach this PC within a loop (ADR-031).</summary>
+    private async Task CheckPolicyAsync()
+    {
+        using var api = state.Api();
+        if (api is null) return;
+        try
+        {
+            var v = await api.PolicyVersionAsync();
+            var p = state.Policy;
+            if (p is null || p.Version != v.PolicyVersion || p.PausedUntil != v.PausedUntil) state.Policy = await api.PolicyAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogDebug(ex, "policy check");
         }
     }
 

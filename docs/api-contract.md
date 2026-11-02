@@ -73,6 +73,11 @@ The server compares `state` with the previous heartbeat: a field turning off rai
 `protection_changed` event and an alert; `safe_mode: true` after `false` raises `tamper`.
 The client fetches `/api/v1/policy` when `policy_version` changed.
 
+### GET /api/v1/policy/version
+Response 200: `{"policy_version": 7, "paused_until": null}`. No writes. Devices poll it every 30 s
+or so and fetch `/api/v1/policy` when the version or the pause changed, so settings apply within
+about a minute instead of at the next five-minute heartbeat (ADR-031).
+
 ### GET /api/v1/policy
 Response 200:
 ```json

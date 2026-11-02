@@ -8,6 +8,17 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-031 - Patches stay while their picture does; heavy blur, a 3 s light peek; settings in a minute
+**2026-11-02.** On a still screen a phone patch vanished after eight seconds: patches expired unless
+a region pass found the picture again, and region passes only ran on accessibility events, which a
+still screen does not send. The timed whole-screen tick now also re-checks the pictures the app last
+reported (a hash and a cache hit each), patches hold for 30 s between refreshes, and a region pass
+made from the app window (which shows what is under the patches) lifts at once any patch whose
+picture was not found again. With real catches coming in, the owner asked for a heavy default blur
+for partners and a light blur only for a peek of at most three seconds; ADR-029's scaling stays.
+Settings reached devices only with the five-minute heartbeat; devices now poll a write-free
+`/api/v1/policy/version` on their 30 s loop.
+
 ### ADR-030 - Pictures the accessibility tree does not call images; apps a household does not watch
 **2026-11-02.** On a YouTube channel list the avatars are reported as `Button` nodes with a
 description and no text, so the region rule (image views, image buttons, described `View` leaves)

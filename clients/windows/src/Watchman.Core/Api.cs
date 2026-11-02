@@ -60,6 +60,9 @@ public sealed class Api : IDisposable
 
     public async Task<Policy> PolicyAsync() => await Read<Policy>(await _http.GetAsync("api/v1/policy"));
 
+    /// <summary>Version and pause only; polled between heartbeats (ADR-031).</summary>
+    public async Task<HeartbeatResponse> PolicyVersionAsync() => await Read<HeartbeatResponse>(await _http.GetAsync("api/v1/policy/version"));
+
     public async Task<EventsResponse> EventsAsync(IEnumerable<WatchmanEvent> events) =>
         await Read<EventsResponse>(await _http.PostAsJsonAsync("api/v1/events", new { events }, Json.Options));
 

@@ -46,6 +46,13 @@ async def get_policy(device: sqlite3.Row = Depends(current_device), ctx: Context
     return policy.policy_for(ctx, device["person_id"])
 
 
+@router.get("/policy/version")
+async def get_policy_version(device: sqlite3.Row = Depends(current_device), ctx: Context = Depends(get_ctx)) -> dict:
+    """What a device polls between heartbeats so settings apply within a minute (ADR-031). No writes."""
+    return {"policy_version": ctx.settings.load().policy_version,
+            "paused_until": policy.paused_until(ctx, device["person_id"])}
+
+
 @router.post("/events")
 async def post_events(body: dict, device: sqlite3.Row = Depends(current_device),
                       ctx: Context = Depends(get_ctx)) -> dict:

@@ -83,6 +83,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private var framesTaken = 0
     private var asked = 0
     private var pendingRegions: Triple<String, String?, List<Rect>>? = null
+    /** The pictures the app last reported; the timed tick re-checks them so patches stay put. */
+    private var lastRegions: Triple<String, String?, List<Rect>>? = null
     private var regionPassScheduled = false
     private val recentHashes = HashMap<String, Long>()
     private var stopped = false
@@ -276,6 +278,11 @@ class ScreenWatcher(private val service: AccessibilityService) {
                     screensSkipped++
                     metrics.count("screens_unchanged")
                 }
+                // A still screen sends no accessibility events, so nothing else would keep its patches
+                // fresh: re-check the pictures the app last reported (cache hits, a hash each).
+                lastRegions?.let { (lp, lu, lr) ->
+                    if (lp == app.watchman.android.access.WatchAccessibilityService.foregroundPackage) regionPass(lp, lu, lr, recheck = true)
+                }
                 updateWork()
                 scheduleTick(interval)
             }
@@ -292,26 +299,33 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 regionPassScheduled = false
                 val (p, u, r) = pendingRegions ?: return@postDelayed
                 pendingRegions = null
-                val policy = state.policy ?: return@postDelayed
-                if (stopped || screenOff || policy.isPaused() || !ensureModels()) return@postDelayed
-                takeAppWindow { shot ->
-                    if (shot == null) return@takeAppWindow
-                    metrics.count("region_passes")
-                    // A display shot contains our own patches: a picture under a patch cannot be seen,
-                    // so its patch is kept while the picture's rectangle is still on screen.
-                    val todo = if (shot.window) r else {
-                        val held = overlay.refreshIfCovered(r)
-                        metrics.count("patches_held_blind", held.size.toLong())
-                        r.filter { it !in held }
-                    }
-                    judge(shot, todo, p, u, power(), policy)
-                    updateWork()
-                }
+                lastRegions = Triple(p, u, r)
+                regionPass(p, u, r)
             }, REGION_COALESCE_MS)
         }
     }
 
-    private fun judge(shot: Shot, screenRegions: List<Rect>, pkg: String, url: String?, p: Power, policy: Policy) {
+    /** Judge the pictures the app reports. Cached pictures cost a hash, so re-checking is cheap. */
+    private fun regionPass(p: String, u: String?, r: List<Rect>, recheck: Boolean = false) {
+        val policy = state.policy ?: return
+        if (stopped || screenOff || policy.isPaused() || !ensureModels()) return
+        takeAppWindow { shot ->
+            if (shot == null) return@takeAppWindow
+            metrics.count(if (recheck) "region_rechecks" else "region_passes")
+            // A display shot contains our own patches: a picture under a patch cannot be seen,
+            // so its patch is kept while the picture's rectangle is still on screen.
+            val todo = if (shot.window) r else {
+                val held = overlay.refreshIfCovered(r)
+                metrics.count("patches_held_blind", held.size.toLong())
+                r.filter { it !in held }
+            }
+            judge(shot, todo, p, u, power(), policy, replace = shot.window)
+            updateWork()
+        }
+    }
+
+    private fun judge(shot: Shot, screenRegions: List<Rect>, pkg: String, url: String?, p: Power, policy: Policy,
+                      replace: Boolean = false) {
         val pipe = pipeline ?: return
         val frame = shot.bitmap
         val whole = Rect(0, 0, frame.width, frame.height)
@@ -330,10 +344,10 @@ class ScreenWatcher(private val service: AccessibilityService) {
         metrics.count("findings", findings.size.toLong())
         // Findings back to screen coordinates for the overlay and the events.
         val onScreen = findings.map { it.copy(region = Rect(it.region).apply { offset(shot.dx, shot.dy) }) }
-        apply(onScreen, pkg, url, shot)
+        apply(onScreen, pkg, url, shot, replace)
     }
 
-    private fun apply(findings: List<Finding>, pkg: String, url: String?, shot: Shot) {
+    private fun apply(findings: List<Finding>, pkg: String, url: String?, shot: Shot, replace: Boolean = false) {
         val frame = shot.bitmap
         val screen = service.resources.displayMetrics
         pipeline?.let { avgClassifyMs = it.avgClassifyMs }
@@ -342,7 +356,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
         val area = covered.sumOf { it.region.width().toLong() * it.region.height() }.toDouble() / (frame.width.toDouble() * frame.height)
         val blocked = coverOnDevice && area > 0.4
         if (blocked) BlockActivity.show(service, pkg)
-        else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy)
+        else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy, replace = replace)
         for (f in findings) {
             if (f.ask) ask(f, pkg, url, screen.widthPixels, screen.heightPixels)
             else record(f, pkg, url, screen.widthPixels, screen.heightPixels, blocked)

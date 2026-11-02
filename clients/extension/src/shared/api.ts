@@ -66,6 +66,10 @@ export class Api {
     return { server, token: r.token, device_id: r.device_id, person_id: r.person_id, server_name: r.server_name };
   }
 
+  policyVersion(): Promise<{ policy_version: number; paused_until: string | null }> {
+    return this.json("/api/v1/policy/version", undefined, "GET");
+  }
+
   heartbeat(body: Record<string, unknown>): Promise<{ policy_version: number; paused_until: string | null }> {
     return this.json("/api/v1/heartbeat", body);
   }
