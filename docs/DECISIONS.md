@@ -8,6 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-043 - Misses become data; the screen is scanned when accessibility reconnects
+**2026-11-02.** Tuning needs misses, and a miss leaves no event. The phone's notification now has
+a Missed something action: it scores the whole screen and every reported picture at once and sends
+the numbers (sizes, classifier and detector scores, decisive hash bits, any cached verdict, the
+app's watch level and the thresholds) as a `miss_reported` event, severity info. No image is sent
+or kept, so a miss of explicit content never travels. Also, after the accessibility service
+(re)connects nothing reported the screen until the app changed something, and a playing video
+changes nothing the tree shows (ADR-039); the service now scans the screen 500 ms after it
+connects.
+
 ### ADR-042 - Blurs that follow a scroll are predicted between Android's scroll events
 **2026-11-02.** Blurs that follow a scroll (ADR-032, a setting since ADR-040) jumped behind the
 finger. Cause: a view sends its accessibility scroll event at most every 100 ms, with the distance

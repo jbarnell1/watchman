@@ -168,6 +168,7 @@ Event `type` values and their `action`:
 | `protection_changed` | optional from clients; the server derives its own from heartbeats (ADR-015) and only those alert; `detail` has `{"field","from","to"}` | `none` |
 | `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump | `none` |
 | `pause_started` / `pause_ended` | an unlock code took effect / expired | `none` |
+| `miss_reported` | the person taps Missed something: the scores of the whole screen and of each picture on it in `detail.regions` (size, classifier, detector, decisive bits, cached verdict), the app's watch level and the thresholds; never an image | `none` |
 | `daily_stats` | once a day: screens examined, images scored, minutes protected | `none` |
 
 ### PUT /api/v1/events/{id}/image

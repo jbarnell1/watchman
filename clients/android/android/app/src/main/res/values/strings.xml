@@ -5,4 +5,7 @@
     <string name="device_admin_description">Keeps Watchman from being uninstalled quietly. Turning this off is reported to your partners.</string>
     <string name="notification_title">Watchman is on</string>
     <string name="notification_text">Judging images on this phone. Reports to your household server.</string>
+    <string name="missed_action">Missed something</string>
+    <string name="missed_thanks">Noted. The scores on screen were sent, no picture.</string>
+    <string name="missed_not_running">Watchman is not watching the screen right now.</string>
 </resources>

@@ -88,6 +88,28 @@ class Pipeline(private val scorer: Scorer, private val cache: DecisionCache = De
         return out
     }
 
+    /**
+     * For a missed-something report (ADR-043): every region's scores, with no decision, cache or
+     * report. Numbers only; no pixels leave this function.
+     */
+    fun scoreAll(frame: Bitmap, regions: List<Rect>, useDetector: Boolean, explicitLabels: List<String>?): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        for (r in regions) {
+            if (Decide.isTiny(r.width(), r.height())) continue
+            val crop = Pixels.crop(frame, r)
+            val hashed = Pixels.dhashWithDetail(crop)
+            val classifier = scorer.classify(crop)
+            var detector: Double? = null
+            if (useDetector && maxOf(r.width(), r.height()) >= Decide.SMALL_CROP && scorer.detectorOutput != null) {
+                detector = Yolo.explicitScore(scorer.detect(crop), scorer.detectorOutput!!, explicitLabels)
+            }
+            out.add(mapOf("w" to r.width(), "h" to r.height(), "classifier" to Math.round(classifier * 1000) / 1000.0,
+                "detector" to detector?.let { Math.round(it * 1000) / 1000.0 }, "decisive_bits" to hashed.decisive,
+                "cached" to (cache.lookup(hashed.hash, hashed.reliable)?.decision?.name)))
+        }
+        return out
+    }
+
     /** The server's answer for a crop that was covered while unsure. */
     fun resolve(hash: String, decision: Decision, score: Double) { cache.remember(Judged(decision, hash, score)) }
 

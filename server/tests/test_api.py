@@ -314,3 +314,13 @@ def test_judge_scores_in_memory_and_keeps_nothing(ctx, client, device, opinion):
     assert ctx.events.timeline(device[0]["person_id"]) == []
     assert client.get("/api/v1/policy", headers=headers).json()["thresholds"]["ask"] == 0.60
     assert client.post("/api/v1/judge", headers=headers, content=b"not an image").status_code == 400
+
+
+def test_miss_reported_is_accepted_as_info_without_an_upload(ctx, client, device, clock):
+    _, headers = device
+    ev_id = str(uuid.uuid4())
+    r = client.post("/api/v1/events", headers=headers, json={"events": [{
+        "id": ev_id, "type": "miss_reported", "occurred_at": iso(clock.now()), "app": "com.instagram.android",
+        "action": "none", "detail": {"regions": [{"w": 1344, "h": 2992, "classifier": 0.41, "detector": 0.2}]}}]})
+    assert r.json()["accepted"] == [ev_id] and r.json()["upload"] == []
+    assert ctx.events.get(ev_id)["severity"] == "info"

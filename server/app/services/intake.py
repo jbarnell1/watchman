@@ -4,6 +4,7 @@ Severity at intake:
   image_covered, screen_blocked   review (until the second opinion says explicit)
   image_flagged                   info, promoted by the second opinion
   url_blocked, search_flagged, app_blocked, pause_*, daily_stats   info
+  miss_reported (the person says something should have been covered; numbers only)   info
   protection_changed (from a client)   info; the server derives its own from heartbeats
   tamper                          protection, alerts
 
@@ -34,7 +35,7 @@ MAX_BATCH = 200
 IMAGE_TYPES = {"image_covered", "screen_blocked", "image_flagged"}
 KNOWN_TYPES = IMAGE_TYPES | {
     "url_blocked", "search_flagged", "app_blocked", "protection_changed", "tamper",
-    "pause_started", "pause_ended", "daily_stats",
+    "pause_started", "pause_ended", "daily_stats", "miss_reported",
 }
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_SIDE = 512
