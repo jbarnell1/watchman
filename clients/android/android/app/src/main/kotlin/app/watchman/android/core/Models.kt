@@ -27,10 +27,25 @@ data class Policy(
     @SerializedName("cover_on_device") val coverOnDevice: Boolean? = null,
     @SerializedName("ask_server") val askServer: Boolean? = null,
     @SerializedName("exempt_apps") val exemptApps: List<String>? = null,
+    @SerializedName("watch_default") val watchDefault: String? = null,
+    @SerializedName("realtime_apps") val realtimeApps: List<String>? = null,
+    @SerializedName("checked_apps") val checkedApps: List<String>? = null,
+    @SerializedName("checked_interval_s") val checkedIntervalS: Int? = null,
 ) {
+    /** How the app in front is watched (ADR-037). An older server sends no levels: real time. */
+    fun levelOf(pkg: String): WatchLevel = when {
+        exemptApps?.contains(pkg) == true -> WatchLevel.OFF
+        checkedApps?.contains(pkg) == true -> WatchLevel.CHECKED
+        realtimeApps?.contains(pkg) == true -> WatchLevel.REALTIME
+        watchDefault == "checked" -> WatchLevel.CHECKED
+        else -> WatchLevel.REALTIME
+    }
+
     fun isPaused(nowMillis: Long = System.currentTimeMillis()): Boolean =
         pausedUntil != null && Iso.parse(pausedUntil) > nowMillis
 }
+
+enum class WatchLevel { REALTIME, CHECKED, OFF }
 
 data class Pairing(
     val server: String,

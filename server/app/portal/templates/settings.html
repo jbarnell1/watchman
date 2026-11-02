@@ -92,10 +92,19 @@
     <label for="blocked_apps">Blocked apps</label><textarea id="blocked_apps" name="blocked_apps" rows="6">{{ settings.blocked_apps|join('\n') }}</textarea>
     <label for="exempt_apps">Not watched</label><textarea id="exempt_apps" name="exempt_apps" rows="3" placeholder="com.google.android.apps.photos">{{ settings.exempt_apps|join('\n') }}</textarea>
     <p class="t2">Nothing is judged, covered or reported while one of these is in front. Partners see this list in the digest; with locks on, adding to it needs a partner code. Android only for now.</p>
+    <label for="watch_default">Other apps are watched</label>
+    <select id="watch_default" name="watch_default">
+      <option value="realtime" {% if settings.watch_default == 'realtime' %}selected{% endif %}>In real time: every picture judged and blurred as it appears</option>
+      <option value="checked" {% if settings.watch_default == 'checked' %}selected{% endif %}>Checked now and then: the whole screen every {{ settings.checked_interval_s }} s</option>
+    </select>
+    <label for="realtime_apps">Always in real time</label><textarea id="realtime_apps" name="realtime_apps" rows="5">{{ settings.realtime_apps|join('\n') }}</textarea>
+    <label for="checked_apps">Checked now and then</label><textarea id="checked_apps" name="checked_apps" rows="3" placeholder="com.google.android.gm">{{ settings.checked_apps|join('\n') }}</textarea>
+    <p class="t2">Real time judges each picture as it appears and costs the most battery. Checked apps get a whole-screen look every {{ settings.checked_interval_s }} s that still blurs and reports what it finds. With locks on, moving an app to a lighter level needs a partner code. Android only for now.</p>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Timing {{ lock('sample_interval_s') }}</h2><p>Seconds between accountability samples and whole-screen passes; minutes of silence before a device counts as tampered with.</p></div><div class="spanel">
     <div class="pair three">
       <div><label for="sample_interval_s">Sample every, s</label><input id="sample_interval_s" name="sample_interval_s" type="number" min="10" value="{{ settings.sample_interval_s }}"></div>
+      <div><label for="checked_interval_s">Checked apps every, s</label><input id="checked_interval_s" name="checked_interval_s" type="number" min="10" max="900" value="{{ settings.checked_interval_s }}"></div>
       <div><label for="whole_screen_interval_s">Whole screen every, s</label><input id="whole_screen_interval_s" name="whole_screen_interval_s" type="number" min="1" value="{{ settings.whole_screen_interval_s }}"></div>
       <div><label for="heartbeat_gap_minutes">Silent after, min</label><input id="heartbeat_gap_minutes" name="heartbeat_gap_minutes" type="number" min="10" value="{{ settings.heartbeat_gap_minutes }}"></div>
     </div>

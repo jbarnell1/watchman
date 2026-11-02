@@ -8,6 +8,20 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-037 - Watch levels per app: real time, checked now and then, not watched
+**2026-11-02.** Unplugged for 29 minutes on a looping reel, Watchman used 53 mAh and Covenant Eyes
+1.9 mAh. Covenant Eyes looks at the screen now and then; Watchman judges every picture as it
+appears. Blurring is not the cost (a pixelated patch is a few milliseconds); judging is, and
+report-only judges just as much. So the household now chooses per app: real time (today's
+behaviour), checked (no per-picture passes; one whole-screen look every `checked_interval_s`,
+default 60, that still blurs and reports what it finds), or not watched (ADR-030). An app's level
+is Not watched, else `checked_apps`, else `realtime_apps` (social, video and the protected browser by
+default), else `watch_default` (real time by default, so nothing loosens until a household chooses).
+Moving an app to a lighter level, raising the checked interval or turning the default to checked
+is loosening and needs a partner code with locks on; moving one from Not watched to checked does
+not. Opening an app triggers an immediate look at any level. Per-person values work as for every
+protection key. Android applies it; Windows next.
+
 ### ADR-036 - Only sure covers take over the screen, and the block screen says why
 **2026-11-02.** The owner saw "Instagram is blocked on this phone" and "Gboard is blocked on this
 phone" at random, though neither is on the blocklist. Both came from the phone's whole-screen rule

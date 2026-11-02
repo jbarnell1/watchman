@@ -172,6 +172,12 @@ PROTECTION_FORM = {
                     "com.duckduckgo.mobile.android\ncom.sec.android.app.sbrowser",
     "sample_interval_s": "180", "whole_screen_interval_s": "5", "max_pause_minutes": "60", "heartbeat_gap_minutes": "30",
     "peek_seconds": "3", "peek_cooldown_hours": "24", "second_opinion_device": "cpu",
+    "watch_default": "realtime", "checked_interval_s": "60", "checked_apps": "",
+    "realtime_apps": "\n".join([
+        "com.instagram.android", "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
+        "com.zhiliaoapp.musically", "com.twitter.android", "com.facebook.katana", "com.snapchat.android",
+        "com.pinterest", "com.tumblr",
+    ]),
 }
 
 
@@ -319,3 +325,23 @@ def test_exempt_apps_reach_the_policy_and_adding_one_loosens(ctx, client, househ
                 **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")})
     r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
     assert "apps not watched" in unquote(r.headers["location"])
+
+
+def test_watch_levels_reach_the_policy_and_lighter_levels_loosen(ctx, client, household, device):
+    from app.services import locks
+    assert locks.loosens("watch_default", "realtime", "checked")
+    assert not locks.loosens("watch_default", "checked", "realtime")
+    assert locks.loosens("checked_apps", [], ["com.google.android.gm"], ctx.settings.load())
+    assert locks.loosens("realtime_apps", ["com.instagram.android"], [])
+    assert locks.loosens("checked_interval_s", 60, 120)
+    form = dict(PROTECTION_FORM, checked_apps="com.google.android.gm", checked_interval_s="90")
+    r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
+    assert "saved=1" in r.headers["location"]
+    _, headers = device
+    policy = client.get("/api/v1/policy", headers=headers).json()
+    assert policy["checked_apps"] == ["com.google.android.gm"] and policy["checked_interval_s"] == 90
+    assert policy["watch_default"] == "realtime" and "com.instagram.android" in policy["realtime_apps"]
+    # Moving an app from Not watched to checked watches it more: no code needed.
+    with ctx.conn:
+        ctx.settings.set("exempt_apps", ["com.google.android.apps.photos"], "owner")
+    assert not locks.loosens("checked_apps", [], ["com.google.android.apps.photos"], ctx.settings.load())
