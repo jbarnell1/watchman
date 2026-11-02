@@ -11,6 +11,15 @@ object RegionRule {
     /** Picture-shaped: neither side more than twice the other. */
     const val MAX_ASPECT = 2.0
 
+    /** Video and other constantly redrawn surfaces, judged as one picture at the video cadence (ADR-038). */
+    const val MIN_VIDEO_SIDE = 160
+
+    fun isVideo(cls: String, width: Int, height: Int): Boolean {
+        if (width < MIN_VIDEO_SIDE || height < MIN_VIDEO_SIDE) return false
+        val c = cls.substringAfterLast('.')
+        return c == "SurfaceView" || c == "TextureView" || c.endsWith("VideoView") || c.endsWith("PlayerView")
+    }
+
     fun isPicture(cls: String, hasDescription: Boolean, hasText: Boolean, childCount: Int, editable: Boolean,
                   width: Int, height: Int): Boolean {
         if (width < MIN_SIDE || height < MIN_SIDE) return false

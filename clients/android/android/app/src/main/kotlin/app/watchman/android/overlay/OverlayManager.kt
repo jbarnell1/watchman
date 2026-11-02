@@ -53,7 +53,7 @@ class OverlayManager(private val context: Context) {
      * patches are only added or refreshed, and expire after [holdMillis] if nothing refreshes them.
      */
     fun cover(found: List<Pair<Rect, Finding>>, frame: Bitmap, dx: Int = 0, dy: Int = 0, holdMillis: Long = HOLD_MS,
-              replace: Boolean = false) {
+              replace: Boolean = false, keep: Collection<Rect> = emptyList()) {
         if (!Settings.canDrawOverlays(context)) return
         val now = System.currentTimeMillis()
         val fresh = found.map { (r, _) ->
@@ -62,7 +62,7 @@ class OverlayManager(private val context: Context) {
         }
         synchronized(patches) {
             patches.removeAll { it.until < now }
-            if (replace) patches.removeAll { old -> !old.solid && fresh.none { it.region == old.region } }
+            if (replace) patches.removeAll { old -> !old.solid && old.region !in keep && fresh.none { it.region == old.region } }
             for (p in fresh) {
                 patches.removeAll { it.region == p.region }
                 patches.add(p)

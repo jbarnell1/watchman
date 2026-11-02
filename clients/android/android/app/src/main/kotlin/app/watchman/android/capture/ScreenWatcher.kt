@@ -18,6 +18,7 @@ import app.watchman.android.core.Coverage
 import app.watchman.android.core.Decision
 import app.watchman.android.core.Finding
 import app.watchman.android.core.Iso
+import app.watchman.android.core.RegionTracker
 import app.watchman.android.core.WatchLevel
 import app.watchman.android.core.Metrics
 import app.watchman.android.core.MetricsLog
@@ -86,11 +87,12 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private var screensSkipped = 0
     private var framesTaken = 0
     private var asked = 0
-    private var pendingRegions: Triple<String, String?, List<Rect>>? = null
+    private var pendingRegions: Triple<String, String?, List<RegionTracker.Region>>? = null
+    private val tracker = RegionTracker()
     /** Apps with covered pictures recently, by the name the switcher shows, and when (ADR-033). */
     private val coveredApps = HashMap<String, Long>()
     /** The pictures the app last reported; the timed tick re-checks them so patches stay put. */
-    private var lastRegions: Triple<String, String?, List<Rect>>? = null
+    private var lastRegions: Triple<String, String?, List<RegionTracker.Region>>? = null
     private var regionPassScheduled = false
     private val recentHashes = HashMap<String, Long>()
     private var stopped = false
@@ -309,7 +311,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
     }
 
     /** Called by the accessibility service with image rectangles in screen pixels; one pass per [REGION_COALESCE_MS] with the latest set. */
-    fun judgeRegions(pkg: String, url: String?, regions: List<Rect>) {
+    fun judgeRegions(pkg: String, url: String?, regions: List<RegionTracker.Region>) {
         handler.post {
             if (state.policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
             pendingRegions = Triple(pkg, url, regions)
@@ -336,14 +338,31 @@ class ScreenWatcher(private val service: AccessibilityService) {
         if (moved > 0) metrics.count("patches_scrolled", moved.toLong())
         // The pictures the timed tick re-checks moved too.
         lastRegions = lastRegions?.let { (p, u, r) ->
-            Triple(p, u, r.map { rect -> if (area == null || Rect.intersects(area, rect)) Rect(rect).apply { offset(-dx, -dy) } else rect })
+            Triple(p, u, r.map { g ->
+                if (area == null || Rect.intersects(area, rectOf(g))) g.copy(left = g.left - dx, top = g.top - dy, right = g.right - dx, bottom = g.bottom - dy) else g
+            })
         }
     }
 
     /** Judge the pictures the app reports. Cached pictures cost a hash, so re-checking is cheap. */
-    private fun regionPass(p: String, u: String?, r: List<Rect>, recheck: Boolean = false) {
+    private fun rectOf(g: RegionTracker.Region) = Rect(g.left, g.top, g.right, g.bottom)
+
+    private fun regionPass(p: String, u: String?, tracked: List<RegionTracker.Region>, recheck: Boolean = false) {
         val policy = state.policy ?: return
         if (stopped || screenOff || policy.isPaused() || !ensureModels()) return
+        // Videos and live pictures are judged at the video cadence; pictures inside a video are
+        // judged as part of it (ADR-038). Held ones keep their patches until their turn.
+        val cadence = policy.wholeScreenIntervalS * 1000L * PowerBudget.intervalMultiplier(power())
+        val plan = tracker.plan(tracked, cadence)
+        if (plan.insideVideo > 0) metrics.count("regions_inside_video", plan.insideVideo.toLong())
+        if (plan.held.isNotEmpty()) metrics.count("regions_held_live", plan.held.size.toLong())
+        val videos = tracked.count { it.video }
+        if (videos > 0) metrics.count("video_regions", videos.toLong())
+        val keep = plan.held.map { rectOf(it) }
+        if (keep.isNotEmpty()) overlay.refreshIfCovered(keep)
+        if (plan.judge.isEmpty()) { metrics.count("region_passes_skipped"); return }
+        val r = plan.judge.map { rectOf(it) }
+        val keys = plan.judge.associate { rectOf(it) to it.key }
         takeAppWindow { shot ->
             if (shot == null) return@takeAppWindow
             metrics.count(if (recheck) "region_rechecks" else "region_passes")
@@ -354,13 +373,16 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 metrics.count("patches_held_blind", held.size.toLong())
                 r.filter { it !in held }
             }
-            judge(shot, todo, p, u, power(), policy, replace = shot.window)
+            judge(shot, todo, p, u, power(), policy, replace = shot.window, keep = keep) { screenRect, hash ->
+                keys[screenRect]?.let { tracker.judged(it, hash) }
+            }
             updateWork()
         }
     }
 
     private fun judge(shot: Shot, screenRegions: List<Rect>, pkg: String, url: String?, p: Power, policy: Policy,
-                      replace: Boolean = false) {
+                      replace: Boolean = false, keep: Collection<Rect> = emptyList(),
+                      hashed: ((Rect, String) -> Unit)? = null) {
         val pipe = pipeline ?: return
         val frame = shot.bitmap
         val whole = Rect(0, 0, frame.width, frame.height)
@@ -384,12 +406,13 @@ class ScreenWatcher(private val service: AccessibilityService) {
         val findings = metrics.timed("judge_ms") {
             pipe.judge(frame, regions, policy.thresholds, policy.knownBadHashes, policy.explicitLabels,
                 coverOnDevice = coverOnDevice, askServer = policy.askServer != false,
-                useDetector = PowerBudget.detectorAllowed(p), onFinding = early)
+                useDetector = PowerBudget.detectorAllowed(p), onFinding = early,
+                onHashed = hashed?.let { h -> { r: Rect, hash: String -> h(Rect(r).apply { offset(shot.dx, shot.dy) }, hash) } })
         }
         metrics.count("findings", findings.size.toLong())
         // Findings back to screen coordinates for the overlay and the events.
         val onScreen = findings.map { it.copy(region = Rect(it.region).apply { offset(shot.dx, shot.dy) }) }
-        apply(onScreen, pkg, url, shot, replace)
+        apply(onScreen, pkg, url, shot, replace, keep)
     }
 
     /** In the app switcher: blank the thumbnail of every app that had covered pictures in the last 15 minutes. */
@@ -408,7 +431,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
         service.packageManager.getApplicationLabel(service.packageManager.getApplicationInfo(pkg, 0)).toString()
     } catch (_: Exception) { pkg }
 
-    private fun apply(findings: List<Finding>, pkg: String, url: String?, shot: Shot, replace: Boolean = false) {
+    private fun apply(findings: List<Finding>, pkg: String, url: String?, shot: Shot, replace: Boolean = false,
+                      keep: Collection<Rect> = emptyList()) {
         val frame = shot.bitmap
         val screen = service.resources.displayMetrics
         pipeline?.let { avgClassifyMs = it.avgClassifyMs }
@@ -424,7 +448,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
         // An empty package makes the block screen say what happened (most of the screen was
         // explicit), not that the app is on the household's blocklist.
         if (blocked) BlockActivity.show(service, "")
-        else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy, replace = replace)
+        else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy, replace = replace, keep = keep)
         for (f in findings) {
             if (f.ask) ask(f, pkg, url, screen.widthPixels, screen.heightPixels)
             else record(f, pkg, url, screen.widthPixels, screen.heightPixels, blocked)

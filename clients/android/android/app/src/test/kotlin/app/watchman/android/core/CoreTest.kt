@@ -213,6 +213,40 @@ class CoreTest {
     }
 
     @Test
+    fun videosAndLivePicturesWaitForTheirTurn() {
+        var clock = 1_000L
+        val tracker = RegionTracker { clock }
+        val video = RegionTracker.Region("player@0,0", 0, 300, 1344, 2700, video = true)
+        val button = RegionTracker.Region("like@1180,1500", 1180, 1500, 1312, 1632, video = false)
+        val avatar = RegionTracker.Region("avatar@40,100", 40, 100, 172, 232, video = false)
+        // The button sits inside the video: judged as part of it.
+        var plan = tracker.plan(listOf(video, button, avatar), 5_000)
+        assertEquals(listOf(video, avatar), plan.judge)
+        assertEquals(1, plan.insideVideo)
+        tracker.judged(video.key, "0000000000000000")
+        tracker.judged(avatar.key, "ffffffffffffffff")
+        // A second later the video waits; the still avatar is judged (a cache hit).
+        clock += 1_000
+        plan = tracker.plan(listOf(video, avatar), 5_000)
+        assertEquals(listOf(avatar), plan.judge)
+        assertEquals(listOf(video), plan.held)
+        clock += 5_000
+        assertEquals(listOf(video, avatar), tracker.plan(listOf(video, avatar), 5_000).judge)
+        // A picture whose fingerprint keeps changing becomes live and waits too.
+        val live = RegionTracker.Region("badge@900,100", 900, 100, 1032, 232, video = false)
+        tracker.plan(listOf(live), 5_000)
+        for (h in listOf("0000000000000000", "ffffffffffffffff", "0000000000000000", "ffffffffffffffff", "0000000000000000")) {
+            tracker.judged(live.key, h)
+        }
+        assertTrue(tracker.isLive(live.key))
+        clock += 1_000
+        assertEquals(listOf(live), tracker.plan(listOf(live), 5_000).held)
+        assertTrue(RegionRule.isVideo("android.view.TextureView", 1344, 2400))
+        assertFalse(RegionRule.isVideo("android.view.TextureView", 100, 100))
+        assertFalse(RegionRule.isVideo("android.widget.ImageView", 1344, 2400))
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))
