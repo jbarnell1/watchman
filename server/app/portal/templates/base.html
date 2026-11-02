@@ -36,6 +36,7 @@
     <a class="navitem {% if nav == 'review' %}on{% endif %}" href="/review{{ q }}">Review{% if review_count %}<span class="count" aria-label="{{ review_count }} items to review">{{ review_count }}</span>{% endif %}</a>
     <a class="navitem {% if nav == 'devices' %}on{% endif %}" href="/devices{{ q }}">Devices</a>
     {% if role == 'partner' %}<a class="navitem {% if nav == 'codes' %}on{% endif %}" href="/codes{{ q }}">Codes</a>{% endif %}
+    {% if person and (viewer.is_admin or role == 'partner') %}<a class="navitem {% if nav == 'whatif' %}on{% endif %}" href="/whatif{{ q }}">What if</a>{% endif %}
     {% if viewer.is_admin %}<a class="navitem {% if nav == 'settings' %}on{% endif %}" href="/settings">Settings</a>{% endif %}
     <div class="side-foot">
       <div class="who">{{ viewer.name }}</div>

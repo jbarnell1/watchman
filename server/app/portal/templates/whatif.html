@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}What if{% endblock %}
+{% block content %}
+{% set labels = {'ask': 'Ask', 'sure': 'Sure', 'cover': 'Cover', 'flag': 'Flag', 'detector_cover': 'Detector cover', 'second_opinion': 'Second opinion'} %}
+{% macro cell(a, b) -%}
+  {%- if a == b -%}{{ a }}
+  {%- else -%}{{ a }} &rarr; {{ b }} <span class="t2 whatif-diff">({{ '%+d'|format(b - a) }})</span>{%- endif -%}
+{%- endmacro %}
+<div class="titlerow"><div><h1>What if</h1>
+  <p class="finding">Replays the scores of {{ person.name }}'s pictures from the last {{ days }} day{{ 's' if days != 1 }} against other thresholds, before anything is changed. Numbers only: no picture is opened. Nothing here changes a setting.</p></div></div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Proposed thresholds</h2><span class="t2">Prefilled with the values in use now</span></div>
+  <form method="get" action="/whatif" class="form">
+    <input type="hidden" name="person" value="{{ person.id }}">
+    <div class="pair three">
+      {% for k in keys %}<div><label for="w-{{ k }}">{{ labels[k] }} <span class="t2">now {{ current[k] }}</span></label><input id="w-{{ k }}" name="{{ k }}" type="number" step="0.01" min="0" max="1" value="{{ proposed[k] }}"></div>{% endfor %}
+    </div>
+    <label for="w-days">Days</label>
+    <select id="w-days" name="days">{% for d in day_choices %}<option value="{{ d }}" {% if d == days %}selected{% endif %}>Last {{ d }} day{{ 's' if d != 1 }}</option>{% endfor %}</select>
+    <button class="btn primary">Replay</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Now and proposed</h2><span class="t2">{{ result.total.events }} picture{{ 's' if result.total.events != 1 }} in the window</span></div>
+  {% if not result.apps %}
+  <p class="empty">No pictures were covered, asked about or reported in this window.</p>
+  {% else %}
+  <p class="t2">Each cell shows the count now, then with the proposed thresholds and the difference.{% if not changed %} The proposed values are the current ones, so both columns match.{% endif %}</p>
+  <div class="whatif-wrap">
+  <table class="whatif-table">
+    <thead><tr><th>App</th>{% for key, label in measures %}<th class="num">{{ label }}</th>{% endfor %}<th class="num">Known-bad list</th></tr></thead>
+    <tbody>
+    {% for row in result.apps + [result.total] %}
+    <tr class="{% if loop.last %}total{% endif %}">
+      <td>{{ row.app }}</td>
+      {% for key, label in measures %}<td class="num" data-measure="{{ key }}">{{ cell(row.current[key], row.proposed[key]) }}</td>{% endfor %}
+      <td class="num">{{ row.known_bad }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <p class="t2">This only replays pictures the device already acted on. A lower line cannot show pictures that were never reported, so it can only tell you what a lower line would add among these; a higher line shows what would no longer be covered or reported.</p>
+  <p class="t2">Pictures on the known-bad list are covered by fingerprint without a score, so thresholds do not change them. An asked picture with no second opinion on record is counted as reported, as it was.{% if not cover_on_device %} Blurring on the device is off, so nothing is covered or asked.{% elif not ask_server %} Asking this server is off, so the ask line is unused.{% endif %}</p>
+</section>
+{% endblock %}
