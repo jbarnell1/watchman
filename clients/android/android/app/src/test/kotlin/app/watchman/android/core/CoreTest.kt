@@ -189,6 +189,18 @@ class CoreTest {
     }
 
     @Test
+    fun coverageCountsOverlapsOnce() {
+        val whole = intArrayOf(0, 0, 1000, 2000)
+        assertEquals(1.0, Coverage.share(listOf(whole, whole), 1000, 2000), 1e-9)
+        val half = intArrayOf(0, 0, 1000, 1000)
+        assertEquals(0.5, Coverage.share(listOf(half, half, half), 1000, 2000), 1e-9)
+        // Three 132 px buttons on a 1344 by 2992 screen are far from a block.
+        val buttons = (0 until 3).map { intArrayOf(1180, 1500 + it * 200, 1312, 1632 + it * 200) }
+        assertTrue(Coverage.share(buttons, 1344, 2992) < 0.05)
+        assertEquals(0.0, Coverage.share(emptyList<IntArray>(), 1344, 2992), 1e-9)
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))
