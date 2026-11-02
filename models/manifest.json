@@ -96,6 +96,53 @@
       ]
     },
     {
+      "role": "crop_gate",
+      "file": "mnv4s-nsfw.onnx",
+      "url": "https://huggingface.co/taufiqdp/mobilenetv4_conv_small.e2400_r224_in1k_nsfw_classifier/resolve/504317ad62086f357c9c5f70cf983726ff47efdb/mobilenetv4_conv_small.e2400_r224_in1k_nsfw_classifier.onnx",
+      "sha256": "46995c000cb285d0c0a0e5b58cc618012ed2e649d326d4fddae910951848fc40",
+      "bytes": 9974311,
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/taufiqdp/mobilenetv4_conv_small.e2400_r224_in1k_nsfw_classifier",
+      "input": {
+        "name": "input",
+        "size": 224,
+        "layout": "CHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "resize": "bicubic"
+      },
+      "output": {
+        "name": "output",
+        "kind": "softmax",
+        "labels": [
+          "drawings",
+          "hentai",
+          "neutral",
+          "porn",
+          "sexy"
+        ],
+        "positive": "porn",
+        "positives": [
+          "hentai",
+          "porn",
+          "sexy"
+        ]
+      },
+      "used_by": [
+        "android"
+      ]
+    },
+    {
       "role": "detector_small",
       "file": "nudenet-320n.onnx",
       "url": "https://github.com/notAI-tech/NudeNet/releases/download/v3.4-weights/320n.onnx",

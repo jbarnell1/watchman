@@ -64,17 +64,19 @@ object Yolo {
             val order = if (input.color == "BGR") intArrayOf(2, 1, 0) else intArrayOf(0, 1, 2)
             for (c in 0 until 3) {
                 val v = ((rgb[order[c]] / input.scale - input.mean[c]) / input.std[c]).toFloat()
-                if (input.layout == "NCHW") out[c * n + i] = v else out[i * 3 + c] = v
+                if (input.layout == "NCHW" || input.layout == "CHW") out[c * n + i] = v else out[i * 3 + c] = v
             }
         }
         return out
     }
 
+    /** Probability of the positive class, or the summed probability of several (ADR-034). */
     fun softmaxPositive(logits: FloatArray, output: ModelOutput): Double {
-        val idx = output.labels.indexOf(output.positive ?: output.labels[0])
-        if (output.kind == "sigmoid") return 1.0 / (1.0 + Math.exp(-logits[idx].toDouble()))
+        val names = output.positives ?: listOf(output.positive ?: output.labels[0])
+        val idx = names.map { output.labels.indexOf(it) }.filter { it >= 0 }
+        if (output.kind == "sigmoid") return idx.maxOf { 1.0 / (1.0 + Math.exp(-logits[it].toDouble())) }
         val max = logits.max()
         val exps = logits.map { Math.exp((it - max).toDouble()) }
-        return exps[idx] / exps.sum()
+        return idx.sumOf { exps[it] } / exps.sum()
     }
 }

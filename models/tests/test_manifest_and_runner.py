@@ -21,7 +21,7 @@ def test_committed_manifest_is_valid():
     assert {"crop_classifier", "detector_small", "detector_large", "second_opinion"} <= roles
     for e in entries:
         assert e.license in ("Apache-2.0", "MIT")
-        assert e.input["size"] in (320, 384, 640)
+        assert e.input["size"] in (224, 320, 384, 640)
 
 
 def test_validation_catches_bad_entries():
@@ -30,12 +30,13 @@ def test_validation_catches_bad_entries():
     bad["models"][0]["output"]["positive"] = "nope"
     with pytest.raises(ManifestError):
         validate(bad)
+    at = {m["role"]: i for i, m in enumerate(manifest["models"])}
     bad = copy.deepcopy(manifest)
-    bad["models"][2]["output"]["explicit_labels"] = ["NOT_A_LABEL"]
+    bad["models"][at["detector_small"]]["output"]["explicit_labels"] = ["NOT_A_LABEL"]
     with pytest.raises(ManifestError):
         validate(bad)
     bad = copy.deepcopy(manifest)
-    bad["models"][3]["role"] = bad["models"][2]["role"]
+    bad["models"][at["detector_large"]]["role"] = "detector_small"
     with pytest.raises(ManifestError):
         validate(bad)
 
@@ -84,3 +85,18 @@ def test_yolov8_decode_with_nms_and_unletterbox():
     assert (b.x, b.y, b.w, b.h) == (160.0, 120.0, 80.0, 80.0)
     assert explicit_score(boxes, out) == pytest.approx(0.9)
     assert explicit_score([Box("A", 0.99, 0, 0, 1, 1)], out) == 0.0
+
+
+def test_positives_sum_and_unbatched_layout():
+    out = {"kind": "softmax", "labels": ["a", "b", "c"], "positive": "b", "positives": ["b", "c"]}
+    logits = np.log(np.array([0.5, 0.3, 0.2]))
+    assert abs(classifier_score(logits, out) - 0.5) < 1e-9
+    gate = next(e for e in load(MANIFEST)[1] if e.role == "crop_gate")
+    x = classifier_input(Image.new("RGB", (50, 80), (10, 20, 30)), gate.input)
+    assert x.shape == (3, 224, 224)
+    bad = json.loads(MANIFEST.read_text())
+    for m in bad["models"]:
+        if m["role"] == "crop_gate":
+            m["output"]["positives"] = ["nope"]
+    with pytest.raises(ManifestError):
+        validate(bad)

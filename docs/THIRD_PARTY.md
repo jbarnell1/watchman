@@ -4,6 +4,7 @@
 | Marqo/nsfw-image-detection-384 | Apache-2.0 | crop classifier | exported to ONNX by `models/export_marqo.py` |
 | NudeNet 320n, 640m (v3.4 weights) | MIT (PyPI nudenet 3.4.2) | detectors | ONNX from the GitHub release |
 | AdamCodd/vit-base-nsfw-detector | Apache-2.0 | server second opinion | upstream ONNX int8 |
+| taufiqdp/mobilenetv4_conv_small.e2400_r224_in1k_nsfw_classifier | Apache-2.0 | Android sorter (`crop_gate`) | upstream ONNX, pinned revision; base MobileNetV4 weights from timm (Apache-2.0) |
 | ONNX Runtime | MIT | all platforms | |
 | ONNX Runtime (DirectML package) | MIT | Windows helper | |
 | WiX Toolset 5 | MS-RL | Windows installer, CI only | |

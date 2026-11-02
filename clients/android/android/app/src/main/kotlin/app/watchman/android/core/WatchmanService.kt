@@ -145,11 +145,15 @@ class WatchmanService : Service() {
     }
 
     private fun ensureModels(api: Api) {
-        if (state.classifier != null && state.classifierFile(this).exists()) return
+        // Look at the manifest every few hours even when a classifier is in place: a newer server may
+        // offer a model this phone does not have yet (the sorter, ADR-034).
+        if (state.classifier != null && state.classifierFile(this).exists() &&
+            System.currentTimeMillis() - manifestCheckedAt < MANIFEST_RECHECK_MS) return
         val manifest = api.manifest()
         val classifier = manifest.models.firstOrNull { it.role == "crop_classifier_int8" } ?: manifest.models.firstOrNull { it.role == "crop_classifier" } ?: return
         val detector = manifest.models.firstOrNull { it.role == "detector_small" }
-        for (entry in listOfNotNull(classifier, detector)) {
+        val gate = manifest.models.firstOrNull { it.role == "crop_gate" }
+        for (entry in listOfNotNull(classifier, detector, gate)) {
             val target = File(modelsDir(this), entry.file)
             if (target.exists() && sha256(target) == entry.sha256) continue
             Log.i(TAG, "downloading ${entry.file}")
@@ -161,7 +165,12 @@ class WatchmanService : Service() {
         }
         state.classifier = classifier
         state.detector = detector
+        state.gate = gate
+        manifestCheckedAt = System.currentTimeMillis()
     }
+
+    private var manifestCheckedAt = 0L
+    private val MANIFEST_RECHECK_MS = 6 * 60 * 60 * 1000L
 
     private fun sha256(f: File): String = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
 

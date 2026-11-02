@@ -7,7 +7,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-ROLES = {"crop_classifier", "crop_classifier_int8", "detector_small", "detector_large", "second_opinion"}
+# crop_gate is a small model that only orders the work (ADR-034); it never clears a picture.
+ROLES = {"crop_classifier", "crop_classifier_int8", "crop_gate", "detector_small", "detector_large", "second_opinion"}
+# CHW is an unbatched NCHW: the model takes one image with no batch axis.
+LAYOUTS = ("NCHW", "NHWC", "CHW")
 OUTPUT_KINDS = {"softmax", "sigmoid", "yolov8"}
 RESIZES = {"bilinear", "bicubic", "letterbox"}
 
@@ -51,7 +54,7 @@ def validate(manifest: dict) -> list[Entry]:
         for key in ("name", "size", "layout", "color", "scale", "mean", "std", "resize"):
             if key not in inp:
                 raise ManifestError(f"{raw['role']} input missing {key}")
-        if inp["resize"] not in RESIZES or inp["layout"] not in ("NCHW", "NHWC") or inp["color"] not in ("RGB", "BGR"):
+        if inp["resize"] not in RESIZES or inp["layout"] not in LAYOUTS or inp["color"] not in ("RGB", "BGR"):
             raise ManifestError(f"{raw['role']} input has an unknown resize, layout or color")
         if len(inp["mean"]) != 3 or len(inp["std"]) != 3:
             raise ManifestError(f"{raw['role']} mean and std need three channels")
@@ -59,6 +62,8 @@ def validate(manifest: dict) -> list[Entry]:
             raise ManifestError(f"{raw['role']} output needs a kind and labels")
         if out["kind"] in ("softmax", "sigmoid") and out.get("positive") not in out["labels"]:
             raise ManifestError(f"{raw['role']} positive label must be one of its labels")
+        if set(out.get("positives", [])) - set(out["labels"]):
+            raise ManifestError(f"{raw['role']} positives must be among its labels")
         if out["kind"] == "yolov8":
             missing = set(out.get("explicit_labels", [])) - set(out["labels"])
             if missing:

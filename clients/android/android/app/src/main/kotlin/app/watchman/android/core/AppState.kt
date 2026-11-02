@@ -42,6 +42,12 @@ class AppState private constructor(context: Context) {
         get() = prefs.get("detector")?.let { gson.fromJson(it, ModelEntry::class.java) }
         set(v) { prefs.put("detector", v?.let { gson.toJson(it) }) }
 
+    /** The sorter model (ADR-034); null when the household server does not offer one. */
+    var gate: ModelEntry?
+        get() = prefs.get("gate")?.let { gson.fromJson(it, ModelEntry::class.java) }
+        set(v) { prefs.put("gate", v?.let { gson.toJson(it) }) }
+
+    fun gateFile(context: Context): File? = gate?.let { File(WatchmanService.modelsDir(context), it.file) }
     fun classifierFile(context: Context): File = File(WatchmanService.modelsDir(context), classifier?.file ?: "none")
     fun detectorFile(context: Context): File? = detector?.let { File(WatchmanService.modelsDir(context), it.file) }
 

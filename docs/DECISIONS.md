@@ -8,6 +8,26 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-034 - A small sorter model on the phone; the classifier on XNNPACK with four threads
+**2026-11-02.** On the owner's Pixel the crop classifier took about 250 ms a picture through NNAPI
+on two threads, so a screen of a dozen new pictures took seconds and covers appeared in screen
+order. Two changes. First, NNAPI is dropped (it ran few of these models' operators) and each model
+is opened at load on both ONNX Runtime's XNNPACK backend and the plain CPU backend, four threads
+each, timed on a plain picture, and kept on the faster one; the times go to the metrics. On the
+Pixel, XNNPACK made the int8 classifier slower (290 ms a picture), because XNNPACK cannot run its
+quantized operators and they fall back to one CPU thread, so no one fixed backend suits every
+model. Second, a small
+MobileNetV4 NSFW classifier (`crop_gate`, about 10 MB, Apache-2.0, pinned upstream revision) scores
+every new picture first, and the real classifier then judges them most suspicious first, with each
+cover drawn the moment it is decided (`first_cover_ms` measures it). Measured on four real
+screenshots (1,546 windows, numbers only): the sorter costs about 6 ms a window on the desktop
+against 76 ms for the classifier, but agrees with it poorly (correlation 0.06), would have cleared
+11 to 13 of the 28 windows the server confirmed, and fires on 313 windows the server did not. So it
+only orders the work: every picture is still classified and nothing is cleared on its say-so.
+Rejected: the sorter as a gate that skips the classifier (misses too many), a single faster model
+in place of the classifier (no candidate matched it), NNAPI or the Tensor TPU (not reachable from
+ONNX Runtime for these models).
+
 ### ADR-033 - Ask the server about every cover that is not sure; blank the app switcher's thumbnails
 **2026-11-02.** On the first day of real use the phone and the server disagreed on 18 of 63 crops
 the phone covered, so a phone cover at 0.85 to 0.97 is often a false alarm, and it stayed blurred
