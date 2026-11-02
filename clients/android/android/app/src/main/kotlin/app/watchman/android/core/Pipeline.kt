@@ -28,7 +28,8 @@ class Pipeline(private val scorer: Scorer, private val cache: DecisionCache = De
 
     fun judge(frame: Bitmap, regions: List<Rect>, thresholds: Thresholds, knownBad: List<String>,
               explicitLabels: List<String>? = null, coverOnDevice: Boolean = true, askServer: Boolean = true,
-              useDetector: Boolean = true, onFinding: ((Finding) -> Unit)? = null): List<Finding> {
+              useDetector: Boolean = true, onFinding: ((Finding) -> Unit)? = null,
+              onHashed: ((Rect, String) -> Unit)? = null): List<Finding> {
         val out = ArrayList<Finding>()
         fun emit(f: Finding) { out.add(f); onFinding?.invoke(f) }
         val todo = ArrayList<Todo>()
@@ -38,6 +39,7 @@ class Pipeline(private val scorer: Scorer, private val cache: DecisionCache = De
             val crop = Pixels.crop(frame, r)
             val hashed = metrics.timed("hash_ms") { Pixels.dhashWithDetail(crop) }
             val hash = hashed.hash
+            onHashed?.invoke(r, hash)
             if (!hashed.reliable) metrics.count("flat_hashes")
             if (Decide.isKnownBad(hash, knownBad, hashed.reliable)) {
                 metrics.count("known_bad")

@@ -6,6 +6,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import app.watchman.android.capture.ScreenWatcher
 import app.watchman.android.core.AppState
+import app.watchman.android.core.RegionTracker
 import app.watchman.android.core.ScrollShift
 import app.watchman.android.core.Iso
 import app.watchman.android.core.WatchmanEvent
@@ -129,19 +130,25 @@ class WatchAccessibilityService : AccessibilityService() {
     }
 
     /** Rectangles of image nodes on screen, largest first, at most 40. */
-    fun imageRegions(root: AccessibilityNodeInfo?): List<Rect> {
+    fun imageRegions(root: AccessibilityNodeInfo?): List<RegionTracker.Region> {
         root ?: return emptyList()
-        val out = ArrayList<Rect>()
+        val out = ArrayList<RegionTracker.Region>()
         walk(root, 0) { node ->
             if (!node.isVisibleToUser) return@walk
             val r = Rect()
             node.getBoundsInScreen(r)
-            val picture = app.watchman.android.core.RegionRule.isPicture(
-                node.className?.toString() ?: "", !node.contentDescription.isNullOrEmpty(), !node.text.isNullOrEmpty(),
+            val cls = node.className?.toString() ?: ""
+            val video = app.watchman.android.core.RegionRule.isVideo(cls, r.width(), r.height())
+            val picture = video || app.watchman.android.core.RegionRule.isPicture(
+                cls, !node.contentDescription.isNullOrEmpty(), !node.text.isNullOrEmpty(),
                 node.childCount, node.isEditable, r.width(), r.height())
-            if (picture) out.add(r)
+            if (picture) {
+                // One track per node and place (ADR-038).
+                val key = "${node.viewIdResourceName ?: cls}@${r.left},${r.top},${r.width()}x${r.height()}"
+                out.add(RegionTracker.Region(key, r.left, r.top, r.right, r.bottom, video))
+            }
         }
-        return out.sortedByDescending { it.width() * it.height() }.take(40)
+        return out.sortedByDescending { it.area }.take(40)
     }
 
     private fun walk(node: AccessibilityNodeInfo, depth: Int, visit: (AccessibilityNodeInfo) -> Unit) {

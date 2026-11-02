@@ -8,6 +8,21 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-038 - Pictures are tracks over time; video surfaces are judged at the video cadence
+**2026-11-02.** On a looping reel the phone judged the 132 px buttons drawn over the video on
+nearly every pass: their pixels change with each frame, so every pass was a new fingerprint and a
+classifier run, while the video itself was rarely judged at all (it was not a reported picture).
+Of 122,489 picture checks that day, 93% repeated one already judged. Now each reported picture is
+a track (node id or class plus bounds). Video surfaces (SurfaceView, TextureView, video and player
+views at least 160 px a side) are reported as pictures and judged once per whole-screen interval,
+stretched by the power budget like everything else. A picture at least 90% inside a video surface
+is not judged on its own. A picture whose fingerprint changed on 3 of its last 4 judgements is
+live and also waits for the video cadence. A held track keeps its patch until its next judgement,
+so nothing is uncovered by waiting. Metrics: `video_regions`, `regions_inside_video`,
+`regions_held_live`, `region_passes_skipped`.
+Rejected: judging every frame of a video (the cost we are removing), skipping pictures over a
+video without judging the video (a miss).
+
 ### ADR-037 - Watch levels per app: real time, checked now and then, not watched
 **2026-11-02.** Unplugged for 29 minutes on a looping reel, Watchman used 53 mAh and Covenant Eyes
 1.9 mAh. Covenant Eyes looks at the screen now and then; Watchman judges every picture as it
