@@ -14,6 +14,7 @@ import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityWindowInfo
 import app.watchman.android.core.AppState
+import app.watchman.android.core.Coverage
 import app.watchman.android.core.Decision
 import app.watchman.android.core.Finding
 import app.watchman.android.core.Iso
@@ -402,9 +403,15 @@ class ScreenWatcher(private val service: AccessibilityService) {
         val coverOnDevice = state.policy?.coverOnDevice != false
         val covered = findings.filter { it.decision == Decision.COVER }
         if (covered.isNotEmpty()) coveredApps[appLabel(pkg)] = System.currentTimeMillis()
-        val area = covered.sumOf { it.region.width().toLong() * it.region.height() }.toDouble() / (frame.width.toDouble() * frame.height)
-        val blocked = coverOnDevice && area > 0.4
-        if (blocked) BlockActivity.show(service, pkg)
+        // Only sure covers can take over the screen: an unsure one is a patch while the server is
+        // asked, and a safe answer lifts it. Three whole-screen blocks on 2026-11-02 were unsure
+        // detector hits (0.56 to 0.75) that the server then scored 0.01 to 0.11 (ADR-036).
+        val sure = covered.filter { !it.ask }
+        val area = Coverage.shareOfRects(sure.map { it.region }, frame.width, frame.height)
+        val blocked = coverOnDevice && area > Coverage.BLOCK_SHARE
+        // An empty package makes the block screen say what happened (most of the screen was
+        // explicit), not that the app is on the household's blocklist.
+        if (blocked) BlockActivity.show(service, "")
         else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy, replace = replace)
         for (f in findings) {
             if (f.ask) ask(f, pkg, url, screen.widthPixels, screen.heightPixels)

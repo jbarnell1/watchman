@@ -43,7 +43,9 @@ class WatchAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == OWN_PACKAGE || pkg == "com.android.systemui") return
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // The keyboard opens its own window over the app; it is never the app in front (ADR-036).
+        // Its own pictures (GIF and sticker search) are still judged below.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != keyboardPackage()) {
             foregroundPackage = pkg
             if (isBlocked(pkg)) { block(pkg); return }
         }
@@ -106,6 +108,10 @@ class WatchAccessibilityService : AccessibilityService() {
     }
 
     private fun isExempt(pkg: String): Boolean = AppState.get(this).policy?.exemptApps?.contains(pkg) == true
+
+    private fun keyboardPackage(): String? =
+        android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
+            ?.substringBefore('/')
 
     private fun isBlocked(pkg: String): Boolean {
         val policy = AppState.get(this).policy ?: return false

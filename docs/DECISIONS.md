@@ -8,6 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-036 - Only sure covers take over the screen, and the block screen says why
+**2026-11-02.** The owner saw "Instagram is blocked on this phone" and "Gboard is blocked on this
+phone" at random, though neither is on the blocklist. Both came from the phone's whole-screen rule
+(covered pictures over 40% of the screen show the block screen), which passed the app's name and so
+used the blocklist wording. All three such blocks that day were unsure whole-screen detector hits
+(0.56 to 0.75) that the server scored 0.01 to 0.11; one named the keyboard because its window had
+become the "app in front". Now only sure covers count toward the 40% (unsure ones stay patches
+while the server is asked, ADR-022), overlapping covers count once, the block screen says most of
+the screen was explicit, and the keyboard's window never becomes the app in front.
+
 ### ADR-035 - The known-bad list changes only on strong, independent evidence
 **2026-11-02.** Every picture the server's second opinion confirmed (0.70 or more) joined the
 known-bad list, and every device then covered and reported anything within six bits of it
