@@ -99,6 +99,26 @@ def test_a_malformed_event_is_rejected_alone(ctx, client, device):
     assert body["rejected"][0]["reason"] == "missing id, type, occurred_at"
 
 
+def test_policy_version_is_cheap_and_follows_settings(ctx, client, device):
+    _, headers = device
+    v1 = client.get("/api/v1/policy/version", headers=headers).json()
+    with ctx.conn:
+        ctx.settings.set("coverage", "revealing", "owner")
+    v2 = client.get("/api/v1/policy/version", headers=headers).json()
+    assert v2["policy_version"] == v1["policy_version"] + 1 and v2["paused_until"] is None
+    assert client.get("/api/v1/policy/version").status_code == 401
+
+
+def test_peeks_last_three_seconds_at_most():
+    import pytest
+    from pydantic import ValidationError
+
+    from app.settings import coerce
+    assert coerce("peek_seconds", 3) == 3
+    with pytest.raises(ValidationError):
+        coerce("peek_seconds", 5)
+
+
 def test_unknown_token_is_unauthorized(client):
     r = client.get("/api/v1/policy", headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401

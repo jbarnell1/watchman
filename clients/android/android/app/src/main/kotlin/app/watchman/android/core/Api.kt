@@ -54,6 +54,9 @@ class Api(private val server: String, private val token: String?, private val cl
 
     fun policy(): Policy = gson.fromJson(call("GET", "/api/v1/policy"), Policy::class.java)
 
+    /** Cheap: version and pause only, no database writes on the server. */
+    fun policyVersion(): HeartbeatResponse = gson.fromJson(call("GET", "/api/v1/policy/version"), HeartbeatResponse::class.java)
+
     fun events(events: List<WatchmanEvent>): EventsResponse =
         gson.fromJson(call("POST", "/api/v1/events", gson.toJson(mapOf("events" to events))), EventsResponse::class.java)
 

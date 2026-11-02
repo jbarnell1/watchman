@@ -41,7 +41,7 @@ class Settings(BaseModel):
     digest_time: str = "19:00"          # HH:MM in the household time zone
     image_retention_days: int = 7
     event_retention_days: int = 365
-    peek_seconds: int = 3
+    peek_seconds: int = Field(default=3, ge=1, le=3)   # the light-blur peek, three seconds at most (ADR-031)
     peek_cooldown_hours: int = 24
     thresholds: Thresholds = Field(default_factory=Thresholds)
     strict_mode: bool = True

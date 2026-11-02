@@ -364,6 +364,16 @@ async function flush(): Promise<void> {
   await foldWork();
   const a = await api();
   if (!a) return;
+  // Settings reach the extension within a flush interval instead of a heartbeat (ADR-031).
+  try {
+    const v = await a.policyVersion();
+    const current = await policy();
+    if (!current || current.version !== v.policy_version || current.paused_until !== v.paused_until) {
+      await storage.set("policy", await a.policy());
+    }
+  } catch {
+    // the heartbeat will try again
+  }
   try {
     const wanted = await queue.flush((batch) => a.events(batch));
     for (const id of wanted) {

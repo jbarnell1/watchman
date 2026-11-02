@@ -99,7 +99,7 @@
   <div class="srow"><div class="slabel"><h2>Pauses and peeks {{ lock('max_pause_minutes') }}</h2><p>The most minutes one partner code can grant, and how a linked partner's peek works.</p></div><div class="spanel">
     <div class="pair three">
       <div><label for="max_pause_minutes">Max pause, min</label><input id="max_pause_minutes" name="max_pause_minutes" type="number" min="1" value="{{ settings.max_pause_minutes }}"></div>
-      <div><label for="peek_seconds">Peek length, s</label><input id="peek_seconds" name="peek_seconds" type="number" min="1" max="10" value="{{ settings.peek_seconds }}"></div>
+      <div><label for="peek_seconds">Peek length, s</label><input id="peek_seconds" name="peek_seconds" type="number" min="1" max="3" value="{{ settings.peek_seconds }}"></div>
       <div><label for="peek_cooldown_hours">Peek cooldown, h</label><input id="peek_cooldown_hours" name="peek_cooldown_hours" type="number" min="1" value="{{ settings.peek_cooldown_hours }}"></div>
     </div>
   </div></div>

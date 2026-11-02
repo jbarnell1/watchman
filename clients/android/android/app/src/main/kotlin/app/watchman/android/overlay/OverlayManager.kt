@@ -16,10 +16,15 @@ import app.watchman.android.core.Pixels
 
 /**
  * One full-screen, touch-transparent overlay window. Each covered region gets a pixelated copy of
- * its crop so the picture's colour and layout stay while detail goes. Patches expire after a few
- * seconds unless the next pass finds the same region again.
+ * its crop so the picture's colour and layout stay while detail goes. A patch stays while its picture
+ * is still found (region passes and the timed re-check) and is lifted when it is not.
  */
 class OverlayManager(private val context: Context) {
+    companion object {
+        /** A patch outlives the pass that drew it by this much; the timed re-check refreshes it sooner. */
+        const val HOLD_MS = 30_000L
+    }
+
     private val wm = context.getSystemService(WindowManager::class.java)
     private val main = Handler(Looper.getMainLooper())
     private var view: PatchView? = null
@@ -41,7 +46,13 @@ class OverlayManager(private val context: Context) {
     }
 
     /** [found] rectangles are screen coordinates; [frame]'s top-left sits at ([dx], [dy]) on the screen. */
-    fun cover(found: List<Pair<Rect, Finding>>, frame: Bitmap, dx: Int = 0, dy: Int = 0, holdMillis: Long = 8000) {
+    /**
+     * With [replace] (a region pass that saw every picture on screen without the overlay in its way),
+     * patches not found again are lifted at once: the picture scrolled away or changed. Otherwise
+     * patches are only added or refreshed, and expire after [holdMillis] if nothing refreshes them.
+     */
+    fun cover(found: List<Pair<Rect, Finding>>, frame: Bitmap, dx: Int = 0, dy: Int = 0, holdMillis: Long = HOLD_MS,
+              replace: Boolean = false) {
         if (!Settings.canDrawOverlays(context)) return
         val now = System.currentTimeMillis()
         val fresh = found.map { (r, _) ->
@@ -50,6 +61,7 @@ class OverlayManager(private val context: Context) {
         }
         synchronized(patches) {
             patches.removeAll { it.until < now }
+            if (replace) patches.removeAll { old -> fresh.none { it.region == old.region } }
             for (p in fresh) {
                 patches.removeAll { it.region == p.region }
                 patches.add(p)
@@ -62,7 +74,7 @@ class OverlayManager(private val context: Context) {
      * For screenshots that contain the overlay itself: a patch whose rectangle the accessibility tree
      * still reports is kept for another [holdMillis]; returns the rectangles that were held.
      */
-    fun refreshIfCovered(rects: List<Rect>, holdMillis: Long = 8000): Set<Rect> {
+    fun refreshIfCovered(rects: List<Rect>, holdMillis: Long = HOLD_MS): Set<Rect> {
         val now = System.currentTimeMillis()
         val held = HashSet<Rect>()
         synchronized(patches) {
@@ -96,7 +108,20 @@ class OverlayManager(private val context: Context) {
             view = it
         }
         v.invalidate()
-        main.postDelayed({ v.invalidate(); if (patches.none { it.until > System.currentTimeMillis() }) hide() }, 8500)
+        scheduleExpiry()
+    }
+
+    /** Wake when the soonest patch is due, drop what expired, and hide when nothing is left. */
+    private fun scheduleExpiry() {
+        main.removeCallbacks(expire)
+        val next = synchronized(patches) { patches.minOfOrNull { it.until } } ?: return
+        main.postDelayed(expire, maxOf(250L, next - System.currentTimeMillis() + 50))
+    }
+
+    private val expire = Runnable {
+        val now = System.currentTimeMillis()
+        val empty = synchronized(patches) { patches.removeAll { it.until < now }; patches.isEmpty() }
+        if (empty) hide() else { view?.invalidate(); scheduleExpiry() }
     }
 
     private fun hide() {
