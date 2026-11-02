@@ -28,7 +28,7 @@ jobs:
           -d HelperPublish=${{ github.workspace }}/clients/windows/publish/helper
           -d Brand=${{ github.workspace }}/docs/brand
           -o publish/Watchman-0.1.0.msi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: watchman-windows
           path: clients/windows/publish/Watchman-0.1.0.msi

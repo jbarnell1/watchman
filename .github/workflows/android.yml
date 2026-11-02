@@ -30,7 +30,7 @@ jobs:
       - run: flutter build apk --debug --split-per-abi
       - run: ./gradlew :app:testDebugUnitTest --console=plain
         working-directory: clients/android/android
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: watchman-android-debug
           path: clients/android/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
