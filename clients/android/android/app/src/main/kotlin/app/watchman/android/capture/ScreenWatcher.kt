@@ -72,6 +72,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private val overlay = OverlayManager(service)
     private var scorer: OnnxScorer? = null
     private var pipeline: Pipeline? = null
+    private var loadedGate: String? = null
     private var latest: Bitmap? = null
     private var latestAt = 0L
     private var latestWindow: Shot? = null
@@ -124,11 +125,20 @@ class ScreenWatcher(private val service: AccessibilityService) {
     }
 
     private fun ensureModels(): Boolean {
-        if (pipeline != null) return true
+        // A model that arrived since loading (the sorter, ADR-034) means loading again.
+        val gateName = state.gateFile(service)?.takeIf { it.exists() }?.name
+        if (pipeline != null && gateName == loadedGate) return true
+        scorer?.close()
+        scorer = null
+        pipeline = null
+        loadedGate = gateName
         val classifier = state.classifier ?: return false
         if (!state.classifierFile(service).exists()) return false
         return try {
-            val s = OnnxScorer(classifier, state.classifierFile(service).absolutePath, state.detector, state.detectorFile(service)?.absolutePath)
+            val gateFile = state.gateFile(service)?.takeIf { it.exists() }
+            val s = OnnxScorer(classifier, state.classifierFile(service).absolutePath, state.detector, state.detectorFile(service)?.absolutePath,
+                state.gate.takeIf { gateFile != null }, gateFile?.absolutePath)
+            s.warmUp(metrics)
             scorer = s
             pipeline = Pipeline(s, metrics = metrics)
             provider = s.provider
@@ -349,10 +359,20 @@ class ScreenWatcher(private val service: AccessibilityService) {
         }
         if (regions.isEmpty()) return
         if (!p.plugged) metrics.count("judged_on_battery")
+        val coverOnDevice = policy.coverOnDevice != false
+        val started = System.nanoTime()
+        var first = true
+        // Each cover goes up the moment it is decided instead of after the whole frame (ADR-034).
+        val early: ((Finding) -> Unit)? = if (!coverOnDevice) null else { f ->
+            if (f.decision == Decision.COVER) {
+                if (first) { metrics.time("first_cover_ms", (System.nanoTime() - started) / 1_000_000.0); first = false }
+                overlay.cover(listOf(Rect(f.region).apply { offset(shot.dx, shot.dy) } to f), frame, shot.dx, shot.dy)
+            }
+        }
         val findings = metrics.timed("judge_ms") {
             pipe.judge(frame, regions, policy.thresholds, policy.knownBadHashes, policy.explicitLabels,
-                coverOnDevice = policy.coverOnDevice != false, askServer = policy.askServer != false,
-                useDetector = PowerBudget.detectorAllowed(p))
+                coverOnDevice = coverOnDevice, askServer = policy.askServer != false,
+                useDetector = PowerBudget.detectorAllowed(p), onFinding = early)
         }
         metrics.count("findings", findings.size.toLong())
         // Findings back to screen coordinates for the overlay and the events.

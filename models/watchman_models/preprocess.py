@@ -29,9 +29,9 @@ def normalise(arr: np.ndarray, spec: dict) -> np.ndarray:
     """arr is HWC uint8 in the manifest's colour order. Returns the model's input tensor (1,...)."""
     x = arr.astype(np.float32) / float(spec["scale"])
     x = (x - np.array(spec["mean"], dtype=np.float32)) / np.array(spec["std"], dtype=np.float32)
-    if spec["layout"] == "NCHW":
+    if spec["layout"] in ("NCHW", "CHW"):
         x = x.transpose(2, 0, 1)
-    return x[None, ...]
+    return x if spec["layout"] == "CHW" else x[None, ...]
 
 
 def to_colour(image: Image.Image, spec: dict) -> Image.Image:

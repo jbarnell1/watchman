@@ -156,6 +156,17 @@ class CoreTest {
     }
 
     @Test
+    fun sorterOrderAndSummedPositives() {
+        assertEquals(listOf(2, 0, 3, 1), Pipeline.order(listOf(0.4, 0.1, 0.9, 0.4)))
+        val out = ModelOutput("output", "softmax", listOf("drawings", "hentai", "neutral", "porn", "sexy"), "porn", null,
+            listOf("hentai", "porn", "sexy"))
+        val p = floatArrayOf(0.1f, 0.2f, 0.4f, 0.2f, 0.1f).map { Math.log(it.toDouble()).toFloat() }.toFloatArray()
+        assertEquals(0.5, Yolo.softmaxPositive(p, out), 1e-6)
+        val single = ModelOutput("logits", "softmax", listOf("NSFW", "SFW"), "NSFW", null)
+        assertEquals(0.25, Yolo.softmaxPositive(floatArrayOf(Math.log(0.25).toFloat(), Math.log(0.75).toFloat()), single), 1e-6)
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

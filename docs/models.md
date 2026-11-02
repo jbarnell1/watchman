@@ -8,6 +8,7 @@ shapes. Weights are never committed; `models/fetch.py` downloads and verifies th
 | Role (`manifest.roles`) | Model | License | Used by |
 |---|---|---|---|
 | `crop_classifier` | Marqo/nsfw-image-detection-384, exported to ONNX fp32 (`crop_classifier_int8` is the dynamic int8 copy) | Apache-2.0 | all clients, extension |
+| `crop_gate` | taufiqdp MobileNetV4-conv-small NSFW classifier (5 classes), ONNX from upstream, pinned revision. Orders the work only, never clears a picture (ADR-034) | Apache-2.0 | Android |
 | `detector_small` | NudeNet 320n ONNX (v3.4 weights) | MIT (PyPI 3.4.2) | Android, iOS |
 | `detector_large` | NudeNet 640m ONNX | MIT | Windows, server |
 | `second_opinion` | AdamCodd/vit-base-nsfw-detector ONNX int8 | Apache-2.0 | server |
@@ -28,7 +29,9 @@ shapes. Weights are never committed; `models/fetch.py` downloads and verifies th
 Detector entries use `"input": {"resize": "letterbox", ...}` (fit inside size by size, pad with 114
 gray) and `"output": {"kind": "yolov8", "labels": [...], "explicit_labels": [...]}`; a detector's
 score is the best box score among `explicit_labels`. `scale` is what pixels are divided by before
-`mean` and `std` are applied. `watchman_models/preprocess.py` and `runner.py` are the reference
+`mean` and `std` are applied. Layout `CHW` is an unbatched `NCHW` (the model has no batch axis).
+A softmax entry may list several `positives`; its score is their summed probability.
+`watchman_models/preprocess.py` and `runner.py` are the reference
 for preprocessing and output decoding; clients reproduce them.
 
 ## Fetching

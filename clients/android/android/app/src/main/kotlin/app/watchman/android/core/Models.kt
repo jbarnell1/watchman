@@ -44,7 +44,8 @@ data class ModelInput(val name: String, val size: Int, val layout: String, val c
                       val mean: DoubleArray, val std: DoubleArray, val resize: String)
 
 data class ModelOutput(val name: String, val kind: String, val labels: List<String>, val positive: String?,
-                       @SerializedName("explicit_labels") val explicitLabels: List<String>?)
+                       @SerializedName("explicit_labels") val explicitLabels: List<String>?,
+                       val positives: List<String>? = null)
 
 data class ModelEntry(val role: String, val file: String, val url: String, val sha256: String, val bytes: Long,
                       val input: ModelInput, val output: ModelOutput)

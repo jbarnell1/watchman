@@ -36,7 +36,10 @@ def classifier_score(raw: np.ndarray, output: dict) -> float:
         probs = 1 / (1 + np.exp(-logits))
     else:
         raise ValueError(output["kind"])
-    return float(probs[output["labels"].index(output["positive"])])
+    # A model with several explicit classes (ADR-034) scores their sum; a sigmoid model their maximum.
+    names = output.get("positives") or [output["positive"]]
+    picked = [probs[output["labels"].index(n)] for n in names]
+    return float(sum(picked) if output["kind"] == "softmax" else max(picked))
 
 
 def iou(a: Box, b: Box) -> float:
