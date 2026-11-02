@@ -49,6 +49,9 @@ class WatchAccessibilityService : AccessibilityService() {
         }
         // Apps the household marked Not watched: nothing is judged while they are in front (ADR-030).
         if (isExempt(pkg)) return
+        // The app switcher (drawn by the launcher) shows snapshots of other apps' windows, which never
+        // include Watchman's overlay: cover the thumbnail of any app that had covered pictures (ADR-033).
+        if (pkg == launcherPackage()) watcher?.coverSwitcher(switcherTiles(rootInActiveWindow))
         // A scroll moves the patches by the distance the app reports, before any screenshot: the blur
         // travels with the page instead of waiting for the next pass (ADR-032).
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
@@ -63,6 +66,43 @@ class WatchAccessibilityService : AccessibilityService() {
         if (pkg in browserPackages) lastUrl = readUrl(rootInActiveWindow) ?: lastUrl
         val regions = imageRegions(rootInActiveWindow)
         if (regions.isNotEmpty()) watcher?.judgeRegions(pkg, lastUrl, regions)
+    }
+
+    private var launcher: String? = null
+
+    /** The home app, which also draws the app switcher on Pixel and most phones. */
+    fun launcherPackage(): String? = launcher ?: try {
+        packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN)
+            .addCategory(android.content.Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName.also { launcher = it }
+    } catch (_: Exception) { null }
+
+    /** App thumbnails in the switcher, with the app's name as the switcher labels them. */
+    fun switcherTiles(root: AccessibilityNodeInfo?): List<Pair<Rect, String>> {
+        root ?: return emptyList()
+        val out = ArrayList<Pair<Rect, String>>()
+        walk(root, 0) { node ->
+            val id = node.viewIdResourceName ?: ""
+            val cls = node.className?.toString() ?: ""
+            if (!(id.endsWith(":id/snapshot") || cls.contains("TaskThumbnail"))) return@walk
+            val r = Rect().also { node.getBoundsInScreen(it) }
+            if (r.width() < 100 || r.height() < 100) return@walk
+            // The task's name sits on the thumbnail or an ancestor (Launcher3 TaskView, its icon).
+            var label: String? = node.contentDescription?.toString()
+            var p = node.parent
+            var depth = 0
+            while (label.isNullOrBlank() && p != null && depth < 4) {
+                label = p.contentDescription?.toString()
+                if (label.isNullOrBlank()) for (i in 0 until p.childCount) {
+                    val c = p.getChild(i) ?: continue
+                    if ((c.viewIdResourceName ?: "").endsWith(":id/icon") && !c.contentDescription.isNullOrBlank()) {
+                        label = c.contentDescription.toString(); break
+                    }
+                }
+                p = p.parent; depth++
+            }
+            out.add(r to (label ?: ""))
+        }
+        return out
     }
 
     private fun isExempt(pkg: String): Boolean = AppState.get(this).policy?.exemptApps?.contains(pkg) == true

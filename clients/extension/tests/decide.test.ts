@@ -20,6 +20,9 @@ describe("decide", () => {
     expect(shouldAsk(0.8, ta)).toBe(false);
     expect(shouldAsk(0.7, t)).toBe(false); // no ask line: never ask
     expect(shouldAsk(0.7, ta, false)).toBe(false); // ask_server off: the device decides alone
+    const tsure = { ...ta, sure: 0.97 };
+    expect(shouldAsk(0.9, tsure)).toBe(true);   // covered and still asked below sure (ADR-033)
+    expect(shouldAsk(0.97, tsure)).toBe(false); // sure: report without asking
   });
 
   it("report only turns a cover into a flag and leaves the rest alone", () => {

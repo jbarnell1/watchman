@@ -32,6 +32,7 @@ def policy_for(ctx: Context, person_id: str) -> dict:
             "flag": s.thresholds.flag,
             "detector_cover": s.thresholds.detector_cover,
             "ask": s.thresholds.ask,
+            "sure": s.thresholds.sure,
         },
         "strict_mode": s.strict_mode,
         "cover_on_device": s.cover_on_device,

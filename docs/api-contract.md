@@ -82,7 +82,7 @@ about a minute instead of at the next five-minute heartbeat (ADR-031).
 Response 200:
 ```json
 {"version": 7,
- "thresholds": {"cover": 0.85, "flag": 0.85, "detector_cover": 0.55, "ask": 0.60},
+ "thresholds": {"cover": 0.85, "flag": 0.85, "detector_cover": 0.55, "ask": 0.60, "sure": 0.97},
  "strict_mode": true,
  "cover_on_device": true,
  "ask_server": true,
@@ -99,6 +99,10 @@ Response 200:
  "known_bad_hashes": ["9f3a0c1e5b7d2a46"],
  "models_manifest_url": "/api/v1/models/manifest"}
 ```
+Devices cover anything at or above `ask` and ask `/api/v1/judge` unless the score is at or above
+`sure` or the hash is known bad; a safe answer lifts the blur and nothing is reported (ADR-022,
+ADR-033). Absent `sure` means `cover`, the earlier behaviour.
+
 `coverage` is `explicit`, `revealing` or `strict`; `explicit_labels` is the detector label set it
 means, which clients use instead of the manifest's list when present (ADR-021).
 `cover_on_device: false` is report only: the device blurs nothing and reports scores at or above

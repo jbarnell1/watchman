@@ -16,11 +16,11 @@ export function settle(decision: Decision, coverOnDevice: boolean): Decision {
   return !coverOnDevice && decision === "cover" ? "flag" : decision;
 }
 
-/** Between ask and cover the device covers first and lets the server's bigger model decide, when the policy allows. */
+/** From ask up to sure the device covers first and lets the server's bigger model decide (ADR-022, ADR-033). */
 export function shouldAsk(score: number, t: Thresholds, askServer = true): boolean {
   if (!askServer) return false;
   const ask = t.ask ?? t.cover;
-  return score >= ask && score < t.cover;
+  return score >= ask && score < (t.sure ?? t.cover);
 }
 
 export function isTiny(width: number, height: number): boolean {

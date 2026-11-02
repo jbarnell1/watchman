@@ -291,7 +291,8 @@ async function judgeOnce(req: JudgeRequest | FrameJudgeRequest, tabId: number | 
   decision = settle(decision, coverOnDevice);
 
   // Unsure: cover now, let the server's bigger model decide, revise the tab when it answers.
-  if (coverOnDevice && decision !== "cover" && reason === "scored" && shouldAsk(result.score, pol.thresholds, pol.ask_server !== false)) {
+  const confirmedBefore = nearby !== undefined && nearby.decision === "cover";
+  if (coverOnDevice && reason === "scored" && !confirmedBefore && shouldAsk(result.score, pol.thresholds, pol.ask_server !== false)) {
     void askServer(req, tabId, result, pol);
     return { decision: "cover", hash: result.hash, score: result.score, reason: "asking" };
   }

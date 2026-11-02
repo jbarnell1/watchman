@@ -25,6 +25,7 @@ import app.watchman.android.core.Policy
 import app.watchman.android.core.Power
 import app.watchman.android.core.PowerBudget
 import app.watchman.android.core.Region
+import app.watchman.android.core.SwitcherMatch
 import app.watchman.android.core.WatchmanEvent
 import app.watchman.android.overlay.BlockActivity
 import app.watchman.android.overlay.OverlayManager
@@ -83,6 +84,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private var framesTaken = 0
     private var asked = 0
     private var pendingRegions: Triple<String, String?, List<Rect>>? = null
+    /** Apps with covered pictures recently, by the name the switcher shows, and when (ADR-033). */
+    private val coveredApps = HashMap<String, Long>()
     /** The pictures the app last reported; the timed tick re-checks them so patches stay put. */
     private var lastRegions: Triple<String, String?, List<Rect>>? = null
     private var regionPassScheduled = false
@@ -357,12 +360,29 @@ class ScreenWatcher(private val service: AccessibilityService) {
         apply(onScreen, pkg, url, shot, replace)
     }
 
+    /** In the app switcher: blank the thumbnail of every app that had covered pictures in the last 15 minutes. */
+    fun coverSwitcher(tiles: List<Pair<Rect, String>>) {
+        if (tiles.isEmpty()) return
+        handler.post {
+            val now = System.currentTimeMillis()
+            coveredApps.entries.removeIf { now - it.value > 15 * 60 * 1000 }
+            val hits = tiles.filter { (_, label) -> SwitcherMatch.matches(label, coveredApps.keys) }.map { it.first }
+            if (hits.isNotEmpty()) metrics.count("switcher_tiles_covered", hits.size.toLong())
+            overlay.coverSolid(hits)
+        }
+    }
+
+    private fun appLabel(pkg: String): String = try {
+        service.packageManager.getApplicationLabel(service.packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (_: Exception) { pkg }
+
     private fun apply(findings: List<Finding>, pkg: String, url: String?, shot: Shot, replace: Boolean = false) {
         val frame = shot.bitmap
         val screen = service.resources.displayMetrics
         pipeline?.let { avgClassifyMs = it.avgClassifyMs }
         val coverOnDevice = state.policy?.coverOnDevice != false
         val covered = findings.filter { it.decision == Decision.COVER }
+        if (covered.isNotEmpty()) coveredApps[appLabel(pkg)] = System.currentTimeMillis()
         val area = covered.sumOf { it.region.width().toLong() * it.region.height() }.toDouble() / (frame.width.toDouble() * frame.height)
         val blocked = coverOnDevice && area > 0.4
         if (blocked) BlockActivity.show(service, pkg)

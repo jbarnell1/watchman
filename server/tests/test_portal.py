@@ -165,7 +165,7 @@ def test_locked_settings_need_a_partner_code(ctx, client, household, device):
 
 PROTECTION_FORM = {
     "cover_on_device": "on", "ask_server": "on", "strict_mode": "on", "coverage": "explicit",
-    "thresholds.cover": "0.85", "thresholds.flag": "0.85", "thresholds.ask": "0.60", "thresholds.detector_cover": "0.55",
+    "thresholds.cover": "0.85", "thresholds.flag": "0.85", "thresholds.ask": "0.60", "thresholds.sure": "0.97", "thresholds.detector_cover": "0.55",
     "thresholds.second_opinion": "0.70", "protected_browser": "org.mozilla.firefox",
     "risky_apps": "com.google.android.youtube\norg.mozilla.firefox\ncom.reddit.frontpage",
     "blocked_apps": "com.android.chrome\ncom.brave.browser\ncom.opera.browser\ncom.microsoft.emmx\n"

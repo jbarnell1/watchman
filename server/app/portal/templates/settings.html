@@ -70,7 +70,10 @@
     </div>
     <div class="pair" style="margin-top:14px">
       <div><label for="t-ask">Ask</label><input id="t-ask" name="thresholds.ask" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.ask }}"></div>
-      <div><p class="t2" style="margin-top:34px">From ask up to cover the device blurs the image and asks this server's bigger model; a safe answer unblurs it and nothing is kept.</p></div>
+      <div><label for="t-sure">Sure</label><input id="t-sure" name="thresholds.sure" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.sure }}"></div>
+    </div>
+    <p class="t2">From ask up to sure the device blurs the image and asks this server's bigger model; a safe answer unblurs it and nothing is kept. At sure or above it covers and reports without asking.</p>
+    <div class="pair" style="display:none">
     </div>
     <label class="check"><input type="checkbox" name="strict_mode" {% if settings.strict_mode %}checked{% endif %}> Strict mode in risky apps: cover new images until each one scores safe {{ lock('strict_mode') }}</label>
   </div></div>
