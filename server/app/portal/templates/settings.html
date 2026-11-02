@@ -74,6 +74,7 @@
       <div><label for="t-kb">Known-bad list</label><input id="t-kb" name="thresholds.known_bad" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.known_bad }}"></div>
     </div>
     <p class="t2">From ask up to sure the device blurs the image and asks this server's bigger model; a safe answer unblurs it and nothing is kept. At sure or above it covers and reports without asking. A picture joins the known-bad list, covered everywhere by its fingerprint, only when the second opinion reaches the known-bad line and the picture has enough detail; marking an item a false alarm takes it and its look-alikes off the list.</p>
+    <p class="t2"><a href="/whatif{{ ('?person=' ~ for_person.id) if for_person else '' }}">What if</a> replays the scores of recent pictures against other thresholds, so you can see what a change would do before saving it.</p>
     <div class="pair" style="display:none">
     </div>
     <label class="check"><input type="checkbox" name="strict_mode" {% if settings.strict_mode %}checked{% endif %}> Strict mode in risky apps: cover new images until each one scores safe {{ lock('strict_mode') }}</label>

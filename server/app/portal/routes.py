@@ -16,10 +16,10 @@ from fastapi.templating import Jinja2Templates
 from app.clients.second_opinion import FakeSecondOpinion
 from app.clock import iso, parse_iso
 from app.portal.viewer import Viewer, pick_person, require_viewer
-from app.services import alerts, digest, health, heartbeat, intake, locks, metrics, pairlink, peeks, unlock
+from app.services import alerts, digest, health, heartbeat, intake, locks, metrics, pairlink, peeks, unlock, whatif
 from app.services.context import Context
 from app.services.errors import ApiError, Forbidden, NotFound
-from app.settings import PERSON_KEYS, PRESET_LABELS, PRESETS, coerce, effective
+from app.settings import PERSON_KEYS, PRESET_LABELS, PRESETS, Thresholds, coerce, effective
 from app.store.events_store import SEVERITY_PROTECTION
 
 router = APIRouter()
@@ -216,6 +216,50 @@ async def image_medium(event_id: str, request: Request, ctx: Context = Depends(g
     if data is None:
         raise NotFound("no such image")
     return Response(data, media_type="image/webp", headers={"Cache-Control": "no-store"})
+
+
+# What if (ADR-041): replay stored scores against other thresholds. Numbers only.
+
+WHATIF_DAYS = (1, 7, 30)
+WHATIF_KEYS = ("ask", "sure", "cover", "flag", "detector_cover", "second_opinion")
+
+
+def _proposed_thresholds(current: Thresholds, params) -> Thresholds:
+    values = current.model_dump()
+    for key in WHATIF_KEYS:
+        raw = params.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if 0.0 <= value <= 1.0:
+            values[key] = value
+    return Thresholds.model_validate(values)
+
+
+@router.get("/whatif", response_class=HTMLResponse)
+async def whatif_page(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    person = pick_person(v, request)
+    if person is None or not (v.is_admin or v.is_partner_of(person["id"])):
+        raise Forbidden("only the admin or a partner can try thresholds")
+    try:
+        days = int(request.query_params.get("days", "7"))
+    except ValueError:
+        days = 7
+    if days not in WHATIF_DAYS:
+        days = 7
+    mine = effective(ctx.settings.load(), person["id"])
+    proposed = _proposed_thresholds(mine.thresholds, request.query_params)
+    now = ctx.clock.now()
+    result = whatif.replay(ctx.events.between(person["id"], now - timedelta(days=days), now),
+                           mine.thresholds, proposed, mine.cover_on_device, mine.ask_server)
+    return _page(request, ctx, v, "whatif.html", person, days=days, day_choices=WHATIF_DAYS,
+                 current=mine.thresholds, proposed=proposed, keys=WHATIF_KEYS, result=result,
+                 measures=whatif.MEASURES, changed=proposed != mine.thresholds,
+                 cover_on_device=mine.cover_on_device, ask_server=mine.ask_server)
 
 
 # Pairing hand-off. No sign-in: the code in the address is the secret, and it only fills in a form.
