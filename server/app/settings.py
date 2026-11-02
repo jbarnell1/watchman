@@ -27,6 +27,10 @@ class Thresholds(BaseModel):
     sure: float = 0.97
     detector_cover: float = 0.55
     second_opinion: float = 0.70
+    # A confirmed picture joins the known-bad list (covered by hash on every device, no model run)
+    # only at this second opinion or above. At 0.70 Instagram's buttons on a tan reel joined it and
+    # pulled their look-alikes in after them (ADR-035).
+    known_bad: float = 0.90
 
 
 class Smtp(BaseModel):

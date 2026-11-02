@@ -36,13 +36,15 @@ class Pipeline(private val scorer: Scorer, private val cache: DecisionCache = De
             if (Decide.isTiny(r.width(), r.height())) { metrics.count("regions_tiny"); continue }
             metrics.count("regions")
             val crop = Pixels.crop(frame, r)
-            val hash = metrics.timed("hash_ms") { Pixels.dhash(crop) }
-            if (Decide.isKnownBad(hash, knownBad)) {
+            val hashed = metrics.timed("hash_ms") { Pixels.dhashWithDetail(crop) }
+            val hash = hashed.hash
+            if (!hashed.reliable) metrics.count("flat_hashes")
+            if (Decide.isKnownBad(hash, knownBad, hashed.reliable)) {
                 metrics.count("known_bad")
                 emit(Finding(r, Decide.settle(Decision.COVER, coverOnDevice), 1.0, hash, listOf("known_bad"), Pixels.jpeg(crop)))
                 continue
             }
-            val cached = metrics.timed("cache_lookup_ms") { cache.lookup(hash) }
+            val cached = metrics.timed("cache_lookup_ms") { cache.lookup(hash, hashed.reliable) }
             if (cached != null) {
                 metrics.count("cache_hits")
                 if (cached.decision != Decision.SAFE) emit(Finding(r, cached.decision, cached.score, hash, emptyList(), null))

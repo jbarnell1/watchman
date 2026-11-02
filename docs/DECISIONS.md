@@ -8,6 +8,30 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-035 - The known-bad list changes only on strong, independent evidence
+**2026-11-02.** Every picture the server's second opinion confirmed (0.70 or more) joined the
+known-bad list, and every device then covered and reported anything within six bits of it
+without running a model. On an Instagram reel the like, comment and save buttons sit on a plain
+background over the video; the second opinion rated those crops around 0.74, so they joined the
+list, and because a flat crop's hash is decided mostly by noise, each listed hash matched the next
+frame's buttons, whose reports were confirmed and listed in turn. In one day: 228 hashes added,
+1,453 covers by hash, 488 of 641 events the 132 px buttons. Seen as a graph, the list was a
+feedback cycle with no damping, and flat hashes were hubs joined to everything near them.
+Now: a picture joins only at `thresholds.known_bad` (default 0.90), only when its hash has at
+least 40 of 64 decisive bits (neighbouring cells differ by 3 grey levels or more), never when the
+judge cache holds a look-alike answered safe, and never from a device's own known-bad cover (that
+would widen the circle). A safe second opinion on a known-bad cover removes the hash and its
+look-alikes; so does a partner marking the item a false alarm. A look-alike of something the same
+device reported in the last 10 minutes is recorded as info with image status `repeat`, not
+uploaded, judged or alerted; alerts go out once per look-alike group per 30 minutes. On the
+phone, a flat hash matches the known-bad list and its own verdict cache only exactly, so it can
+neither be covered by an unrelated listed hash nor inherit another crop's safe verdict.
+Trade-off: a genuinely explicit picture with little detail (a close crop of skin) no longer joins
+the list. It is still judged by the models every time it appears; the list is an accelerator,
+not the protection. Windows, the extension and iOS still near-match flat hashes (ROADMAP).
+Rejected: raising the second-opinion line (would lose real reviews), deleting the existing list
+(the owner's call; the phone's exact-match rule already neutralises its flat entries).
+
 ### ADR-034 - A small sorter model on the phone; the classifier on XNNPACK with four threads
 **2026-11-02.** On the owner's Pixel the crop classifier took about 250 ms a picture through NNAPI
 on two threads, so a screen of a dozen new pictures took seconds and covers appeared in screen

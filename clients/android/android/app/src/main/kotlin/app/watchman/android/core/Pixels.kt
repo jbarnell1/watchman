@@ -15,6 +15,11 @@ object Pixels {
         return out
     }
 
+    fun dhashWithDetail(bitmap: Bitmap): DHash.Hashed {
+        val b = if (bitmap.width * bitmap.height > 512 * 512) Bitmap.createScaledBitmap(bitmap, 512, 512 * bitmap.height / bitmap.width, true) else bitmap
+        return DHash.computeWithDetail(argb(b), b.width, b.height)
+    }
+
     fun dhash(bitmap: Bitmap): String {
         val b = if (bitmap.width * bitmap.height > 512 * 512) Bitmap.createScaledBitmap(bitmap, 512, 512 * bitmap.height / bitmap.width, true) else bitmap
         return DHash.compute(argb(b), b.width, b.height)

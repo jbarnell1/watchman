@@ -15,15 +15,17 @@ them encrypted and never writes the original (ADR-004).
 from __future__ import annotations
 
 import io
+import json
 import logging
 import sqlite3
+from datetime import timedelta
 
 from PIL import Image
 
 from app.services import alerts, blur
 from app.services.context import Context
 from app.services.errors import ApiError, NotFound
-from app.services.imagehash import dhash
+from app.services.imagehash import MATCH_TOLERANCE, MIN_DECISIVE_BITS, decisive_bits, dhash, hamming
 from app.store.events_store import SEVERITY_EXPLICIT, SEVERITY_INFO, SEVERITY_PROTECTION, SEVERITY_REVIEW
 
 log = logging.getLogger(__name__)
@@ -36,6 +38,10 @@ KNOWN_TYPES = IMAGE_TYPES | {
 }
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_SIDE = 512
+# A look-alike of a picture this device reported within this window is stored for the record but
+# not uploaded, judged or alerted again: one picture on a looping video is one event (ADR-035).
+REPEAT_WINDOW = timedelta(minutes=10)
+ALERT_WINDOW = timedelta(minutes=30)
 
 
 def _initial_severity(event: dict) -> str:
@@ -51,6 +57,7 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
     if len(events) > MAX_BATCH:
         raise ApiError(f"at most {MAX_BATCH} events per call")
     accepted, duplicates, upload, rejected = [], [], [], []
+    recent = ctx.events.recent_image_hashes(device["id"], ctx.clock.now() - REPEAT_WINDOW)
     with ctx.conn:
         for ev in events:
             # A malformed event is named in `rejected` and skipped; the rest of the batch still
@@ -73,10 +80,15 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
             if ev["type"] in IMAGE_TYPES and ev.get("has_image"):
                 if ev.get("hash") and ctx.events.hash_has_image(device["person_id"], ev["hash"]):
                     image_status = "skipped"
+                elif ev.get("hash") and any(hamming(ev["hash"], h) <= MATCH_TOLERANCE for h in recent):
+                    image_status = "repeat"
+                    severity = SEVERITY_INFO  # the first look-alike carries the review
                 else:
                     image_status = "wanted"
                     upload.append(ev["id"])
             ctx.events.insert(ev, device["id"], device["person_id"], severity, image_status)
+            if ev.get("hash"):
+                recent.append(ev["hash"])
             accepted.append(ev["id"])
             if severity == SEVERITY_PROTECTION:
                 alerts.protection_alert(ctx, device, ev)
@@ -128,6 +140,7 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
         image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
 
     score = ctx.second_opinion.score(image)
+    decisive = decisive_bits(image)
     heavy_webp = blur.to_webp(blur.heavy(image))
     medium_webp = blur.to_webp(blur.medium(image))
     del image, data  # the original lives only in this function
@@ -145,8 +158,59 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
         ctx.blobs.put(event_id, "medium", medium_webp)
         ctx.events.add_image(event_id, blur.OUTPUT_SIZE, blur.OUTPUT_SIZE)
         ctx.events.set_second_opinion(event_id, score, severity, "stored")
-        if confirmed and event["hash"]:
-            if ctx.events.add_known_bad(event["hash"], "confirmed"):
-                ctx.settings.bump_policy()
-    if confirmed and not event["alerted_at"]:
+        if event["hash"] and _update_known_bad(ctx, event, score, decisive, settings):
+            ctx.settings.bump_policy()
+    if confirmed and not event["alerted_at"] and not _alerted_lately(ctx, event):
         alerts.explicit_alert(ctx, ctx.events.get(event_id), heavy_webp)
+
+
+def _labels(event: sqlite3.Row) -> list[str]:
+    try:
+        return list((json.loads(event["scores"] or "{}") or {}).get("labels") or [])
+    except (ValueError, AttributeError):
+        return []
+
+
+def _update_known_bad(ctx: Context, event: sqlite3.Row, score: float, decisive: int, settings) -> bool:
+    """The known-bad list feeds back into what devices report, so it changes only on strong,
+    independent evidence (ADR-035). Returns True when the list changed."""
+    t = settings.thresholds
+    if "known_bad" in _labels(event):
+        # The device covered this by hash. A safe second opinion means the listed hash is wrong:
+        # drop it and its look-alikes. A confirming one adds nothing: adding this variant would only
+        # widen the circle of look-alikes, which is how the loop grew.
+        if score < t.second_opinion:
+            removed = ctx.events.remove_known_bad_near(event["hash"], MATCH_TOLERANCE)
+            if removed:
+                log.info("known-bad: removed %d hash(es) after a safe second opinion %.2f", removed, score)
+            return removed > 0
+        return False
+    if score < t.known_bad:
+        return False
+    if decisive < MIN_DECISIVE_BITS:
+        log.info("known-bad: not added, flat crop (%d of 64 decisive bits)", decisive)
+        return False
+    hubs = ctx.judge_cache.safe_near(event["hash"])
+    if hubs:
+        log.info("known-bad: not added, %d look-alike(s) were judged safe", hubs)
+        return False
+    return ctx.events.add_known_bad(event["hash"], "confirmed")
+
+
+def _alerted_lately(ctx: Context, event: sqlite3.Row) -> bool:
+    """One alert per look-alike group per half hour: a looping video is one thing to talk about."""
+    if not event["hash"]:
+        return False
+    since = ctx.clock.now() - ALERT_WINDOW
+    alerted = ctx.events.alerted_hashes(event["person_id"], since)
+    return any(hamming(event["hash"], h) <= MATCH_TOLERANCE for h in alerted)
+
+
+def forget_known_bad(ctx: Context, event: sqlite3.Row) -> int:
+    """A partner marked this item a false alarm: its hash and look-alikes leave the known-bad list."""
+    if not event["hash"]:
+        return 0
+    removed = ctx.events.remove_known_bad_near(event["hash"], MATCH_TOLERANCE)
+    if removed:
+        ctx.settings.bump_policy()
+    return removed

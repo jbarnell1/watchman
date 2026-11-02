@@ -133,7 +133,9 @@ Batched, idempotent by `id` (the server ignores IDs it has). Max 200 events per 
 ```
 Response 200: `{"accepted": ["uuid"], "duplicates": ["uuid"], "upload": ["uuid"], "rejected":
 [{"id": "uuid", "reason": "missing type"}]}`. `upload` lists events whose image the server wants (it
-may skip images for hashes it already holds). A malformed event (no `id`, `type` or `occurred_at`,
+may skip images for hashes it already holds, and for look-alikes of an image the same device
+reported in the last 10 minutes, which it records with image status `repeat` and severity info,
+ADR-035). A malformed event (no `id`, `type` or `occurred_at`,
 or an unknown `type`) is listed in `rejected` with the reason and skipped; the rest of the batch is
 taken. Clients drop rejected events from their queue rather than send them again.
 
@@ -205,4 +207,6 @@ row set bit `row*8 + col` when cell `col` is brighter than cell `col + 1`. Encod
 lowercase hex digits. The reference implementation is `models/watchman_models/dhash.py`; every
 client's implementation must reproduce `models/test-vectors/dhash/vectors.json` exactly. Two hashes
 match when their Hamming distance is 6 or less, which absorbs the small differences left by each
-platform's colour conversion and scaling.
+platform's colour conversion and scaling. A hash with fewer than 40 decisive bits (bits whose two
+cells differ by 3 grey levels or more) comes from a flat crop and matches only exactly, both
+against `known_bad_hashes` and in a client's own verdict cache (ADR-035).

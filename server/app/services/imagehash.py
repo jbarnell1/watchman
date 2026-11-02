@@ -25,6 +25,25 @@ def dhash(image: Image.Image) -> str:
     return f"{bits:016x}"
 
 
+# A hash bit is decisive when its two cells differ by at least this many grey levels. In a flat
+# crop (a white icon on a plain background) most bits are decided by noise, so the hash lands near
+# the hashes of many unrelated flat crops: such a hash must never become known-bad (ADR-035).
+DECISIVE_MARGIN = 3
+MIN_DECISIVE_BITS = 40
+MATCH_TOLERANCE = 6  # the contract's near-match distance, as the clients use it
+
+
+def decisive_bits(image: Image.Image) -> int:
+    gray = np.asarray(image.convert("RGB"), dtype=np.float64)
+    gray = 0.299 * gray[:, :, 0] + 0.587 * gray[:, :, 1] + 0.114 * gray[:, :, 2]
+    small = _area_average(gray)
+    return int((np.abs(small[:, :-1] - small[:, 1:]) >= DECISIVE_MARGIN).sum())
+
+
+def hamming(a: str, b: str) -> int:
+    return bin(int(a, 16) ^ int(b, 16)).count("1")
+
+
 def _area_average(gray: np.ndarray) -> np.ndarray:
     """Box filter to 9 by 8 with fractional coverage at cell edges, the reference algorithm."""
     in_h, in_w = gray.shape
@@ -72,3 +91,8 @@ class JudgeCache:
 
     def __len__(self) -> int:
         return len(self._map)
+
+    def safe_near(self, key: str, tolerance: int = MATCH_TOLERANCE) -> int:
+        """How many crops answered safe sit within [tolerance] of [key]. A hash with safe
+        neighbours is a hub in the near-match graph and would cover them all (ADR-035)."""
+        return sum(1 for k, (_, verdict) in self._map.items() if verdict == "safe" and hamming(k, key) <= tolerance)

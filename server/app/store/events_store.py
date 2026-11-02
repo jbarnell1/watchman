@@ -145,6 +145,26 @@ class EventsStore:
         )
         return cur.rowcount == 1
 
+    def remove_known_bad_near(self, hash_: str, tolerance: int) -> int:
+        from app.services.imagehash import hamming
+        rows = self.conn.execute("SELECT hash FROM known_bad_hashes").fetchall()
+        near = [r["hash"] for r in rows if hamming(r["hash"], hash_) <= tolerance]
+        for h in near:
+            self.conn.execute("DELETE FROM known_bad_hashes WHERE hash = ?", (h,))
+        return len(near)
+
+    def recent_image_hashes(self, device_id: str, since: datetime) -> list[str]:
+        return [r["hash"] for r in self.conn.execute(
+            "SELECT hash FROM events WHERE device_id = ? AND received_at >= ? AND hash IS NOT NULL",
+            (device_id, iso(since)),
+        )]
+
+    def alerted_hashes(self, person_id: str, since: datetime) -> list[str]:
+        return [r["hash"] for r in self.conn.execute(
+            "SELECT hash FROM events WHERE person_id = ? AND alerted_at >= ? AND hash IS NOT NULL",
+            (person_id, iso(since)),
+        )]
+
     def known_bad(self, person_id: str) -> list[str]:
         return [r["hash"] for r in self.conn.execute(
             "SELECT hash FROM known_bad_hashes WHERE person_id IS NULL OR person_id = ? ORDER BY added_at",

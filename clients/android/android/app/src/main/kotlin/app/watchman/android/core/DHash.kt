@@ -9,6 +9,36 @@ object DHash {
     private const val W = 9
     private const val H = 8
 
+    /**
+     * A bit is decisive when its two cells differ by at least [DECISIVE_MARGIN] grey levels. A flat
+     * crop (an icon on a plain background) has few, so its hash sits near the hashes of many
+     * unrelated flat crops and may only match exactly (ADR-035). Same numbers as the server.
+     */
+    const val DECISIVE_MARGIN = 3.0
+    const val MIN_DECISIVE_BITS = 40
+
+    data class Hashed(val hash: String, val decisive: Int) {
+        val reliable: Boolean get() = decisive >= MIN_DECISIVE_BITS
+    }
+
+    fun decisive(small: DoubleArray): Int {
+        var n = 0
+        for (row in 0 until H) for (col in 0 until W - 1) {
+            if (Math.abs(small[row * W + col] - small[row * W + col + 1]) >= DECISIVE_MARGIN) n++
+        }
+        return n
+    }
+
+    fun computeWithDetail(argb: IntArray, width: Int, height: Int): Hashed {
+        val small = areaAverage(gray(argb), width, height)
+        return Hashed(fromCells(small), decisive(small))
+    }
+
+    private fun gray(argb: IntArray): DoubleArray = DoubleArray(argb.size) { i ->
+        val p = argb[i]
+        0.299 * ((p shr 16) and 0xFF) + 0.587 * ((p shr 8) and 0xFF) + 0.114 * (p and 0xFF)
+    }
+
     /** argb is width*height packed ARGB ints as Bitmap.getPixels gives them. */
     fun compute(argb: IntArray, width: Int, height: Int): String {
         val gray = DoubleArray(width * height)
