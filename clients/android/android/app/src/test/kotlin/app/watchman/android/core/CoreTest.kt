@@ -167,6 +167,28 @@ class CoreTest {
     }
 
     @Test
+    fun flatCropsMatchOnlyExactly() {
+        // A plain tan square with a small white ring: few decisive bits.
+        val w = 132
+        val px = IntArray(w * w) { i ->
+            val x = i % w - 66; val y = i / w - 66; val d = Math.sqrt((x * x + y * y).toDouble())
+            if (d in 20.0..26.0) 0xFFFFFFFF.toInt() else 0xFFCDAA7D.toInt()
+        }
+        val flat = DHash.computeWithDetail(px, w, w)
+        assertFalse(flat.reliable)
+        val ramp = IntArray(w * w) { i -> val v = (i % w) * 255 / w; (0xFF shl 24) or (v shl 16) or (v shl 8) or v }
+        assertTrue(DHash.computeWithDetail(ramp, w, w).reliable)
+        val near = java.lang.Long.toHexString(java.lang.Long.parseUnsignedLong(flat.hash, 16) xor 1L).padStart(16, '0')
+        assertTrue(Decide.isKnownBad(near, listOf(flat.hash)))
+        assertFalse(Decide.isKnownBad(near, listOf(flat.hash), reliable = false))
+        assertTrue(Decide.isKnownBad(flat.hash, listOf(flat.hash), reliable = false))
+        val cache = DecisionCache()
+        cache.remember(Judged(Decision.SAFE, flat.hash, 0.1))
+        assertEquals(null, cache.lookup(near, reliable = false))
+        assertEquals(Decision.SAFE, cache.lookup(near)?.decision)
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

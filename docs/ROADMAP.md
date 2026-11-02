@@ -27,6 +27,12 @@ screen-off surface detach, a power budget and the ask band on Android; a judge c
 Unmeasured until the devices run: the Pixel's milliseconds per crop and battery per hour, and the
 laptop's. The numbers go in the status pages.
 
+## Known-bad list (ADR-035)
+
+The server lists a picture only on strong evidence and removes it on contrary evidence; the phone
+matches flat hashes only exactly. Still to do: the same exact-match rule in Windows, the extension
+and iOS; a portal view of the list with a way to clear it.
+
 ## Measurement and the phone's view
 
 ADR-025 metrics on Windows, Android and the extension, merged per day on the server and shown on

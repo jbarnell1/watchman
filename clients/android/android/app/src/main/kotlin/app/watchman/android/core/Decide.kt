@@ -15,7 +15,9 @@ object Decide {
 
     fun isTiny(w: Int, h: Int): Boolean = w < MIN_SIDE || h < MIN_SIDE
 
-    fun isKnownBad(hash: String, knownBad: List<String>): Boolean = knownBad.any { DHash.matches(it, hash) }
+    /** A flat crop's hash is unreliable, so it matches the known-bad list only exactly (ADR-035). */
+    fun isKnownBad(hash: String, knownBad: List<String>, reliable: Boolean = true): Boolean =
+        if (reliable) knownBad.any { DHash.matches(it, hash) } else hash in knownBad
 
     /** From ask up to sure the device covers first and asks the server (ADR-022, ADR-033). */
     fun shouldAsk(score: Double, t: Thresholds, askServer: Boolean): Boolean {
@@ -53,6 +55,8 @@ class Lru<K, V>(private val limit: Int) {
 class DecisionCache {
     private val byHash = Lru<String, Judged>(4000)
 
-    fun lookup(hash: String): Judged? = byHash[hash] ?: byHash.nearby { DHash.matches(it, hash) }
+    /** Near matches only for reliable hashes: a flat crop must not inherit another's verdict (ADR-035). */
+    fun lookup(hash: String, reliable: Boolean = true): Judged? =
+        byHash[hash] ?: if (reliable) byHash.nearby { DHash.matches(it, hash) } else null
     fun remember(j: Judged) { byHash[j.hash] = j }
 }

@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from app.clients.second_opinion import FakeSecondOpinion
 from app.clock import iso, parse_iso
 from app.portal.viewer import Viewer, pick_person, require_viewer
-from app.services import alerts, digest, health, heartbeat, locks, metrics, pairlink, peeks, unlock
+from app.services import alerts, digest, health, heartbeat, intake, locks, metrics, pairlink, peeks, unlock
 from app.services.context import Context
 from app.services.errors import ApiError, Forbidden, NotFound
 from app.settings import PERSON_KEYS, PRESET_LABELS, PRESETS, coerce, effective
@@ -172,6 +172,8 @@ async def review_mark(event_id: str, request: Request, ctx: Context = Depends(ge
         raise ApiError("unknown review state")
     with ctx.conn:
         ctx.events.review(event_id, state, v.login)
+        if state == "false_alarm":
+            intake.forget_known_bad(ctx, event)
     return RedirectResponse(f"/review?person={event['person_id']}", status_code=303)
 
 
@@ -332,7 +334,7 @@ AREAS: dict[str, list[str]] = {
 
 def _parse_setting(key: str, form) -> object:
     if key == "thresholds":
-        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure")
+        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure", "known_bad")
         return {k: float(form.get(f"thresholds.{k}", 0)) for k in keys}
     if key == "smtp":
         return {
