@@ -134,6 +134,16 @@ class CoreTest {
     }
 
     @Test
+    fun scrollDistancesAndTheUnknownMarker() {
+        assertTrue(ScrollShift.known(0, 240))
+        assertFalse(ScrollShift.known(-1, -1))
+        assertFalse(ScrollShift.known(0, 0))
+        assertTrue(ScrollShift.known(-1, 120))
+        assertEquals(0, ScrollShift.of(-1))
+        assertEquals(-35, ScrollShift.of(-35))
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

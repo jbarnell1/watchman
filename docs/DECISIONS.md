@@ -8,6 +8,17 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-032 - Phone patches move with the scroll the app reports
+**2026-11-02.** On the phone a patch stayed where the picture had been until the next pass found
+the picture again, which at today's model speed could be several seconds, so a scrolled picture
+slid out from under its blur. Android's accessibility events already say how far a view scrolled
+(`scrollDeltaX/Y`, -1 when the app does not say). Each scroll event now moves the patches inside the
+scrolled view by that distance at once and drops the ones that leave it; the next region pass,
+from the app window, confirms each picture by hash (a cache hit) and lifts a patch only when its
+picture is gone, so a re-check never uncovers. This is the phone's version of the Windows scroll
+estimate (ADR-023 addendum), with the distance given rather than guessed. Apps that report no
+distance still rely on the next pass.
+
 ### ADR-031 - Patches stay while their picture does; heavy blur, a 3 s light peek; settings in a minute
 **2026-11-02.** On a still screen a phone patch vanished after eight seconds: patches expired unless
 a region pass found the picture again, and region passes only ran on accessibility events, which a

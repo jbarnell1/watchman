@@ -305,6 +305,16 @@ class ScreenWatcher(private val service: AccessibilityService) {
         }
     }
 
+    /** The page scrolled by (dx, dy) inside [area]: patches move with it now, the next pass confirms. */
+    fun shiftPatches(dx: Int, dy: Int, area: Rect?) {
+        val moved = overlay.shift(dx, dy, area)
+        if (moved > 0) metrics.count("patches_scrolled", moved.toLong())
+        // The pictures the timed tick re-checks moved too.
+        lastRegions = lastRegions?.let { (p, u, r) ->
+            Triple(p, u, r.map { rect -> if (area == null || Rect.intersects(area, rect)) Rect(rect).apply { offset(-dx, -dy) } else rect })
+        }
+    }
+
     /** Judge the pictures the app reports. Cached pictures cost a hash, so re-checking is cheap. */
     private fun regionPass(p: String, u: String?, r: List<Rect>, recheck: Boolean = false) {
         val policy = state.policy ?: return

@@ -83,6 +83,28 @@ class OverlayManager(private val context: Context) {
         return held
     }
 
+    /**
+     * Move every patch inside [area] (all of them when null) by the page's scroll: content scrolled
+     * down by dy moves up by dy. A patch that leaves the scrolled area is dropped. Returns how many moved.
+     */
+    fun shift(dx: Int, dy: Int, area: Rect?): Int {
+        if (dx == 0 && dy == 0) return 0
+        var moved = 0
+        synchronized(patches) {
+            val it = patches.listIterator()
+            while (it.hasNext()) {
+                val p = it.next()
+                if (area != null && !Rect.intersects(area, p.region)) continue
+                val r = Rect(p.region).apply { offset(-dx, -dy) }
+                if (area != null && !Rect.intersects(area, r)) { it.remove(); continue }
+                it.set(Patch(r, p.bitmap, p.until))
+                moved++
+            }
+        }
+        if (moved > 0) main.post { view?.invalidate() }
+        return moved
+    }
+
     /** Lift the patch over one region: the server said the picture is safe. */
     fun uncover(region: Rect) {
         synchronized(patches) { patches.removeAll { it.region == region } }
