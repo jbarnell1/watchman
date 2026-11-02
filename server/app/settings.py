@@ -72,6 +72,18 @@ class Settings(BaseModel):
     # Not watched (ADR-030): while one of these apps is in front nothing is judged, covered or
     # reported. Adding one is loosening, so with locks on it needs a partner code.
     exempt_apps: list[str] = Field(default_factory=list)
+    # Watch levels (ADR-037). Real time judges every picture as it appears and blurs it; checked
+    # looks at the whole screen every checked_interval_s and still blurs and reports what it finds,
+    # for a fraction of the battery. An app's level: Not watched, else checked_apps, else
+    # realtime_apps, else watch_default. Moving an app to a lighter level is loosening.
+    watch_default: str = "realtime"     # realtime | checked
+    realtime_apps: list[str] = Field(default_factory=lambda: [
+        "com.instagram.android", "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
+        "com.zhiliaoapp.musically", "com.twitter.android", "com.facebook.katana", "com.snapchat.android",
+        "com.pinterest", "com.tumblr",
+    ])
+    checked_apps: list[str] = Field(default_factory=list)
+    checked_interval_s: int = Field(default=60, ge=10, le=900)
     sample_interval_s: int = 180
     whole_screen_interval_s: int = 5
     # Per-person protection settings: person id to {key: value} for keys in PERSON_KEYS. A person
@@ -94,6 +106,7 @@ class Settings(BaseModel):
 
 
 LOCKED_KEYS = frozenset({
+    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s",
@@ -101,6 +114,7 @@ LOCKED_KEYS = frozenset({
 })
 
 POLICY_KEYS = frozenset({
+    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s", "whole_screen_interval_s",
@@ -108,6 +122,7 @@ POLICY_KEYS = frozenset({
 
 # The protection keys a person may have their own values for.
 PERSON_KEYS = frozenset({
+    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "risky_apps", "blocked_apps",
     "protected_browser", "sample_interval_s", "whole_screen_interval_s",

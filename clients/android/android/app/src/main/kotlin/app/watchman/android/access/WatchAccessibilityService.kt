@@ -46,7 +46,7 @@ class WatchAccessibilityService : AccessibilityService() {
         // The keyboard opens its own window over the app; it is never the app in front (ADR-036).
         // Its own pictures (GIF and sticker search) are still judged below.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != keyboardPackage()) {
-            foregroundPackage = pkg
+            if (pkg != foregroundPackage) { foregroundPackage = pkg; watcher?.foregroundChanged() }
             if (isBlocked(pkg)) { block(pkg); return }
         }
         // Apps the household marked Not watched: nothing is judged while they are in front (ADR-030).

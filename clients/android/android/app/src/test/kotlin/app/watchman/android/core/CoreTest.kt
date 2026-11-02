@@ -201,6 +201,18 @@ class CoreTest {
     }
 
     @Test
+    fun watchLevelsResolveInOrder() {
+        val base = Policy(1, Thresholds(0.85, 0.85, 0.55), true, null, null, emptyList(), emptyList(), "org.mozilla.firefox",
+            180, 5, null, emptyList(), exemptApps = listOf("photos"), watchDefault = "checked",
+            realtimeApps = listOf("instagram", "photos", "gmail"), checkedApps = listOf("gmail"), checkedIntervalS = 60)
+        assertEquals(WatchLevel.OFF, base.levelOf("photos"))
+        assertEquals(WatchLevel.CHECKED, base.levelOf("gmail"))
+        assertEquals(WatchLevel.REALTIME, base.levelOf("instagram"))
+        assertEquals(WatchLevel.CHECKED, base.levelOf("calculator"))
+        assertEquals(WatchLevel.REALTIME, base.copy(watchDefault = null).levelOf("calculator"))
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

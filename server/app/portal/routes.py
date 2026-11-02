@@ -325,6 +325,7 @@ AREAS: dict[str, list[str]] = {
                    "thresholds",
                    "risky_apps",
                    "blocked_apps", "exempt_apps", "protected_browser",
+                   "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
                    "sample_interval_s", "whole_screen_interval_s", "max_pause_minutes",
                    "heartbeat_gap_minutes", "peek_seconds", "peek_cooldown_hours", "second_opinion_device"],
     "email": ["smtp"],
@@ -344,7 +345,12 @@ def _parse_setting(key: str, form) -> object:
             "from_address": str(form.get("smtp.from_address", "")).strip(),
             "starttls": form.get("smtp.starttls") == "on",
         }
-    if key in ("risky_apps", "blocked_apps", "exempt_apps"):
+    if key == "watch_default":
+        value = str(form.get(key, "realtime"))
+        if value not in ("realtime", "checked"):
+            raise ApiError("unknown watch level")
+        return value
+    if key in ("risky_apps", "blocked_apps", "exempt_apps", "realtime_apps", "checked_apps"):
         return [line.strip() for line in str(form.get(key, "")).splitlines() if line.strip()]
     if key in ("strict_mode", "cover_on_device", "ask_server", "locks_on"):
         return form.get(key) == "on"

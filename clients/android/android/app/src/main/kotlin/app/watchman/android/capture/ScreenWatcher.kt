@@ -18,6 +18,7 @@ import app.watchman.android.core.Coverage
 import app.watchman.android.core.Decision
 import app.watchman.android.core.Finding
 import app.watchman.android.core.Iso
+import app.watchman.android.core.WatchLevel
 import app.watchman.android.core.Metrics
 import app.watchman.android.core.MetricsLog
 import app.watchman.android.core.OnnxScorer
@@ -270,7 +271,12 @@ class ScreenWatcher(private val service: AccessibilityService) {
         if (policy == null || !ensureModels()) { scheduleTick(30_000); return }
         val p = power()
         budget = PowerBudget.describe(p)
-        val interval = policy.wholeScreenIntervalS * 1000L * PowerBudget.intervalMultiplier(p)
+        val front = app.watchman.android.access.WatchAccessibilityService.foregroundPackage
+        val level = policy.levelOf(front)
+        // A checked app gets one whole-screen look per checked interval and no per-picture passes (ADR-037).
+        val baseS = if (level == WatchLevel.CHECKED) (policy.checkedIntervalS ?: 60) else policy.wholeScreenIntervalS
+        val interval = baseS * 1000L * PowerBudget.intervalMultiplier(p)
+        if (level == WatchLevel.CHECKED) metrics.count("checked_ticks")
         when {
             policy.isPaused() -> { overlay.clear(); scheduleTick(interval) }
             screenOff -> scheduleTick(interval)
@@ -294,7 +300,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 // A still screen sends no accessibility events, so nothing else would keep its patches
                 // fresh: re-check the pictures the app last reported (cache hits, a hash each).
                 lastRegions?.let { (lp, lu, lr) ->
-                    if (lp == app.watchman.android.access.WatchAccessibilityService.foregroundPackage) regionPass(lp, lu, lr, recheck = true)
+                    if (level == WatchLevel.REALTIME && lp == front) regionPass(lp, lu, lr, recheck = true)
                 }
                 updateWork()
                 scheduleTick(interval)
@@ -305,6 +311,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
     /** Called by the accessibility service with image rectangles in screen pixels; one pass per [REGION_COALESCE_MS] with the latest set. */
     fun judgeRegions(pkg: String, url: String?, regions: List<Rect>) {
         handler.post {
+            if (state.policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
             pendingRegions = Triple(pkg, url, regions)
             if (regionPassScheduled) return@post
             regionPassScheduled = true
@@ -316,6 +323,11 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 regionPass(p, u, r)
             }, REGION_COALESCE_MS)
         }
+    }
+
+    /** A new app came to the front: look at it now instead of at the next tick, whatever its level. */
+    fun foregroundChanged() {
+        handler.post { scheduleTick(0) }
     }
 
     /** The page scrolled by (dx, dy) inside [area]: patches move with it now, the next pass confirms. */

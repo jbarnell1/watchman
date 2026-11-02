@@ -92,6 +92,10 @@ Response 200:
  "risky_apps": ["com.google.android.youtube", "org.mozilla.firefox"],
  "blocked_apps": ["com.android.chrome"],
  "exempt_apps": [],
+ "watch_default": "realtime",
+ "realtime_apps": ["com.instagram.android"],
+ "checked_apps": [],
+ "checked_interval_s": 60,
  "protected_browser": "org.mozilla.firefox",
  "sample_interval_s": 180,
  "whole_screen_interval_s": 5,
@@ -113,6 +117,12 @@ can run different postures.
 
 `exempt_apps` are apps not watched at all (ADR-030): while one is in front nothing is judged,
 covered or reported. Android applies it today.
+
+Watch levels (ADR-037): an app in `exempt_apps` is not watched; else one in `checked_apps` is
+checked, else one in `realtime_apps` is real time, else it gets `watch_default` (`realtime` or
+`checked`). Real time is today's behaviour: every picture judged as it appears. Checked means no
+per-picture passes, only a whole-screen look every `checked_interval_s` seconds (stretched by the
+power budget) that still covers and reports what it finds. Android applies it today.
 
 App identifiers are platform specific (Android package names, Windows process names, iOS bundle
 IDs); clients ignore entries that are not theirs. `known_bad_hashes` are 64-bit dHash hex strings.

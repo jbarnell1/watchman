@@ -21,9 +21,11 @@ from app.settings import PERSON_KEYS, Settings, effective
 LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "protection": ("Thresholds, coverage and posture",
                    ("thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides")),
-    "apps": ("Blocked, risky and not-watched apps, protected browser",
-             ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser")),
-    "timing": ("Timing and silence alerts", ("sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes")),
+    "apps": ("Blocked, risky and not-watched apps, watch levels, protected browser",
+             ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser", "watch_default", "realtime_apps",
+              "checked_apps")),
+    "timing": ("Timing and silence alerts", ("sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes",
+                                              "checked_interval_s")),
     "pauses": ("Pauses and peeks", ("max_pause_minutes", "peek_seconds", "peek_cooldown_hours")),
     "retention": ("How long blurred images are kept", ("image_retention_days",)),
     "partners": ("Removing a partner", ()),
@@ -32,13 +34,15 @@ LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
 COVERAGE_RANK = {"explicit": 0, "revealing": 1, "strict": 2}
 # Lower is stronger: more images covered, more often looked at, sooner noticed, shorter pauses.
 LOWER_IS_STRONGER = {"sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes", "max_pause_minutes",
+                     "checked_interval_s",
                      "peek_cooldown_hours"}
 # Higher is stronger: partners see more for longer.
 HIGHER_IS_STRONGER = {"image_retention_days", "peek_seconds"}
 # On is stronger.
 FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on"}
 # Lists where adding is stronger and removing anything is weaker.
-LISTS = {"blocked_apps", "risky_apps"}
+LISTS = {"blocked_apps", "risky_apps", "realtime_apps"}
+WATCH_RANK = {"checked": 0, "realtime": 1}
 
 
 def group_of(key: str) -> str | None:
@@ -77,6 +81,12 @@ def loosens(key: str, old: Any, new: Any, current: Settings | None = None) -> bo
         return bool(old) and not bool(new)
     if key in LISTS:
         return bool(set(old or []) - set(new or []))
+    if key == "watch_default":
+        return WATCH_RANK.get(new, 0) < WATCH_RANK.get(old, 0)
+    if key == "checked_apps":
+        # Every app added is watched less, unless it was not watched at all before.
+        was_off = set(current.exempt_apps) if current is not None else set()
+        return bool(set(new or []) - set(old or []) - was_off)
     if key == "exempt_apps":
         # The opposite list: every app added is one less app watched.
         return bool(set(new or []) - set(old or []))
@@ -116,6 +126,9 @@ LABELS = {
     "cover_on_device": "blur on the device", "ask_server": "asking the server",
     "person_overrides": "a person's own values", "blocked_apps": "blocked apps", "risky_apps": "risky apps",
     "protected_browser": "the protected browser", "exempt_apps": "apps not watched",
+    "watch_default": "how other apps are watched",
+    "realtime_apps": "apps watched in real time", "checked_apps": "apps checked now and then",
+    "checked_interval_s": "how often checked apps are looked at",
     "sample_interval_s": "the sample interval",
     "whole_screen_interval_s": "the whole-screen interval", "heartbeat_gap_minutes": "the silence alert",
     "max_pause_minutes": "the longest pause", "peek_seconds": "peek length", "peek_cooldown_hours": "peek cooldown",
