@@ -92,6 +92,7 @@ Response 200:
  "risky_apps": ["com.google.android.youtube", "org.mozilla.firefox"],
  "blocked_apps": ["com.android.chrome"],
  "exempt_apps": [],
+ "follow_scroll": false,
  "watch_default": "realtime",
  "realtime_apps": ["com.instagram.android"],
  "checked_apps": [],
@@ -117,6 +118,11 @@ can run different postures.
 
 `exempt_apps` are apps not watched at all (ADR-030): while one is in front nothing is judged,
 covered or reported. Android applies it today.
+
+`follow_scroll` (ADR-040, default false): true moves blurs with a scroll the app reports before the
+next check; false or absent leaves them in place until the next check. `strict_mode` (ADR-040): in `risky_apps`, a picture
+that appears is covered at once from its position alone and stays covered until it is judged.
+Android applies both.
 
 Watch levels (ADR-037): an app in `exempt_apps` is not watched; else one in `checked_apps` is
 checked, else one in `realtime_apps` is real time, else it gets `watch_default` (`realtime` or

@@ -61,6 +61,9 @@ class Settings(BaseModel):
     # alone and the ask band is unused (ADR-022). The settings page offers presets that fill these.
     cover_on_device: bool = True
     ask_server: bool = True
+    # Blurs move with a scroll the app reports, before the next check confirms them (ADR-032).
+    # Off by default: the owner found it not effective; blurs then wait for the next check (ADR-040).
+    follow_scroll: bool = False
     risky_apps: list[str] = Field(default_factory=lambda: [
         "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
     ])
@@ -106,6 +109,7 @@ class Settings(BaseModel):
 
 
 LOCKED_KEYS = frozenset({
+    "follow_scroll",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
@@ -114,6 +118,7 @@ LOCKED_KEYS = frozenset({
 })
 
 POLICY_KEYS = frozenset({
+    "follow_scroll",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
@@ -122,6 +127,7 @@ POLICY_KEYS = frozenset({
 
 # The protection keys a person may have their own values for.
 PERSON_KEYS = frozenset({
+    "follow_scroll",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "risky_apps", "blocked_apps",

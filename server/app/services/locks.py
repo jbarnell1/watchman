@@ -20,7 +20,8 @@ from app.settings import PERSON_KEYS, Settings, effective
 # removing a partner, which the partner pages check by name.
 LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "protection": ("Thresholds, coverage and posture",
-                   ("thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides")),
+                   ("thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
+                    "follow_scroll")),
     "apps": ("Blocked, risky and not-watched apps, watch levels, protected browser",
              ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser", "watch_default", "realtime_apps",
               "checked_apps")),
@@ -39,7 +40,7 @@ LOWER_IS_STRONGER = {"sample_interval_s", "whole_screen_interval_s", "heartbeat_
 # Higher is stronger: partners see more for longer.
 HIGHER_IS_STRONGER = {"image_retention_days", "peek_seconds"}
 # On is stronger.
-FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on"}
+FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll"}
 # Lists where adding is stronger and removing anything is weaker.
 LISTS = {"blocked_apps", "risky_apps", "realtime_apps"}
 WATCH_RANK = {"checked": 0, "realtime": 1}
@@ -123,7 +124,8 @@ def needs_code(current: Settings, changes: dict[str, Any]) -> list[str]:
 
 LABELS = {
     "thresholds": "thresholds", "strict_mode": "strict mode", "coverage": "coverage",
-    "cover_on_device": "blur on the device", "ask_server": "asking the server",
+    "cover_on_device": "blur on the device", "follow_scroll": "blurs following a scroll",
+    "ask_server": "asking the server",
     "person_overrides": "a person's own values", "blocked_apps": "blocked apps", "risky_apps": "risky apps",
     "protected_browser": "the protected browser", "exempt_apps": "apps not watched",
     "watch_default": "how other apps are watched",

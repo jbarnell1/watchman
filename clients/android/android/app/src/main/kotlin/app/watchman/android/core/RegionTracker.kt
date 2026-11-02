@@ -53,6 +53,15 @@ class RegionTracker(private val now: () -> Long = System::currentTimeMillis) {
         track.judgedAt = now()
     }
 
+    /** Judged at least once and still on screen: not new. */
+    fun isKnown(key: String): Boolean = (tracks[key]?.judgedAt ?: 0L) > 0L
+
+    /** Pictures that just appeared, outside any video surface (videos are judged on their cadence). */
+    fun fresh(regions: List<Region>): List<Region> {
+        val videos = regions.filter { it.video }
+        return regions.filter { r -> !r.video && !isKnown(r.key) && videos.none { v -> insideShare(r, v) >= INSIDE } }
+    }
+
     fun isLive(key: String): Boolean = tracks[key]?.let { isLive(it) } ?: false
 
     private fun isLive(track: Track): Boolean = track.changes.count { it } >= LIVE_CHANGES

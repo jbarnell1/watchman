@@ -247,6 +247,18 @@ class CoreTest {
     }
 
     @Test
+    fun strictModeCoversOnlyNewPicturesOutsideVideos() {
+        val tracker = RegionTracker { 1_000L }
+        val video = RegionTracker.Region("player@0,0", 0, 300, 1344, 2700, video = true)
+        val button = RegionTracker.Region("like@1180,1500", 1180, 1500, 1312, 1632, video = false)
+        val avatar = RegionTracker.Region("avatar@40,100", 40, 100, 172, 232, video = false)
+        assertEquals(listOf(avatar), tracker.fresh(listOf(video, button, avatar)))
+        tracker.plan(listOf(avatar), 5_000)
+        tracker.judged(avatar.key, "0f0f0f0f0f0f0f0f")
+        assertEquals(emptyList<RegionTracker.Region>(), tracker.fresh(listOf(video, button, avatar)))
+    }
+
+    @Test
     fun cacheFindsNearbyHashes() {
         val cache = DecisionCache()
         cache.remember(Judged(Decision.COVER, "9f3a0c1e5b7d2a46", 0.9))

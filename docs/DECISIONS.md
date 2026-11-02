@@ -8,6 +8,19 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-040 - Scroll-following is a setting; strict mode covers new pictures until judged
+**2026-11-02.** The owner found blurs that move with a scroll (ADR-032) not effective enough to
+keep on unconditionally: the app's reported distance often lags the picture. `follow_scroll`, a
+protection lock key, is now off by default (the owner's call; an older server that sends no value
+also means off); blurs then stay put until the next check moves them. The settings page has offered strict mode ("cover new images until each one scores safe" in
+risky apps) since the first build, but no client did it. The phone now does: in `risky_apps`, a
+picture that appears and has not been judged on this screen is covered at once with a plain patch
+from its position alone, before any screenshot; the region pass that follows lifts it when it is
+safe or swaps in a pixelated patch when it is not, and an unjudged cover expires after 5 s.
+Videos are not strict-covered (they are judged on their cadence, ADR-038). It costs no model run.
+Strict mode stays on by default, which turns this on for the default risky apps (YouTube, Firefox,
+Reddit). Windows and the extension still ignore strict mode (ROADMAP).
+
 ### ADR-039 - The phone's check chain starts itself and cannot stall on a missing callback
 **2026-11-02.** After an accessibility rebind (here caused by a UI dump, which suppresses every
 accessibility service for a moment) the phone reported protection on but judged nothing for six
