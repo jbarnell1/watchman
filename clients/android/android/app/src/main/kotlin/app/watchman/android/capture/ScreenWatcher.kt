@@ -56,6 +56,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
         private const val TAG = "ScreenWatcher"
         const val REGION_COALESCE_MS = 400L
         const val MIN_FRAME_AGE_MS = 1000L
+        /** How long a whole-screen check waits for the system's screenshot before moving on. */
+        const val SCREENSHOT_TIMEOUT_MS = 5_000L
         @Volatile var instance: ScreenWatcher? = null
         @Volatile var lastError: String? = null
         @Volatile var avgClassifyMs: Double = 0.0
@@ -124,7 +126,11 @@ class ScreenWatcher(private val service: AccessibilityService) {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         })
-        scheduleTick(0)
+        // Posted, not called: `tick` is declared further down, so during construction it is still
+        // null and a direct call would post an empty message. Until 2026-11-02 the first check only
+        // ran once something else (screen on, an app switch) scheduled it, so a service rebind with
+        // the screen on and one app in front left the phone unwatched (ADR-039).
+        handler.post { scheduleTick(0) }
         handler.postDelayed(flush, 60_000)
     }
 
@@ -287,25 +293,30 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 overlay.clear()
                 scheduleTick(interval)
             }
-            else -> takeDisplay { frame ->
-                if (frame != null && frameSeq != judgedSeq) {
-                    judgedSeq = frameSeq
-                    screensExamined++
-                    metrics.count("screens_judged")
-                    judge(Shot(frame, 0, 0, window = false), listOf(Rect(0, 0, frame.width, frame.height)),
-                        app.watchman.android.access.WatchAccessibilityService.foregroundPackage,
-                        app.watchman.android.access.WatchAccessibilityService.lastUrl, p, policy)
-                } else {
-                    screensSkipped++
-                    metrics.count("screens_unchanged")
+            else -> {
+                // Book the next check before asking for a screenshot: if the system never calls back,
+                // the chain still continues instead of stopping for good (ADR-039).
+                scheduleTick(interval + SCREENSHOT_TIMEOUT_MS)
+                takeDisplay { frame ->
+                    if (frame != null && frameSeq != judgedSeq) {
+                        judgedSeq = frameSeq
+                        screensExamined++
+                        metrics.count("screens_judged")
+                        judge(Shot(frame, 0, 0, window = false), listOf(Rect(0, 0, frame.width, frame.height)),
+                            app.watchman.android.access.WatchAccessibilityService.foregroundPackage,
+                            app.watchman.android.access.WatchAccessibilityService.lastUrl, p, policy)
+                    } else {
+                        screensSkipped++
+                        metrics.count("screens_unchanged")
+                    }
+                    // A still screen sends no accessibility events, so nothing else would keep its patches
+                    // fresh: re-check the pictures the app last reported (cache hits, a hash each).
+                    lastRegions?.let { (lp, lu, lr) ->
+                        if (level == WatchLevel.REALTIME && lp == front) regionPass(lp, lu, lr, recheck = true)
+                    }
+                    updateWork()
+                    scheduleTick(interval)
                 }
-                // A still screen sends no accessibility events, so nothing else would keep its patches
-                // fresh: re-check the pictures the app last reported (cache hits, a hash each).
-                lastRegions?.let { (lp, lu, lr) ->
-                    if (level == WatchLevel.REALTIME && lp == front) regionPass(lp, lu, lr, recheck = true)
-                }
-                updateWork()
-                scheduleTick(interval)
             }
         }
     }

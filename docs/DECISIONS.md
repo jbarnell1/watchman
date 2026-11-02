@@ -8,6 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-039 - The phone's check chain starts itself and cannot stall on a missing callback
+**2026-11-02.** After an accessibility rebind (here caused by a UI dump, which suppresses every
+accessibility service for a moment) the phone reported protection on but judged nothing for six
+minutes on a playing reel. The watcher scheduled its first whole-screen check in its constructor
+before the timer object existed, so the call posted an empty message; the chain only ever started
+when a screen-on broadcast or an app switch scheduled it. A playing reel sends almost no
+accessibility events, so nothing else ran. The first check is now posted after construction, and
+each check books its successor before asking for a screenshot, so a callback the system never
+delivers cannot end the chain. The rebind itself was partner-visible (protection off, then on).
+
 ### ADR-038 - Pictures are tracks over time; video surfaces are judged at the video cadence
 **2026-11-02.** On a looping reel the phone judged the 132 px buttons drawn over the video on
 nearly every pass: their pixels change with each frame, so every pass was a new fingerprint and a
