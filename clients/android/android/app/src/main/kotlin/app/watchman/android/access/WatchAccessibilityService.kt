@@ -6,6 +6,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import app.watchman.android.capture.ScreenWatcher
 import app.watchman.android.core.AppState
+import app.watchman.android.core.ScrollShift
 import app.watchman.android.core.Iso
 import app.watchman.android.core.WatchmanEvent
 import app.watchman.android.overlay.BlockActivity
@@ -48,6 +49,17 @@ class WatchAccessibilityService : AccessibilityService() {
         }
         // Apps the household marked Not watched: nothing is judged while they are in front (ADR-030).
         if (isExempt(pkg)) return
+        // A scroll moves the patches by the distance the app reports, before any screenshot: the blur
+        // travels with the page instead of waiting for the next pass (ADR-032).
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            val dx = event.scrollDeltaX
+            val dy = event.scrollDeltaY
+            if (ScrollShift.known(dx, dy)) {
+                val area = android.graphics.Rect()
+                event.source?.getBoundsInScreen(area)
+                watcher?.shiftPatches(ScrollShift.of(dx), ScrollShift.of(dy), if (area.isEmpty) null else area)
+            }
+        }
         if (pkg in browserPackages) lastUrl = readUrl(rootInActiveWindow) ?: lastUrl
         val regions = imageRegions(rootInActiveWindow)
         if (regions.isNotEmpty()) watcher?.judgeRegions(pkg, lastUrl, regions)
