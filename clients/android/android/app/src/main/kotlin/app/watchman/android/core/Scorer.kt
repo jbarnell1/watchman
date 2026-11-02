@@ -42,7 +42,9 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
     private val gateEntry = gate
     private val classifierSession: OrtSession
     private val detectorSession: OrtSession?
-    private val gateSession: OrtSession?
+    private var gateSession: OrtSession?
+    /** Each model's time on a plain picture with its chosen backend. */
+    private val warmMs = HashMap<String, Double>()
     /** The backend each model ended up on, with its time on a plain picture. */
     val provider: String
 
@@ -52,6 +54,15 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
         classifierSession = fastest("classify", classifierPath, chosen) { softmaxRun(it, classifier, plain) }
         detectorSession = if (detector != null && detectorPath != null) fastest("detect", detectorPath, chosen) { detectRun(it, detector, plain) } else null
         gateSession = if (gate != null && gatePath != null) fastest("gate", gatePath, chosen) { softmaxRun(it, gate, plain) } else null
+        // Sorting costs one sorter run for every new picture before the first classifier run, so it
+        // only pays when the sorter is several times cheaper. On the owner's Pixel it was about half
+        // the classifier's time, and sorting made the first cover later on average (ADR-034).
+        if (gateSession != null && warmMs["gate"]!! * GATE_WORTH > warmMs["classify"]!!) {
+            gateSession?.close()
+            gateSession = null
+            chosen.add("sorter off: not ${GATE_WORTH}x cheaper than the classifier")
+            metrics?.count("gate_off")
+        }
         provider = chosen.joinToString(", ")
         plain.recycle()
     }
@@ -75,6 +86,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
             }
         }
         chosen.add("$name $bestName ${"%.0f".format(bestMs)} ms")
+        warmMs[name] = bestMs
         return best ?: throw IllegalStateException("$name: no backend could run the model")
     }
 
@@ -149,5 +161,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
     companion object {
         const val THREADS = 4
         const val WARM_RUNS = 3
+        /** The sorter is used only when it is at least this many times cheaper than the classifier. */
+        const val GATE_WORTH = 4
     }
 }
