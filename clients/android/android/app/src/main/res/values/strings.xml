@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Watchman</string>
+    <string name="accessibility_description">Watchman uses accessibility to know which app is in front, where images sit on the screen and what is in a browser\'s address bar, so it can cover explicit images as they appear and report to your household\'s own server. Nothing is sent anywhere else.</string>
+    <string name="device_admin_description">Keeps Watchman from being uninstalled quietly. Turning this off is reported to your partners.</string>
+    <string name="notification_title">Watchman is on</string>
+    <string name="notification_text">Judging images on this phone. Reports to your household server.</string>
+</resources>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Watchman mark: the watchtower stands in the W's valley; its light is the inner V. -->
+  <!-- Traced from the Gemini candidate chosen 2026-11-01 (docs/brand/mark-reference.jpg). -->
+  <g fill="#0b1114">
+    <polygon points="4,22 15.3,22 26.4,56.6 15.3,56.6"/>
+    <polygon points="48.7,22 60,22 48.7,56.6 37.6,56.6"/>
+  </g>
+  <polygon fill="#156d7a" points="28.9,22 35.1,22 48.7,56.6 37.6,56.6 32,37 26.4,56.6 15.3,56.6"/>
+  <g fill="#0b1114">
+    <polygon points="30.2,17.6 33.8,17.6 34.2,22.4 29.8,22.4"/>
+    <rect x="28.8" y="16.5" width="6.4" height="1.4"/>
+    <rect x="30.4" y="13.4" width="3.2" height="3.2"/>
+    <polygon points="29.3,13.5 34.7,13.5 32,11.3"/>
+    <rect x="31.6" y="9.9" width="0.8" height="1.6"/>
+  </g>
+  <rect fill="#ffffff" x="31.3" y="14.2" width="1.4" height="1.9"/>
+</svg>

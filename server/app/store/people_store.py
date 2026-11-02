@@ -1,0 +1,106 @@
+"""People (the protected), partners, and portal logins."""
+
+from __future__ import annotations
+
+import sqlite3
+import uuid
+
+from app.clock import Clock, iso
+
+
+class PeopleStore:
+    def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
+        self.conn = conn
+        self.clock = clock
+
+    # People
+
+    def add_person(self, name: str, email: str | None = None, login: str | None = None) -> str:
+        pid = str(uuid.uuid4())
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO people(id, name, email, created_at) VALUES (?, ?, ?, ?)",
+                (pid, name, email, iso(self.clock.now())),
+            )
+            if login:
+                self.add_login(login, "protected", pid)
+        return pid
+
+    def get_person(self, person_id: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM people WHERE id = ?", (person_id,)).fetchone()
+
+    def list_people(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM people ORDER BY created_at").fetchall()
+
+    def update_person(self, person_id: str, name: str, email: str | None) -> None:
+        self.conn.execute("UPDATE people SET name = ?, email = ? WHERE id = ?", (name, email, person_id))
+
+    # Logins
+
+    def add_login(self, login: str, role: str, person_id: str | None = None,
+                  partner_id: str | None = None) -> None:
+        self.conn.execute(
+            "INSERT OR IGNORE INTO logins(login, role, person_id, partner_id) VALUES (?, ?, ?, ?)",
+            (login.lower(), role, person_id, partner_id),
+        )
+
+    def roles_for(self, login: str) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM logins WHERE login = ?", (login.lower(),)
+        ).fetchall()
+
+    def admins(self) -> list[str]:
+        return [r["login"] for r in self.conn.execute("SELECT login FROM logins WHERE role = 'admin'")]
+
+    def has_admin(self) -> bool:
+        return self.conn.execute("SELECT 1 FROM logins WHERE role = 'admin' LIMIT 1").fetchone() is not None
+
+    def remove_login(self, login: str, role: str, person_id: str | None) -> None:
+        self.conn.execute(
+            "DELETE FROM logins WHERE login = ? AND role = ? AND person_id IS ?",
+            (login.lower(), role, person_id),
+        )
+
+    # Partners
+
+    def add_partner(self, person_id: str, name: str, email: str, link_type: str,
+                    login: str | None = None) -> str:
+        if link_type not in ("linked", "email"):
+            raise ValueError("link_type must be linked or email")
+        if link_type == "linked" and not login:
+            raise ValueError("a linked partner needs a Tailscale login")
+        pid = str(uuid.uuid4())
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO partners(id, person_id, name, email, link_type, login, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (pid, person_id, name, email, link_type, login.lower() if login else None,
+                 iso(self.clock.now())),
+            )
+            if login:
+                self.add_login(login, "partner", person_id, pid)
+        return pid
+
+    def get_partner(self, partner_id: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM partners WHERE id = ?", (partner_id,)).fetchone()
+
+    def partners_for(self, person_id: str) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM partners WHERE person_id = ? ORDER BY created_at", (person_id,)
+        ).fetchall()
+
+    def partner_for_login(self, login: str, person_id: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM partners WHERE login = ? AND person_id = ?", (login.lower(), person_id)
+        ).fetchone()
+
+    def remove_partner(self, partner_id: str) -> None:
+        row = self.get_partner(partner_id)
+        if row is None:
+            return
+        with self.conn:
+            if row["login"]:
+                self.conn.execute(
+                    "DELETE FROM logins WHERE partner_id = ?", (partner_id,)
+                )
+            self.conn.execute("DELETE FROM partners WHERE id = ?", (partner_id,))

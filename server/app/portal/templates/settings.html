@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>Settings</h1>
+  <p class="finding">{% if locked %}Protection is on. Tightening anything is free; loosening a setting marked locked needs a partner's settings code.{% elif not settings.locks_on %}Locks are off while you set up and test: every setting can change without a partner code, and partners see each change in the digest. Turn locks on under Protection when you are done.{% else %}Nothing is paired yet, so every setting can be changed freely. Once a device is paired, protection settings lock.{% endif %}</p></div></div>
+
+<nav class="tabs" aria-label="Settings areas">
+  {% for a in areas %}<a class="{% if a == area %}on{% endif %}" href="/settings?area={{ a }}">{{ a|capitalize }}</a>{% endfor %}
+</nav>
+
+{% if saved %}<p class="notice ok">{% if saved == 'digest' %}Digest sent.{% elif saved == 'digest_failed' %}The digest could not be sent. Check the email settings.{% else %}Saved.{% endif %}</p>{% endif %}
+{% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+
+{% macro lock(key) %}{% if locked and key in locked_keys %}<span class="lock" title="tightening is free; loosening needs a partner's settings code">locked</span>{% endif %}{% endmacro %}
+
+{% if area == 'general' %}
+<form method="post" action="/settings/general" class="settings">
+  <div class="srow"><div class="slabel"><h2>Household</h2><p>The name devices and emails show.</p></div><div class="spanel">
+    <label for="household_name">Household name</label><input id="household_name" name="household_name" value="{{ settings.household_name }}">
+    <label for="timezone">Time zone</label><select id="timezone" name="timezone">{% for tz in timezones %}<option {% if tz == settings.timezone %}selected{% endif %}>{{ tz }}</option>{% endfor %}</select>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Digest</h2><p>Sent to {{ person.name if person else 'the protected person' }} and every partner. {% if last_digest %}Last sent {{ when(last_digest.sent_at) }}.{% else %}Not sent yet.{% endif %}</p></div><div class="spanel">
+    <div class="pair">
+      <div><label for="digest_day">Day</label><select id="digest_day" name="digest_day">{% for d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}<option value="{{ d }}" {% if d == settings.digest_day %}selected{% endif %}>{{ d|capitalize }}</option>{% endfor %}</select></div>
+      <div><label for="digest_time">Time</label><input id="digest_time" name="digest_time" type="time" value="{{ settings.digest_time }}"></div>
+    </div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Retention {{ lock('image_retention_days') }}</h2><p>Blurred images are deleted after this many days; event text later.</p></div><div class="spanel">
+    <div class="pair">
+      <div><label for="image_retention_days">Images, days</label><input id="image_retention_days" name="image_retention_days" type="number" min="1" value="{{ settings.image_retention_days }}"></div>
+      <div><label for="event_retention_days">Events, days</label><input id="event_retention_days" name="event_retention_days" type="number" min="7" value="{{ settings.event_retention_days }}"></div>
+    </div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Extras</h2><p>Optional. ntfy gets a short push for the admin on every alert.</p></div><div class="spanel">
+    <label for="ntfy_url">ntfy topic URL</label><input id="ntfy_url" name="ntfy_url" value="{{ settings.ntfy_url }}" placeholder="https://ntfy.example/homelab">
+    <label for="adguard_url">AdGuard Home URL</label><input id="adguard_url" name="adguard_url" value="{{ settings.adguard_url }}" placeholder="http://adguard.lan:3053">
+  </div></div>
+  {% if locked %}<div class="srow"><div class="slabel"><h2>Partner code</h2><p>Only needed when a locked value changes.</p></div><div class="spanel"><label for="partner_code">Settings code</label><input id="partner_code" name="partner_code" inputmode="numeric" autocomplete="off"></div></div>{% endif %}
+  <div class="sactions"><button class="btn primary">Save</button>
+    {% if person %}<button class="btn" formaction="/settings/digest/send" name="person" value="{{ person.id }}" formnovalidate>Send the digest now</button>{% endif %}</div>
+</form>
+
+{% elif area == 'protection' %}
+<form method="post" action="/settings/protection" class="settings">
+  <input type="hidden" name="for_person" value="{{ for_person.id if for_person else '' }}">
+  <div class="srow"><div class="slabel"><h2>Who</h2><p>The household's values apply to everyone who has none of their own.</p></div><div class="spanel">
+    <label for="for-select">Settings for</label>
+    <select id="for-select" onchange="location.href='/settings?area=protection' + (this.value ? '&for=' + this.value : '')">
+      <option value="" {% if not for_person %}selected{% endif %}>The household</option>
+      {% for p in people_rows %}<option value="{{ p.id }}" {% if for_person and for_person.id == p.id %}selected{% endif %}>{{ p.name }}{% if p.id in overridden %} (own values){% endif %}</option>{% endfor %}
+    </select>
+    {% if for_person %}<p class="t2">{% if override_keys %}{{ for_person.name }} differs from the household in {{ override_keys|join(', ') }}. Anything else follows the household.{% else %}{{ for_person.name }} follows the household. Change anything below and save to give them their own values.{% endif %}</p>{% endif %}
+  </div></div>
+{% if not for_person %}  <div class="srow"><div class="slabel"><h2>Locks</h2><p>Off while you set up and test. Turning locks on is free; turning them off again needs a partner's code. Tightening is always free. Once a device is paired, loosening anything in a checked group needs a partner's settings code: raising a threshold, removing a blocked app, a longer pause, removing a partner. Unchecking a group is loosening too.</p></div><div class="spanel">
+    <label class="check"><input type="checkbox" name="locks_on" {% if settings.locks_on %}checked{% endif %}> <strong>Locks are on</strong></label>
+    <p class="t2">When locks are on, loosening anything in these groups needs a partner's settings code:</p>
+    {% for gid, g in lock_groups.items() %}<label class="check"><input type="checkbox" name="lock.{{ gid }}" {% if gid in locked_groups %}checked{% endif %}> {{ g[0] }}</label>{% endfor %}
+  </div></div>
+{% endif %}  <div class="srow"><div class="slabel"><h2>Posture {{ lock('cover_on_device') }}</h2><p>Most households start strict and loosen later. A preset fills the fields; nothing changes until you save.</p></div><div class="spanel">
+    <div class="presets">{% for id, label in preset_labels.items() %}<button type="button" class="btn" data-preset="{{ id }}">{{ label }}</button>{% endfor %}</div>
+    <label class="check"><input type="checkbox" id="cover_on_device" name="cover_on_device" {% if settings.cover_on_device %}checked{% endif %}> Blur on the device. Off is report only: nothing is hidden, partners see what was found.</label>
+    <label class="check"><input type="checkbox" id="ask_server" name="ask_server" {% if settings.ask_server %}checked{% endif %}> Ask this server about unsure images. Off means the device decides alone and the ask threshold is unused. {{ lock('ask_server') }}</label>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Thresholds {{ lock('thresholds') }}</h2><p>Scores from 0 to 1. Cover hides the image on the device and sends the crop; the second opinion then sorts explicit from review. Ask is the lower line where the device blurs first and lets this server decide. Flag equals cover by default; set it lower only to send crops below the line without covering them, which means someone saw them sharp.</p></div><div class="spanel">
+    <div class="pair four">
+      <div><label for="t-cover">Cover</label><input id="t-cover" name="thresholds.cover" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.cover }}"></div>
+      <div><label for="t-flag">Flag</label><input id="t-flag" name="thresholds.flag" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.flag }}"></div>
+      <div><label for="t-det">Detector cover</label><input id="t-det" name="thresholds.detector_cover" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.detector_cover }}"></div>
+      <div><label for="t-so">Second opinion</label><input id="t-so" name="thresholds.second_opinion" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.second_opinion }}"></div>
+    </div>
+    <div class="pair" style="margin-top:14px">
+      <div><label for="t-ask">Ask</label><input id="t-ask" name="thresholds.ask" type="number" step="0.01" min="0" max="1" value="{{ settings.thresholds.ask }}"></div>
+      <div><p class="t2" style="margin-top:34px">From ask up to cover the device blurs the image and asks this server's bigger model; a safe answer unblurs it and nothing is kept.</p></div>
+    </div>
+    <label class="check"><input type="checkbox" name="strict_mode" {% if settings.strict_mode %}checked{% endif %}> Strict mode in risky apps: cover new images until each one scores safe {{ lock('strict_mode') }}</label>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Coverage {{ lock('coverage') }}</h2><p>How much skin counts. The classifier judges every image for pornography at the thresholds above; this decides which body parts the detector also covers.</p></div><div class="spanel">
+    <label for="coverage">Cover</label>
+    <select id="coverage" name="coverage">
+      <option value="explicit" {% if settings.coverage == 'explicit' %}selected{% endif %}>Explicit only: bare breasts, genitals, buttocks</option>
+      <option value="revealing" {% if settings.coverage == 'revealing' %}selected{% endif %}>Revealing too: underwear and swimwear</option>
+      <option value="strict" {% if settings.coverage == 'strict' %}selected{% endif %}>Strict: also bare bellies and armpits</option>
+    </select>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Apps {{ lock('blocked_apps') }}</h2><p>One identifier per line. Android package names, Windows process names, iOS bundle IDs; each device ignores the ones that are not its own.</p></div><div class="spanel">
+    <label for="protected_browser">Protected browser</label><input id="protected_browser" name="protected_browser" value="{{ settings.protected_browser }}">
+    <label for="risky_apps">Risky apps (strict mode applies)</label><textarea id="risky_apps" name="risky_apps" rows="4">{{ settings.risky_apps|join('\n') }}</textarea>
+    <label for="blocked_apps">Blocked apps</label><textarea id="blocked_apps" name="blocked_apps" rows="6">{{ settings.blocked_apps|join('\n') }}</textarea>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Timing {{ lock('sample_interval_s') }}</h2><p>Seconds between accountability samples and whole-screen passes; minutes of silence before a device counts as tampered with.</p></div><div class="spanel">
+    <div class="pair three">
+      <div><label for="sample_interval_s">Sample every, s</label><input id="sample_interval_s" name="sample_interval_s" type="number" min="10" value="{{ settings.sample_interval_s }}"></div>
+      <div><label for="whole_screen_interval_s">Whole screen every, s</label><input id="whole_screen_interval_s" name="whole_screen_interval_s" type="number" min="1" value="{{ settings.whole_screen_interval_s }}"></div>
+      <div><label for="heartbeat_gap_minutes">Silent after, min</label><input id="heartbeat_gap_minutes" name="heartbeat_gap_minutes" type="number" min="10" value="{{ settings.heartbeat_gap_minutes }}"></div>
+    </div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Pauses and peeks {{ lock('max_pause_minutes') }}</h2><p>The most minutes one partner code can grant, and how a linked partner's peek works.</p></div><div class="spanel">
+    <div class="pair three">
+      <div><label for="max_pause_minutes">Max pause, min</label><input id="max_pause_minutes" name="max_pause_minutes" type="number" min="1" value="{{ settings.max_pause_minutes }}"></div>
+      <div><label for="peek_seconds">Peek length, s</label><input id="peek_seconds" name="peek_seconds" type="number" min="1" max="10" value="{{ settings.peek_seconds }}"></div>
+      <div><label for="peek_cooldown_hours">Peek cooldown, h</label><input id="peek_cooldown_hours" name="peek_cooldown_hours" type="number" min="1" value="{{ settings.peek_cooldown_hours }}"></div>
+    </div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Second opinion</h2><p>Where the server runs its own model on each flagged crop.</p></div><div class="spanel">
+    <label for="second_opinion_device">Device</label><select id="second_opinion_device" name="second_opinion_device"><option value="cpu" {% if settings.second_opinion_device == 'cpu' %}selected{% endif %}>CPU</option><option value="cuda" {% if settings.second_opinion_device == 'cuda' %}selected{% endif %}>GPU (CUDA)</option></select>
+    <p class="t2">Takes effect after a restart.</p>
+  </div></div>
+  {% if locked %}<div class="srow"><div class="slabel"><h2>Partner code</h2><p>Needed when a locked value changes.</p></div><div class="spanel"><label for="partner_code">Settings code</label><input id="partner_code" name="partner_code" inputmode="numeric" autocomplete="off"></div></div>{% endif %}
+  <div class="sactions"><button class="btn primary">Save</button>
+    {% if for_person and override_keys %}<button class="btn" formaction="/settings/protection/reset" formnovalidate>Use the household's values</button>{% endif %}</div>
+</form>
+<script>
+  const presets = {{ presets|tojson }};
+  const ids = { 'thresholds.flag': 't-flag', 'thresholds.ask': 't-ask', 'thresholds.cover': 't-cover' };
+  for (const b of document.querySelectorAll('[data-preset]')) b.addEventListener('click', () => {
+    for (const [key, value] of Object.entries(presets[b.dataset.preset])) {
+      const el = document.getElementById(ids[key] || key);
+      if (!el) continue;
+      if (el.type === 'checkbox') el.checked = value; else el.value = value;
+    }
+  });
+</script>
+
+{% elif area == 'email' %}
+<form method="post" action="/settings/email" class="settings">
+  <div class="srow"><div class="slabel"><h2>Outgoing mail</h2><p>Digests, alerts and pause codes for email-only partners go through this server.</p></div><div class="spanel">
+    <div class="pair"><div><label for="smtp.host">SMTP host</label><input id="smtp.host" name="smtp.host" value="{{ settings.smtp.host }}"></div><div><label for="smtp.port">Port</label><input id="smtp.port" name="smtp.port" type="number" value="{{ settings.smtp.port }}"></div></div>
+    <label for="smtp.username">Username</label><input id="smtp.username" name="smtp.username" value="{{ settings.smtp.username }}" autocomplete="off">
+    <label for="smtp.password">Password</label><input id="smtp.password" name="smtp.password" type="password" value="{{ settings.smtp.password }}" autocomplete="off">
+    <label for="smtp.from_address">From address</label><input id="smtp.from_address" name="smtp.from_address" value="{{ settings.smtp.from_address }}">
+    <label class="check"><input type="checkbox" name="smtp.starttls" {% if settings.smtp.starttls %}checked{% endif %}> Use STARTTLS</label>
+  </div></div>
+  <div class="sactions"><button class="btn primary">Save</button></div>
+</form>
+
+{% elif area == 'people' %}
+<div class="settings">
+  {% for p in people_rows %}
+  <div class="srow"><div class="slabel"><h2>{{ p.name }}</h2><p>{{ p.email or 'no email' }}<br>Logins: {{ logins[p.id]|join(', ') or 'none' }}</p></div><div class="spanel">
+    <h3>Partners</h3>
+    {% if partners[p.id] %}<ul class="rows">{% for pr in partners[p.id] %}<li class="row"><div class="row-main"><div class="t1">{{ pr.name }}</div><div class="t2">{{ pr.email }} · {{ 'linked, ' ~ pr.login if pr.link_type == 'linked' else 'email only' }}</div></div>
+      <form class="row-side" method="post" action="/settings/partners/{{ pr.id }}/remove">{% if locked %}<input name="partner_code" placeholder="settings code" inputmode="numeric" autocomplete="off" aria-label="settings code">{% endif %}<button class="btn small">Remove</button></form></li>{% endfor %}</ul>
+    {% else %}<p class="empty">No partners yet. Add at least one.</p>{% endif %}
+    <form method="post" action="/settings/partners/add" class="form inline-add">
+      <input type="hidden" name="person" value="{{ p.id }}">
+      <div class="pair"><div><label for="pn-{{ p.id }}">Partner name</label><input id="pn-{{ p.id }}" name="name" required></div><div><label for="pe-{{ p.id }}">Email</label><input id="pe-{{ p.id }}" name="email" type="email" required></div></div>
+      <div class="pair"><div><label for="pl-{{ p.id }}">Connection</label><select id="pl-{{ p.id }}" name="link_type"><option value="email">Email only</option><option value="linked">Linked through Tailscale</option></select></div><div><label for="pg-{{ p.id }}">Tailscale login (linked only)</label><input id="pg-{{ p.id }}" name="login" placeholder="their Tailscale login"></div></div>
+      <button class="btn">Add partner</button>
+    </form>
+  </div></div>
+  {% endfor %}
+  <div class="srow"><div class="slabel"><h2>Add a protected person</h2><p>Each person has their own devices, partners and timeline. Admins: {{ admins|join(', ') }}.</p></div><div class="spanel">
+    <form method="post" action="/settings/people/add" class="form">
+      <label for="np-name">Name</label><input id="np-name" name="name" required>
+      <label for="np-email">Email, for their own copy of the digest</label><input id="np-email" name="email" type="email">
+      <label for="np-login">Tailscale login, so they can see their own timeline</label><input id="np-login" name="login" placeholder="their Tailscale login">
+      <button class="btn primary">Add person</button>
+    </form>
+  </div></div>
+</div>
+{% endif %}
+{% endblock %}

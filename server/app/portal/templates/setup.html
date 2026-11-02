@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Setup{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>Setup</h1><p class="finding">You are signed in as {{ viewer.login }} and are this server's admin. Nothing here is hard-coded; everything can be changed later under Settings.</p></div></div>
+{% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+<form method="post" action="/setup" class="settings">
+  <div class="srow"><div class="slabel"><h2>Household</h2><p>The name devices and emails show, and the time zone the digest keeps.</p></div><div class="spanel">
+    <label for="household_name">Household name</label><input id="household_name" name="household_name" placeholder="Smith household" required>
+    <label for="timezone">Time zone</label><select id="timezone" name="timezone">{% for tz in timezones %}<option {% if tz == 'UTC' %}selected{% endif %}>{{ tz }}</option>{% endfor %}</select>
+    <div class="pair"><div><label for="digest_day">Digest day</label><select id="digest_day" name="digest_day">{% for d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}<option value="{{ d }}" {% if d == 'sunday' %}selected{% endif %}>{{ d|capitalize }}</option>{% endfor %}</select></div><div><label for="digest_time">Digest time</label><input id="digest_time" name="digest_time" type="time" value="19:00"></div></div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Protected person</h2><p>Whose screens are watched. Their Tailscale login lets them see their own timeline and who peeked.</p></div><div class="spanel">
+    <label for="person_name">Name</label><input id="person_name" name="person_name" required>
+    <label for="person_email">Email</label><input id="person_email" name="person_email" type="email">
+    <label class="check"><input type="checkbox" name="person_is_me" checked> This is me ({{ viewer.login }})</label>
+    <label for="person_login">Or their Tailscale login</label><input id="person_login" name="person_login" placeholder="their Tailscale login">
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>First partner</h2><p>Gets the digest and alerts. A linked partner also gets this portal, peeks and codes through a Tailscale share of this node; an email-only partner gets codes by email.</p></div><div class="spanel">
+    <label for="partner_name">Name</label><input id="partner_name" name="partner_name" required>
+    <label for="partner_email">Email</label><input id="partner_email" name="partner_email" type="email" required>
+    <div class="pair"><div><label for="partner_link_type">Connection</label><select id="partner_link_type" name="partner_link_type"><option value="email">Email only</option><option value="linked">Linked through Tailscale</option></select></div><div><label for="partner_login">Tailscale login (linked only)</label><input id="partner_login" name="partner_login" placeholder="their Tailscale login"></div></div>
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Locks</h2><p>Locks start off so you can set up and test freely. When you turn them on under Settings, Protection, tightening stays free and loosening anything checked needs a partner's settings code. Leave everything checked unless you have a reason.</p></div><div class="spanel">
+    {% for gid, g in lock_groups.items() %}<label class="check"><input type="checkbox" name="lock.{{ gid }}" checked> {{ g[0] }}</label>{% endfor %}
+  </div></div>
+  <div class="srow"><div class="slabel"><h2>Email sending</h2><p>Optional now, needed before the first digest. Any SMTP account works.</p></div><div class="spanel">
+    <div class="pair"><div><label for="smtp.host">SMTP host</label><input id="smtp.host" name="smtp.host"></div><div><label for="smtp.port">Port</label><input id="smtp.port" name="smtp.port" type="number" value="587"></div></div>
+    <label for="smtp.username">Username</label><input id="smtp.username" name="smtp.username" autocomplete="off">
+    <label for="smtp.password">Password</label><input id="smtp.password" name="smtp.password" type="password" autocomplete="off">
+    <label for="smtp.from_address">From address</label><input id="smtp.from_address" name="smtp.from_address">
+    <label class="check"><input type="checkbox" name="smtp.starttls" checked> Use STARTTLS</label>
+  </div></div>
+  <div class="sactions"><button class="btn primary">Finish setup</button></div>
+</form>
+{% endblock %}

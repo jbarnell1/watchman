@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchman settings</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body class="options">
+<header class="brand"><img src="../icons/mark-32.png" width="22" height="22" alt=""><span>Watchman</span></header>
+<main>
+  <h1>Settings</h1>
+  <p class="sub" id="status"></p>
+
+  <section class="panel" id="pair-panel">
+    <h2>Pair with your household server</h2>
+    <p class="sub">The admin creates a pairing code on the Devices page of the portal. It is valid for 15 minutes.</p>
+    <form id="pair-form">
+      <label for="server">Server</label>
+      <input id="server" name="server" placeholder="https://watchman.your-tailnet.ts.net" required>
+      <label for="code">Pairing code</label>
+      <input id="code" name="code" placeholder="K7Q-4MZ-P2D" autocomplete="off" required>
+      <label for="name">This browser's name</label>
+      <input id="name" name="name" placeholder="Firefox on the Pixel">
+      <button class="btn primary" type="submit">Pair</button>
+      <p class="error" id="pair-error"></p>
+    </form>
+  </section>
+
+  <section class="panel" id="paired-panel" hidden>
+    <h2>Paired</h2>
+    <p id="paired-text"></p>
+    <p class="sub">Unpairing turns protection off in this browser. The server notices the silence within half an hour and tells your partners. To stop quietly is not possible; that is the point.</p>
+  </section>
+
+  <section class="panel" id="pause-panel" hidden>
+    <h2>Pause with a partner code</h2>
+    <form id="unlock-form">
+      <label for="unlock">Code from your partner</label>
+      <input id="unlock" name="unlock" placeholder="482-913" inputmode="numeric" autocomplete="off">
+      <button class="btn" type="submit">Pause</button>
+      <p class="error" id="unlock-error"></p>
+    </form>
+    <h3>Or ask for one</h3>
+    <form id="request-form">
+      <label for="minutes">Minutes</label>
+      <input id="minutes" name="minutes" type="number" min="1" value="30">
+      <label for="reason">Reason</label>
+      <input id="reason" name="reason" placeholder="work upload">
+      <button class="btn" type="submit">Ask my partners</button>
+      <p class="sub" id="request-note"></p>
+    </form>
+  </section>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

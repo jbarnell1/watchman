@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Devices{% endblock %}
+{% block content %}
+<div class="titlerow">
+  <div><h1>Devices</h1>
+    <p class="finding">{% if person %}{{ devices|rejectattr('revoked_at')|list|length }} paired for {{ person.name }}.{% else %}No one to show.{% endif %}</p></div>
+  {% if can_manage %}
+  <form method="post" action="/devices/pairing-code"><input type="hidden" name="person" value="{{ person.id }}"><button class="btn primary">New pairing code</button></form>
+  {% endif %}
+</div>
+
+{% if new_code %}
+<section class="panel code-panel">
+  <div class="panel-head"><h2>Pairing code</h2><span class="t2">Valid 15 minutes, one device</span></div>
+  <div class="pairing">
+    {% if pair_qr %}<div class="qr" aria-label="QR code for pairing a phone">{{ pair_qr|safe }}</div>{% endif %}
+    <div>
+      <div class="bigcode num" id="code">{{ new_code }}</div>
+      <p class="t2">On a phone, tap Scan code in the Watchman app, or point the camera at the square and open the link; the server and code fill in and you tap Pair. Anywhere else, type the code with or without the dashes, and the server as <span class="num">{{ pair_url }}</span>.</p>
+      <p class="t2">The device then holds its own token; revoking the device ends it.</p>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if devices %}
+<section class="panel">
+  <table class="table">
+    <thead><tr><th>Device</th><th>Platform</th><th>Version</th><th>Last heartbeat</th><th>State</th>{% if viewer.is_admin %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for d in devices %}{% set s = states.get(d.id) %}
+    <tr class="{% if d.revoked_at %}dim{% endif %}">
+      <td>{{ d.name }}</td>
+      <td>{{ d.platform }} <span class="t2">{{ d.kind }}</span></td>
+      <td class="num">{{ d.app_version or '–' }}</td>
+      <td>{{ when(d.last_heartbeat_at) or 'never' }} <span class="t2">{{ ago(d.last_heartbeat_at) if d.last_heartbeat_at }}</span></td>
+      <td>
+        {% if d.revoked_at %}<span class="pill">Revoked {{ when(d.revoked_at, '%d %b') }}</span>
+        {% elif s.ok %}<span class="pill pos">Protected</span>
+        {% elif s.silent %}<span class="pill neg">Silent</span>
+        {% else %}<span class="pill neg">{{ s.off|join(', ') }} off</span>{% endif %}
+        {% if s and s.state %}<div class="t2 chips">{% for k, val in s.state.items() %}{% if val is not none %}<span class="chip {% if val in (True, 'granted', 'not_applicable') %}ok{% else %}bad{% endif %}">{{ k|replace('_',' ') }}</span>{% endif %}{% endfor %}</div>{% endif %}
+      </td>
+      {% if viewer.is_admin %}<td class="act">{% if not d.revoked_at %}<form method="post" action="/devices/{{ d.id }}/revoke" onsubmit="return confirm('Revoke {{ d.name }}? Partners are alerted and the device stops being trusted.')"><button class="btn small">Revoke</button></form>{% endif %}</td>{% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="panel"><p class="empty">No devices yet. Create a pairing code, then pair the app, the Windows service or a browser extension with it.</p></section>
+{% endif %}
+
+{% for d in devices if work.get(d.id) %}{% set w = work[d.id] %}
+<section class="panel work">
+  <div class="panel-head"><h2>{{ d.name }}: work today</h2><span class="t2">{{ (w.window_s // 60) }} min reported</span></div>
+  {% if w.timings %}<table class="table work-table">
+    <thead><tr><th>Step</th><th class="r">Runs</th><th class="r">Median</th><th class="r">95%</th><th class="r">Slowest</th></tr></thead>
+    <tbody>{% for t in w.timings %}<tr><td>{{ t.name|replace('_ms','')|replace('_',' ') }}</td><td class="num r">{{ '{:,}'.format(t.n) }}</td><td class="num r">{{ '%.0f'|format(t.p50) }} ms</td><td class="num r">{{ '%.0f'|format(t.p95) }} ms</td><td class="num r">{{ '%.0f'|format(t.max) }} ms</td></tr>{% endfor %}</tbody>
+  </table>{% endif %}
+  {% if w.counters %}<dl class="counts">{% for name, value in w.counters %}<div><dt>{{ name|replace('_',' ') }}</dt><dd class="num">{{ '{:,}'.format(value) }}</dd></div>{% endfor %}</dl>{% endif %}
+  <p class="t2">Medians and percentiles are read from coarse buckets (1, 2, 4 ... 1024 ms), so they are bounds, not exact times.</p>
+</section>
+{% endfor %}
+
+{% if pairing_codes and not new_code %}
+<section class="panel">
+  <div class="panel-head"><h2>Open pairing codes</h2></div>
+  <ul class="rows">{% for c in pairing_codes %}<li class="row"><div class="row-main"><div class="t1 num">{{ c.code }}</div></div><div class="row-side t2">expires {{ when(c.expires_at, '%H:%M') }}</div></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if settings.adguard_url %}
+<section class="panel"><div class="panel-head"><h2>DNS filtering</h2></div><p>AdGuard Home at <a href="{{ settings.adguard_url }}">{{ settings.adguard_url }}</a>. Add each device there as a client with the adult categories blocked and safe search forced.</p></section>
+{% endif %}
+{% endblock %}

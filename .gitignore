@@ -1,0 +1,58 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+secrets/
+*.p8
+*.p12
+*.jks
+*.keystore
+key.properties
+.claude/settings.local.json
+
+# Model weights and evaluation data (downloaded, never committed)
+models/cache/
+models/eval/out/
+*.onnx
+*.safetensors
+*.pt
+
+# Server
+server/.venv/
+server/data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Extension
+clients/extension/node_modules/
+clients/extension/dist/
+clients/extension/test-results/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Flutter / Android
+clients/android/.dart_tool/
+clients/android/build/
+clients/android/.flutter-plugins
+clients/android/.flutter-plugins-dependencies
+clients/android/android/.gradle/
+clients/android/android/local.properties
+clients/android/android/app/.cxx/
+clients/android/coverage/
+
+# iOS
+clients/ios/build/
+clients/ios/*.xcodeproj/
+DerivedData/
+
+# Design-skill working files
+.taste-skill/
+# The server's database and sealed images when run from the repository root (compose).
+/data/

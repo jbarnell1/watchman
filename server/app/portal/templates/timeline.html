@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Timeline{% endblock %}
+{% block content %}
+{% if not person %}
+<div class="titlerow"><h1>Timeline</h1></div>
+<p class="empty">No one is set up for you to see yet.{% if viewer.is_admin %} Add the protected person under <a href="/settings?area=people">Settings</a>.{% endif %}</p>
+{% else %}
+{% set ok_devices = states.values()|selectattr('ok')|list|length %}
+{% set bad = states.values()|rejectattr('ok')|list %}
+<div class="titlerow">
+  <div>
+    <h1>Timeline</h1>
+    {% if pause %}
+      <p class="finding">Paused by a partner code until {{ when(pause.ends_at, '%H:%M') }}.</p>
+    {% elif devices|length == 0 %}
+      <p class="finding">No devices paired yet. Create a pairing code on the Devices page.</p>
+    {% elif bad|length == 0 %}
+      <p class="finding">Protection on across {{ devices|length }} device{{ 's' if devices|length != 1 }}.</p>
+    {% else %}
+      {% set first = (devices|selectattr('id', 'in', bad|map(attribute='state')|list)|list) %}
+      <p class="finding bad">
+        {% for d in devices %}{% if not states[d.id].ok %}{{ d.name }}{% if states[d.id].silent %} has been silent since {{ when(d.last_heartbeat_at) or 'pairing' }}{% else %}: {{ states[d.id].off|join(', ') }} off{% endif %}. {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+<section class="strip" aria-label="Last 7 days">
+  <div><span class="label">Hours protected, 7 days</span><span class="value">{{ hours }}<small> h</small></span></div>
+  <div><span class="label">Images covered</span><span class="value">{{ counts.covered }}</span></div>
+  <div><span class="label">Confirmed explicit</span><span class="value {% if counts.explicit %}neg{% endif %}">{{ counts.explicit }}</span></div>
+  <div><span class="label">Protection gaps</span><span class="value {% if counts.gaps %}neg{% endif %}">{{ counts.gaps }}</span></div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>The watch, hour by hour</h2>
+    <span class="legend"><i class="sw on"></i>on <i class="sw off"></i>off <i class="sw none"></i>no heartbeat</span></div>
+  {% if coverage %}
+  <div class="watch">
+    {% for row in coverage %}
+    <div class="watch-row">
+      <div class="watch-name">{{ row.device.name }}</div>
+      <div class="watch-cells" role="img" aria-label="{{ row.device.name }}: hourly protection over 7 days">
+        {% for c in row.cells %}<i class="{{ c }}"></i>{% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="watch-days"><span></span>{% for d in coverage[0].days %}<span>{{ d }}</span>{% endfor %}</div>
+  </div>
+  {% else %}
+  <p class="empty">Nothing to draw until a device checks in.</p>
+  {% endif %}
+</section>
+
+<div class="two">
+<section class="panel">
+  <div class="panel-head"><h2>Devices now</h2><a href="/devices?person={{ person.id }}">All devices</a></div>
+  {% if devices %}
+  <ul class="rows">
+    {% for d in devices %}{% set s = states[d.id] %}
+    <li class="row">
+      <div class="row-main"><div class="t1">{{ d.name }}</div>
+        <div class="t2">{{ d.platform }} · {{ d.app_version or 'version unknown' }} · heartbeat {{ ago(d.last_heartbeat_at) }}</div></div>
+      <div class="row-side">
+        {% if s.ok %}<span class="pill pos">Protected</span>
+        {% elif s.silent %}<span class="pill neg">Silent</span>
+        {% else %}<span class="pill neg">{{ s.off|join(', ') }} off</span>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No devices paired.</p>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Peeks by partners</h2></div>
+  {% if peeks %}
+  <ul class="rows">
+    {% for p in peeks %}
+    <li class="row"><div class="row-main"><div class="t1">{{ p.partner_name }}</div><div class="t2">{{ p.app or 'image' }} from {{ when(p.event_at) }}</div></div><div class="row-side t2">{{ when(p.at) }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No partner has peeked at an image.</p>{% endif %}
+</section>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Recent events</h2></div>
+  {% if events %}
+  <ul class="rows">
+    {% for e in events %}
+    <li class="row">
+      {% if e.image_status == 'stored' %}<img class="thumb" src="/images/{{ e.id }}/heavy" width="40" height="40" alt="blurred image">{% else %}<span class="thumb none"></span>{% endif %}
+      <div class="row-main">
+        <div class="t1">
+          {% if e.type == 'image_covered' %}Image covered{% elif e.type == 'screen_blocked' %}Screen blocked
+          {% elif e.type == 'image_flagged' %}Image noted{% elif e.type == 'url_blocked' %}Site blocked
+          {% elif e.type == 'search_flagged' %}Search flagged{% elif e.type == 'app_blocked' %}App blocked
+          {% elif e.type == 'protection_changed' %}{% set dt = json.loads(e.detail) %}{{ dt.field|replace('_',' ')|capitalize }} {{ 'off' if dt.to in (False, 'denied', 'revoked') else 'changed' }}
+          {% elif e.type == 'tamper' %}{% set dt = json.loads(e.detail) %}{{ 'Device silent' if dt.reason == 'silent' else 'Safe mode boot' if dt.reason == 'safe_mode' else 'Tamper' }}
+          {% elif e.type == 'pause_started' %}Pause started{% elif e.type == 'pause_ended' %}Pause ended
+          {% elif e.type == 'daily_stats' %}Daily summary{% else %}{{ e.type }}{% endif %}
+          {% if e.app %}<span class="dim">· {{ e.app }}</span>{% endif %}
+        </div>
+        <div class="t2">{% if e.url %}{{ e.url|truncate(80) }}{% elif e.title %}{{ e.title|truncate(80) }}{% elif e.type in ('image_covered','image_flagged','screen_blocked') and e.region %}{% set r = json.loads(e.region) %}{{ r.w }} × {{ r.h }} px{% if e.second_opinion is not none %} · second opinion {{ '%.2f'|format(e.second_opinion) }}{% endif %}{% else %}&nbsp;{% endif %}</div>
+      </div>
+      <div class="row-side">
+        {% if e.severity == 'explicit' %}<span class="pill neg">Explicit</span>{% elif e.severity == 'review' %}<span class="pill warn">Review</span>{% elif e.severity == 'protection' %}<span class="pill neg">Protection</span>{% endif %}
+        <span class="t2 num">{{ when(e.occurred_at) }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No events yet.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

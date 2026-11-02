@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}Watchman{% endblock %} · {{ settings.household_name }}</title>
+<link rel="stylesheet" href="/static/fonts/geist.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <input type="checkbox" id="navtoggle" class="navtoggle" aria-hidden="true">
+  <header class="topbar">
+    <label for="navtoggle" class="menubtn" aria-label="Menu"><span></span></label>
+    <span class="topbar-title">{% block topbar %}{{ self.title() }}{% endblock %}</span>
+  </header>
+  <nav class="side" aria-label="Main">
+    <a class="brand" href="/">
+      <img src="/static/mark.svg" alt="" width="22" height="22">
+      <span>Watchman</span>
+    </a>
+    {% if people|length > 1 and person %}
+    <form class="switcher" method="get" action="/{{ nav if nav != 'timeline' else '' }}">
+      <label class="visually-hidden" for="person-switch">Person</label>
+      <select id="person-switch" name="person" onchange="this.form.submit()">
+        {% for p in people %}<option value="{{ p.id }}" {% if p.id == person.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% elif person %}
+    <div class="scope">{{ person.name }}</div>
+    {% endif %}
+    {% set q = ('?person=' ~ person.id) if person else '' %}
+    <a class="navitem {% if nav == 'timeline' %}on{% endif %}" href="/{{ q }}">Timeline</a>
+    <a class="navitem {% if nav == 'review' %}on{% endif %}" href="/review{{ q }}">Review{% if review_count %}<span class="count" aria-label="{{ review_count }} items to review">{{ review_count }}</span>{% endif %}</a>
+    <a class="navitem {% if nav == 'devices' %}on{% endif %}" href="/devices{{ q }}">Devices</a>
+    {% if role == 'partner' %}<a class="navitem {% if nav == 'codes' %}on{% endif %}" href="/codes{{ q }}">Codes</a>{% endif %}
+    {% if viewer.is_admin %}<a class="navitem {% if nav == 'settings' %}on{% endif %}" href="/settings">Settings</a>{% endif %}
+    <div class="side-foot">
+      <div class="who">{{ viewer.name }}</div>
+      <div class="who-sub">{{ viewer.login }} · {{ role if role != 'none' else 'no role' }}</div>
+      {% if viewer.can_sign_out %}<form method="post" action="/auth/logout"><button type="submit" class="btn ghost small signout">Sign out</button></form>{% endif %}
+    </div>
+  </nav>
+  <main id="main" class="canvas">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

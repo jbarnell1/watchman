@@ -1,0 +1,33 @@
+# Homepage tile for a Watchman server, for the Admin group of services.yaml. Merge the entry
+# under your existing "Admin" group rather than adding a second one.
+#
+# Homepage substitutes {{HOMEPAGE_VAR_*}} from its environment: set HOMEPAGE_VAR_WATCHMAN_URL to
+# the portal address, for example https://watchman.<your-tailnet>.ts.net. The widget is fetched by
+# the Homepage server, so that host must reach the portal (tailnet or reverse proxy). The icon is
+# loaded by your browser from the portal itself.
+
+- Admin:
+    - Watchman:
+        href: "{{HOMEPAGE_VAR_WATCHMAN_URL}}"
+        description: Accountability and protection
+        icon: "{{HOMEPAGE_VAR_WATCHMAN_URL}}/static/mark.svg"
+        widget:
+          type: customapi
+          url: "{{HOMEPAGE_VAR_WATCHMAN_URL}}/healthz"
+          refreshInterval: 60000
+          method: GET
+          mappings:
+            - field: ok
+              label: Status
+              format: text
+              remap:
+                - value: true
+                  to: OK
+                - any: true
+                  to: Down
+            - field: version
+              label: Version
+              format: text
+            - field: models
+              label: Models
+              format: number

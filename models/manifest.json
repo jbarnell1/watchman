@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "notes": "Source of truth for every model Watchman runs. Weights are never committed; fetch.py downloads, exports and verifies them into cache/. Clients read this through the household server at /api/v1/models/manifest.",
+  "models": [
+    {
+      "role": "crop_classifier",
+      "file": "nsfw-384.onnx",
+      "url": "",
+      "sha256": "34942ee4604ad28287dc4b22c2b7a70d211523d4a4e4a77b103fb56ce69e19ad",
+      "bytes": 22520605,
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/Marqo/nsfw-image-detection-384",
+      "export": {
+        "kind": "marqo",
+        "weights_url": "https://huggingface.co/Marqo/nsfw-image-detection-384/resolve/main/model.safetensors",
+        "weights_sha256": "6bf2e0f64a1d20169736c2836e3a787b12379fdc08ba87f7d94a7a3d58eeefce",
+        "architecture": "vit_tiny_patch16_384"
+      },
+      "input": {
+        "name": "input",
+        "size": 384,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "resize": "bicubic"
+      },
+      "output": {
+        "name": "logits",
+        "kind": "softmax",
+        "labels": [
+          "NSFW",
+          "SFW"
+        ],
+        "positive": "NSFW"
+      },
+      "used_by": [
+        "extension",
+        "windows",
+        "android",
+        "ios"
+      ]
+    },
+    {
+      "role": "crop_classifier_int8",
+      "file": "nsfw-384-int8.onnx",
+      "url": "",
+      "sha256": "962e18be2075e90677c84d6698a887821c3f787f50c2d0937e6e683ebe52f68c",
+      "bytes": 6710141,
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/Marqo/nsfw-image-detection-384",
+      "export": {
+        "kind": "quantize",
+        "from": "nsfw-384.onnx"
+      },
+      "input": {
+        "name": "input",
+        "size": 384,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "resize": "bicubic"
+      },
+      "output": {
+        "name": "logits",
+        "kind": "softmax",
+        "labels": [
+          "NSFW",
+          "SFW"
+        ],
+        "positive": "NSFW"
+      },
+      "used_by": [
+        "android",
+        "ios",
+        "extension"
+      ]
+    },
+    {
+      "role": "detector_small",
+      "file": "nudenet-320n.onnx",
+      "url": "https://github.com/notAI-tech/NudeNet/releases/download/v3.4-weights/320n.onnx",
+      "sha256": "c15d8273adad2d0a92f014cc69ab2d6c311a06777a55545f2c4eb46f51911f0f",
+      "bytes": 12150158,
+      "license": "MIT",
+      "source": "https://github.com/notAI-tech/NudeNet",
+      "input": {
+        "name": "images",
+        "size": 320,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "std": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "resize": "letterbox"
+      },
+      "output": {
+        "name": "output0",
+        "kind": "yolov8",
+        "labels": [
+          "FEMALE_GENITALIA_COVERED",
+          "FACE_FEMALE",
+          "BUTTOCKS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_BREAST_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEET_EXPOSED",
+          "BELLY_COVERED",
+          "FEET_COVERED",
+          "ARMPITS_COVERED",
+          "ARMPITS_EXPOSED",
+          "FACE_MALE",
+          "BELLY_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_COVERED",
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED"
+        ],
+        "explicit_labels": [
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_EXPOSED",
+          "BUTTOCKS_EXPOSED"
+        ]
+      },
+      "used_by": [
+        "android",
+        "ios"
+      ]
+    },
+    {
+      "role": "detector_large",
+      "file": "nudenet-640m.onnx",
+      "url": "https://github.com/notAI-tech/NudeNet/releases/download/v3.4-weights/640m.onnx",
+      "sha256": "04fe3d77980780c1f8297dc6d7f942fd5b3abe6942a188f742a85241e4f634eb",
+      "bytes": 103538690,
+      "license": "MIT",
+      "source": "https://github.com/notAI-tech/NudeNet",
+      "input": {
+        "name": "images",
+        "size": 640,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "std": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "resize": "letterbox"
+      },
+      "output": {
+        "name": "output0",
+        "kind": "yolov8",
+        "labels": [
+          "FEMALE_GENITALIA_COVERED",
+          "FACE_FEMALE",
+          "BUTTOCKS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_BREAST_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEET_EXPOSED",
+          "BELLY_COVERED",
+          "FEET_COVERED",
+          "ARMPITS_COVERED",
+          "ARMPITS_EXPOSED",
+          "FACE_MALE",
+          "BELLY_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_COVERED",
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED"
+        ],
+        "explicit_labels": [
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_EXPOSED",
+          "BUTTOCKS_EXPOSED"
+        ]
+      },
+      "used_by": [
+        "windows",
+        "server"
+      ]
+    },
+    {
+      "role": "second_opinion",
+      "file": "vit-base-nsfw-int8.onnx",
+      "url": "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/onnx/model_int8.onnx",
+      "sha256": "d25aa73fe1eec78459e35ff911e2af98f652ee919b48d9c54316c86d5ff435fa",
+      "bytes": 88500985,
+      "license": "Apache-2.0",
+      "source": "https://huggingface.co/AdamCodd/vit-base-nsfw-detector",
+      "input": {
+        "name": "pixel_values",
+        "size": 384,
+        "layout": "NCHW",
+        "color": "RGB",
+        "scale": 255.0,
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "resize": "bilinear"
+      },
+      "output": {
+        "name": "logits",
+        "kind": "softmax",
+        "labels": [
+          "sfw",
+          "nsfw"
+        ],
+        "positive": "nsfw"
+      },
+      "used_by": [
+        "server"
+      ]
+    }
+  ]
+}

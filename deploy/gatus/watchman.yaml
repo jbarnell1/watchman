@@ -1,0 +1,17 @@
+# Gatus endpoint for a Watchman server. Merge into your Gatus config (or mount this file in its
+# config directory). Gatus expands ${VAR} from its own environment: set WATCHMAN_URL there to the
+# portal address, for example https://watchman.<your-tailnet>.ts.net, or replace it by hand.
+#
+# /healthz needs no sign-in and returns no personal data:
+#   {"ok": true, "version": "0.1.0", "models": 5, "second_opinion": "loaded"}
+# The Gatus host must be able to reach the portal: on the tailnet (MagicDNS name and a grant to
+# the watchman node on 443), or through the reverse proxy in OIDC mode.
+
+endpoints:
+  - name: watchman
+    group: household
+    url: "${WATCHMAN_URL}/healthz"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].ok == true"

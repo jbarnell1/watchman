@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "watchman-dev",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--project", "server", "python", "-m", "app.devserver"],
+      "port": 8035
+    }
+  ]
+}

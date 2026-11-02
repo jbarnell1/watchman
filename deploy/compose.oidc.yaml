@@ -1,0 +1,36 @@
+# OIDC mode for households without Tailscale on every device (ADR-027).
+#
+# The Tailscale sidecar is not started. The server listens on its own port, published to the host
+# (loopback by default) for your reverse proxy, and people sign in with your OpenID Connect provider
+# (Pocket ID, Authelia, Authentik, Keycloak). Devices still pair and use bearer tokens.
+#
+#   docker compose -f compose.yaml -f deploy/compose.oidc.yaml up -d --build
+#
+# or put these two lines in .env so plain `docker compose` uses both files (scripts/setup.sh does):
+#   COMPOSE_FILE=compose.yaml:deploy/compose.oidc.yaml
+#   COMPOSE_PATH_SEPARATOR=:
+#
+# Your reverse proxy must serve the portal over HTTPS (the session cookie is Secure) at the address
+# in WATCHMAN_OIDC_REDIRECT_URL, and forward everything, including /api/v1, to WATCHMAN_PUBLISH.
+# Keep it on your home network or VPN: Watchman is not meant to face the public internet (ADR-006).
+# Paths below are relative to the repository root, as for compose.yaml.
+
+services:
+  tailscale:
+    profiles: ["tailscale"]          # only started if someone asks for the profile; OIDC mode does not
+  server:
+    network_mode: !reset null        # its own network instead of the sidecar's namespace
+    depends_on: !reset []
+    ports:
+      # host address:port the reverse proxy talks to. 127.0.0.1 keeps it off the LAN; use the
+      # host's LAN address if the proxy runs on another machine.
+      - "${WATCHMAN_PUBLISH:-127.0.0.1:8030}:8030"
+    environment:
+      WATCHMAN_AUTH: oidc
+      WATCHMAN_BIND_HOST: 0.0.0.0
+      WATCHMAN_BIND_PORT: "8030"
+      WATCHMAN_OIDC_ISSUER: ${WATCHMAN_OIDC_ISSUER:?set WATCHMAN_OIDC_ISSUER in .env}
+      WATCHMAN_OIDC_CLIENT_ID: ${WATCHMAN_OIDC_CLIENT_ID:?set WATCHMAN_OIDC_CLIENT_ID in .env}
+      WATCHMAN_OIDC_CLIENT_SECRET: ${WATCHMAN_OIDC_CLIENT_SECRET:-}
+      WATCHMAN_OIDC_REDIRECT_URL: ${WATCHMAN_OIDC_REDIRECT_URL:?set WATCHMAN_OIDC_REDIRECT_URL in .env}
+      WATCHMAN_SESSION_HOURS: ${WATCHMAN_SESSION_HOURS:-168}

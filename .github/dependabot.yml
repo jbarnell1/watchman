@@ -1,0 +1,65 @@
+# Weekly dependency updates. Minor and patch bumps arrive as one grouped PR per ecosystem; major
+# bumps arrive one PR each. At most 5 open PRs per ecosystem. CI on each PR is the review.
+#
+# Python uses Dependabot's uv ecosystem (the pip family for projects managed by uv), so each PR
+# updates pyproject.toml and uv.lock together; the plain pip updater would leave uv.lock behind.
+
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      server-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /models
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      models-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /clients/extension
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      extension-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: nuget
+    directories:
+      - /clients/windows
+      - /clients/windows/src/*
+      - /clients/windows/tests/*
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      windows-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directory: /clients/android/android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      android-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

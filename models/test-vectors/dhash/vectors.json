@@ -1,0 +1,59 @@
+{
+  "note": "Expected 64-bit dHash per image, from watchman_models/dhash.py. Clients must produce exactly these hashes for these PNGs.",
+  "vectors": [
+    {
+      "file": "gradient-36x32.png",
+      "width": 36,
+      "height": 32,
+      "dhash": "0000000000000000"
+    },
+    {
+      "file": "gradient-100x75.png",
+      "width": 100,
+      "height": 75,
+      "dhash": "0000000000000000"
+    },
+    {
+      "file": "checker-64x64-c8.png",
+      "width": 64,
+      "height": 64,
+      "dhash": "a55aa55aa55aa55a"
+    },
+    {
+      "file": "checker-45x40-c5.png",
+      "width": 45,
+      "height": 40,
+      "dhash": "aa55aa55aa55aa55"
+    },
+    {
+      "file": "noise-48x48-s1.png",
+      "width": 48,
+      "height": 48,
+      "dhash": "9a44662dc14a5625"
+    },
+    {
+      "file": "noise-200x120-s7.png",
+      "width": 200,
+      "height": 120,
+      "dhash": "54982986cc6a560e"
+    },
+    {
+      "file": "blocks-90x60.png",
+      "width": 90,
+      "height": 60,
+      "dhash": "2020202004040404"
+    },
+    {
+      "file": "tiny-5x4.png",
+      "width": 5,
+      "height": 4,
+      "dhash": "4343c3c30303c3c3"
+    },
+    {
+      "file": "flat-20x20.png",
+      "width": 20,
+      "height": 20,
+      "dhash": "0000000000000000"
+    }
+  ]
+}

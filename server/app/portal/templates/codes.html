@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Codes{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>Codes</h1>
+  <p class="finding">{% if partner %}A code pauses protection on every one of {{ person.name }}'s devices for the minutes you choose. It is single use and appears in the next digest.{% else %}Only a partner can issue codes.{% endif %}</p></div></div>
+
+{% if issued %}
+<section class="panel code-panel">
+  <div class="panel-head"><h2>{{ 'Settings code' if issued_purpose == 'settings' else 'Pause code, ' ~ issued_minutes ~ ' minutes' }}</h2><span class="t2">Valid 24 hours, one use</span></div>
+  <div class="bigcode num">{{ issued }}</div>
+  <p class="t2">{{ 'Give it to the admin to unlock one protection settings change.' if issued_purpose == 'settings' else 'Read it to ' ~ person.name ~ ' or send it. They type it into the app.' }}</p>
+</section>
+{% endif %}
+
+{% if partner %}
+<div class="two">
+<section class="panel">
+  <div class="panel-head"><h2>Pause protection</h2></div>
+  <form method="post" action="/codes" class="form">
+    <input type="hidden" name="person" value="{{ person.id }}">
+    <input type="hidden" name="purpose" value="pause">
+    <label for="minutes">Minutes, up to {{ settings.max_pause_minutes }}</label>
+    <input id="minutes" name="minutes" type="number" min="1" max="{{ settings.max_pause_minutes }}" value="{{ [30, settings.max_pause_minutes]|min }}" required>
+    <button class="btn primary">Issue pause code</button>
+  </form>
+</section>
+<section class="panel">
+  <div class="panel-head"><h2>Allow a settings change</h2></div>
+  <p class="t2">Once protection is on, the admin cannot weaken it alone: retention, thresholds, pause limits, blocked apps and partner changes each need a code from a partner.</p>
+  <form method="post" action="/codes" class="form">
+    <input type="hidden" name="person" value="{{ person.id }}">
+    <input type="hidden" name="purpose" value="settings">
+    <input type="hidden" name="minutes" value="0">
+    <button class="btn">Issue settings code</button>
+  </form>
+</section>
+</div>
+{% endif %}
+
+<div class="two">
+<section class="panel">
+  <div class="panel-head"><h2>Open codes</h2></div>
+  {% if open_codes %}<ul class="rows">{% for c in open_codes %}<li class="row"><div class="row-main"><div class="t1">{{ 'Settings' if c.purpose == 'settings' else c.minutes ~ ' min pause' }}</div><div class="t2">from {{ c.partner_name }}, {{ when(c.created_at) }}</div></div><div class="row-side t2">expires {{ when(c.expires_at) }}</div></li>{% endfor %}</ul>
+  {% else %}<p class="empty">No unused codes.</p>{% endif %}
+</section>
+<section class="panel">
+  <div class="panel-head"><h2>Requests from {{ person.name if person else 'the protected person' }}</h2></div>
+  {% if requests %}<ul class="rows">{% for r in requests %}<li class="row"><div class="row-main"><div class="t1">{{ r.minutes }} minutes</div><div class="t2">{{ r.reason or 'no reason given' }}</div></div><div class="row-side t2">{{ when(r.created_at) }}</div></li>{% endfor %}</ul>
+  {% else %}<p class="empty">No pause requests.</p>{% endif %}
+</section>
+</div>
+{% endblock %}

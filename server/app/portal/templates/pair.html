@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Pair a phone · Watchman</title>
+<link rel="stylesheet" href="/static/fonts/geist.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="plain">
+<main class="plain-main">
+  <img src="/static/mark.svg" alt="" width="40" height="40">
+  <h1>Pair this phone</h1>
+  {% if code %}
+  <p>Open the Watchman app with this server and code filled in, then check the server and tap Pair.</p>
+  <p class="bigcode num">{{ code }}</p>
+  <p><a class="btn primary" href="{{ app_link }}">Open in Watchman</a></p>
+  <p class="t2">No app yet? Install it first, then scan the code again. The server is <span class="num">{{ server }}</span>.</p>
+  {% else %}
+  <p>This link has no pairing code. Make a new one on the Devices page.</p>
+  {% endif %}
+</main>
+</body>
+</html>

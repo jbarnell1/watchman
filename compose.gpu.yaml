@@ -1,0 +1,12 @@
+# Optional: run the second opinion on an NVIDIA GPU.
+#   docker compose -f compose.yaml -f compose.gpu.yaml up -d
+# Then set "Second opinion device" to GPU under Settings > Protection and restart.
+services:
+  server:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

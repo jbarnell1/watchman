@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Watchman.Helper</RootNamespace>
+    <AssemblyName>WatchmanHelper</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\..\..\..\docs\brand\mark.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Watchman.Core\Watchman.Core.csproj" />
+  </ItemGroup>
+</Project>

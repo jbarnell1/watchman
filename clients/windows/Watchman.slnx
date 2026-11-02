@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Watchman.Core/Watchman.Core.csproj" />
+    <Project Path="src/Watchman.Helper/Watchman.Helper.csproj" />
+    <Project Path="src/Watchman.Service/Watchman.Service.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Watchman.Core.Tests/Watchman.Core.Tests.csproj" />
+  </Folder>
+</Solution>

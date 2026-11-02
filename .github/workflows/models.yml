@@ -1,0 +1,76 @@
+name: models
+
+on:
+  push:
+    paths: ["models/**", ".github/workflows/models.yml"]
+  pull_request:
+    paths: ["models/**", ".github/workflows/models.yml"]
+  # Run by hand (Actions, models, Run workflow) to build every model file in CI, including the
+  # Marqo classifier that needs torch, and keep them as the `watchman-models` artifact. A household
+  # without the export toolchain downloads it and runs `fetch.py --from-artifact <folder>`.
+  # Nothing is released or published; the artifact stays inside this repository's Actions.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.2"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  artifact:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.2"
+      - name: Install the export toolchain (torch, timm, onnx)
+        run: uv sync --frozen --group export
+      - name: Download, export and verify every model
+        # GITHUB_TOKEN: GitHub answers some release downloads (NudeNet) only to a signed-in client.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run python fetch.py --export
+      - name: Verify every file against the manifest again, offline
+        run: |
+          uv run python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          from watchman_models.manifest import load, sha256_of
+          _, entries = load(Path("manifest.json"))
+          bad = []
+          for e in entries:
+              f = Path("cache") / e.file
+              ok = f.is_file() and e.sha256 and sha256_of(f) == e.sha256 and f.stat().st_size == e.bytes
+              print(f"{e.file}: {'ok' if ok else 'MISMATCH'}")
+              if not ok:
+                  bad.append(e.file)
+          sys.exit(1 if bad else 0)
+          PY
+      - name: Write checksums
+        run: cd cache && sha256sum manifest.json *.onnx | tee SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watchman-models
+          path: |
+            models/cache/*.onnx
+            models/cache/manifest.json
+            models/cache/SHA256SUMS
+          if-no-files-found: error

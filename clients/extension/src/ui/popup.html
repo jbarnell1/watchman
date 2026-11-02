@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Watchman</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body class="popup">
+<header class="brand"><img src="../icons/mark-32.png" width="22" height="22" alt=""><span>Watchman</span></header>
+<main id="main">
+  <p class="state" id="state">Checking</p>
+  <p class="sub" id="sub"></p>
+  <section class="strip" id="strip" hidden>
+    <div><span class="label">Scored today</span><span class="value num" id="scored">0</span></div>
+    <div><span class="label">Covered</span><span class="value num" id="covered">0</span></div>
+    <div><span class="label">Noted</span><span class="value num" id="flagged">0</span></div>
+  </section>
+  <p class="sub num" id="work"></p>
+  <p class="sub" id="queue"></p>
+</main>
+<section id="diag" hidden>
+  <button class="btn" id="score-page" type="button">Score this page</button>
+  <p class="sub" id="diag-note">Every image on this tab with its score. Numbers only; nothing is kept or sent.</p>
+  <div id="diag-out"></div>
+</section>
+<footer><a href="options.html" target="_blank" id="options">Settings</a></footer>
+<script src="popup.js"></script>
+</body>
+</html>

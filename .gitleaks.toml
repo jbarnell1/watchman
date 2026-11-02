@@ -1,0 +1,15 @@
+# gitleaks configuration: the default rules, plus allowlists for files that are known not to hold
+# secrets but look random. Add a path here only after checking a finding is a false positive;
+# a real secret is rotated, never allowlisted.
+
+title = "Watchman"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "dHash test vectors: synthetic PNGs and their expected hashes, shared by every client"
+paths = [
+  '''models/test-vectors/''',
+  '''clients/ios/WatchmanCore/Tests/WatchmanCoreTests/Vectors/''',
+]

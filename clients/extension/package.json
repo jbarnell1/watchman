@@ -1,0 +1,28 @@
+{
+  "name": "watchman-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Watchman browser extension: images are held back until scored on the device and blurred before they are ever painted.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/run.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.13.1",
+    "@types/pngjs": "^6.0.5",
+    "esbuild": "^0.24.2",
+    "jsdom": "^26.0.0",
+    "playwright": "^1.50.1",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.20.1"
+  }
+}

@@ -1,0 +1,382 @@
+# Decisions
+
+Newest first. Each ADR states the choice, why, and what was rejected.
+
+## Open questions
+- Q-1: Default peek cooldown: 24 hours, or longer? (default 24 h until answered)
+- Q-2: Should the repo be public now? Public makes macOS CI minutes free for the iOS build.
+
+## Decisions
+
+### ADR-029 - Partners see a medium blur, and a light one when they peek
+**2026-11-02.** The first real event, a 54 px avatar the phone scored 0.89 and the second opinion
+0.07, was unreadable on the review page: the default view squeezed every crop to a few pixels before
+blurring, and small crops were never scaled up, so a partner could not tell a false alarm from
+anything else. Every crop is now scaled to 256 px first; the default view is a medium Gaussian blur
+(colours and shapes readable, detail gone) and the timed peek a light one. ADR-004 still holds: the
+original is never stored, only these two. Stored names stay `heavy` and `medium` so existing images
+keep working; images stored before this change keep their stronger blur. Rejected: showing the
+original on a peek (ADR-004), a single level (no way to look closer when it matters).
+
+### ADR-028 - Locks are one-way: tightening is free, loosening needs a partner code
+**2026-11-02.** ADR-008 locked whole settings: once a device was paired, adding a blocked app needed
+a partner code just like removing one. The owner's rule is that strengthening protection must never
+need anyone's permission and anything else must. `services/locks.py` now says, per setting, whether
+a change loosens: a threshold raised, coverage narrowed, a flag such as strict mode turned off, any
+app removed from the blocked or risky list (even alongside an addition), a longer interval, pause or
+silence alert, a shorter peek or retention, a person's own values loosened or dropped, the protected
+browser replaced. Only loosening a locked setting needs a code. Settings sit in lock groups
+(protection, apps, timing, pauses and peeks, retention, removing a partner); the household chooses at
+setup and under Settings, Protection, Locks which groups are locked, and every group is locked by
+default. Locks start off (`locks_on`) so a household can set up and test freely; turning them on is
+free and turning them off again, or unlocking a group, is itself loosening and needs a code. Every
+change still reaches the partners in the digest, so testing with locks off is never silent.
+Rejected: a time-limited trial that relocks by itself (surprising, and it fails the household that
+is still testing), per-key lock choices (too many switches to reason about).
+
+### ADR-027 - Portal sign-in is pluggable: Tailscale headers or the household's own OIDC provider
+**2026-11-02.** ADR-014 identified people only by Tailscale identity headers, which assumes every
+admin, protected person and partner runs Tailscale on every device they open the portal from. Some
+households already run an identity provider (Pocket ID, for example) and a reverse proxy,
+and would rather sign in with a passkey than install Tailscale on a partner's work laptop. So the
+portal's identity is chosen by one process setting, `WATCHMAN_AUTH`:
+
+- `tailscale` (the default, unchanged): `tailscale serve` headers, trusted only from the sidecar on
+  loopback. uvicorn keeps `proxy_headers=False` so the trusted-proxy check sees the real peer.
+- `oidc`: the authorization code flow with PKCE (S256) against `WATCHMAN_OIDC_ISSUER`, found by
+  discovery. The ID token is checked for signature against the provider's JWKS (asymmetric
+  algorithms only; `none` and HMAC are refused; an unknown key id refetches the JWKS once), issuer,
+  audience (and `azp` when there are several), expiry, issued-at and the nonce. The login is the
+  `email` claim, lower-cased, so it matches the logins already stored for partners. A session is a
+  cookie signed with HMAC-SHA256 under a 32-byte key generated into `data/keys/session.key` on first
+  start; it is HttpOnly, Secure and SameSite=Lax, lasts `WATCHMAN_SESSION_HOURS` (168 by default)
+  and is cleared by `/auth/logout`. State, nonce and the PKCE verifier ride in a second signed
+  cookie scoped to `/auth` for ten minutes. Tailscale headers are ignored in this mode.
+
+Both modes keep the first-login-becomes-admin rule (ADR-014): it lives in the portal's viewer
+lookup, after identity, so it does not care which provider answered. In OIDC mode the gate is the
+provider instead of the tailnet, so the household should limit the Watchman client to its own
+group in Pocket ID before the first start. SameSite=Lax keeps the portal's form posts from being
+forged by another site. The device API (`/api/v1/*`, bearer tokens from pairing) does not change.
+Households without Tailscale on every device use `deploy/compose.oidc.yaml`, which publishes the
+server port to their reverse proxy instead of running the sidecar. Every external call goes to the
+household's own provider; nothing leaves the household's network.
+Rejected: passwords stored by Watchman (one more secret store to protect), an OIDC library with a
+web framework integration (more dependencies than PyJWT plus httpx, and harder to fake), trusting
+`X-Forwarded-*` from the reverse proxy for identity (a header any misconfigured proxy would pass
+through), and requiring OIDC and Tailscale together (most households need only one).
+### ADR-025 - Every client measures its own work and the portal shows it
+**2026-11-02.** ADR-023 made the clients skip work they think is unnecessary; without numbers there
+is no way to tell whether that pays, what a phone or laptop spends, or where time goes. Every client
+now keeps counters and timing histograms for each step: Windows times capture, the thumbnail and
+fingerprints, the scroll estimate and each inference, and counts sweeps, passes planned, run,
+skipped and unchanged, motion, game and battery sweeps, scrolls and carried findings; Android times
+screenshots, the bitmap copy, hashing, the cache lookup, the classifier, the detector, each judge and
+each ask, and counts frames taken, reused and refused, secure windows, cache hits, known-bad hits,
+asks and their answers; the extension times each judge, the engine and each ask, and counts
+judgements, URL, hash and in-flight cache hits, video frames judged and dropped. Histograms use fixed
+buckets (1, 2, 4 ... 1024 ms and slower) so windows merge by adding. Each client writes a local log
+(Windows: `%LocalAppData%\Watchman\metrics.jsonl`, one line per sweep and one per minute; Android:
+`files/metrics.jsonl` and Logcat tag `WatchmanMetrics`, one line per minute; the extension keeps the
+day in its storage and logs each judge when `watchmanDebug` is set) and sends the window since the
+last heartbeat in the heartbeat's optional `metrics` field. The server merges those per device per
+household day (`device_metrics`, purged with event retention) and the Devices page shows each
+device's day: runs, median, 95th percentile and slowest for every step, and every counter. Counts
+and milliseconds only, never content. Rejected: a metrics service or exporter (another thing to run
+for one household), exact percentiles (needs every sample), sending per-event records (volume).
+
+### ADR-026 - The phone watches the screen through the accessibility service, not MediaProjection
+**2026-11-01.** MediaProjection is Android's screen-recording API. Running it keeps the red
+recording indicator in the status bar, collapses every notification behind a "screen is being
+recorded" banner, and demands a consent dialog after every restart. Covenant Eyes and Canopy ask
+for none of that; they see the screen through the accessibility service, which on Android 11 and
+up may take its own screenshots. Watchman now does the same: the accessibility service owns a
+`ScreenWatcher` that calls `takeScreenshot` when it has a reason (a region pass, the whole-screen
+tick), reuses a frame younger than a second because the API is rate-limited, and gets nothing from
+a secure window (banking apps, DRM video), which is also what a human partner would see. There is
+no capture service, no consent activity, no projection permission, and the only notification is
+the quiet "Watchman is on" line of the always-on service. The permissions the walkthrough asks
+for are the same set those two products ask for: accessibility, draw over other apps, device
+admin, unrestricted battery, notifications.
+Rejected: MediaProjection with a smaller virtual display (the indicator is the problem, not the
+cost), the Camera-style one-time consent (Android has none for projection).
+Addendum, the strict-mode "patch lift" spike: a screenshot that contains Watchman's own patches
+cannot see the picture under a patch, so the patch can neither follow the picture nor know it has
+gone; lifting it for one frame would show the picture. On Android 14 and later the region passes
+screenshot only the app window in front (`takeScreenshotOfWindow`), which does not contain the
+overlay: the picture under a patch is judged like any other, the patch is refreshed while it is
+there and expires when it is not. The whole-screen tick still takes the display so the shade and
+picture-in-picture are seen. Before Android 14 a patch is held while the accessibility tree still
+reports its rectangle. No patch is ever lifted to look.
+
+### ADR-024 - Posture is a set of knobs with presets, and it is per person
+**2026-11-02.** "Blur first and ask the server" (ADR-022) is one way to run Watchman, not the
+product. Households differ: some want report only (Covenant Eyes), some want the device to blur
+and decide alone (Canopy), some want blur and a second opinion; and the same household may want
+a child on the strict end and an adult on report only. So there is no `mode` field. The posture is
+two plain settings next to the thresholds: `cover_on_device` (off is report only: nothing is
+blurred anywhere, scores at or above `flag` are reported as `image_flagged`) and `ask_server`
+(off means the device decides alone and the ask threshold is unused). The settings page offers
+three presets, Report only, Cover on the device, Cover and ask this server, which fill the fields
+and save nothing until Save, so a first-time admin starts from a sensible posture and can loosen
+or tighten later with the knobs. Every protection setting is also settable per person: the
+settings page has a "Settings for" selector; a person's own values are stored as the differences
+from the household (`person_overrides`), and `/api/v1/policy` answers each device with its
+person's merged values. Clients read `cover_on_device` and `ask_server` from the policy and
+default both to true when absent.
+Rejected: a single `mode` enum (hides which knob does what and cannot express mixtures), a
+household-only posture (one server, one household, several people with different needs).
+
+### ADR-023 - Work only on what changed: fingerprints per place, viewport gating, video sampling, a power budget
+**2026-11-02.** The first build judged everything it could see: every `img` on a page whether or
+not it was on screen, every tile of every monitor each interval even on a desktop nobody touched,
+every accessibility event during a scroll, and on the phone a copy of every composed frame (18 MB
+at up to 60 Hz) whether anything used it. Video was either not judged at all (the extension) or
+judged frame by frame as if each frame were a new picture (screen capture). The fix is one rule on
+every client: keep a fingerprint of what was last judged at each *place*, and run a model only when
+the fingerprint changed.
+
+The data structures, shared by all clients:
+- *Place to last fingerprint*: a map from a place (an image element, a screen tile, an accessibility
+  rectangle, a video element) to the 64-bit dHash of what was there at the last pass. A new hash
+  within 2 bits of the old one is "unchanged": nothing runs and the last answer stands. A tile's
+  hash is a 9x8 downsample, microseconds; a model pass is tens of milliseconds.
+- *Decision cache* keyed by hash (exact first, then Hamming 6), already present, so the same picture
+  at a new place or a new URL costs nothing.
+- *In-flight map* keyed by URL in the extension, so fifty copies of one avatar on a page are one
+  fetch and one inference, not fifty.
+- *Token bucket per source* for events: a video that stays explicit produces one `image_covered`
+  per source per minute, not one per sampled frame.
+
+Per client:
+- *Extension.* A `MutationObserver` finds new and changed images (already) and an
+  `IntersectionObserver` with one viewport of margin decides when to judge them: an image far down
+  an infinite feed stays hidden (it is off screen anyway) until it comes within a screen of view,
+  nearest first. The engine keeps a hash to score cache so CDN variants of one picture are scored
+  once. Video: `video` elements that are playing and on screen are sampled once per `whole_screen_interval_s` (5 s by
+  default) into a 384 px canvas; a sample whose hash is within 2 bits of the previous one is dropped
+  before any model runs (a paused or static scene costs one hash per interval). A cover on a video sticks for that source until
+  a tap asks the server. `canvas` is never sampled: games and WebGL render there, and sampling them
+  would be both expensive and pointless. DRM video (Netflix, Prime) cannot be read from a canvas and
+  is not the threat. A cross-origin video served without CORS taints the canvas; the element is
+  marked unsampleable once and left alone.
+- *Windows.* A `SweepPlanner` hashes each pass's region when a sweep starts. Passes whose region is
+  unchanged since the last sweep are skipped and their last findings are re-applied, so a patch over
+  a picture that is still there does not expire. When more than half the tiles changed at once
+  (video, a game, a fast scroll) the sweep collapses to the whole-frame pass only ("motion mode"),
+  which generalises game mode to anything moving everywhere. A static desktop runs zero inferences.
+  On battery the interval doubles.
+- *Android.* Frames are pulled, not pushed: no `ImageReader` listener copying every frame. The
+  capture service calls `acquireLatestImage` only when it has a reason (a region pass, a whole-screen
+  tick). No new frame since the last pull means the screen did not change, which means no work.
+  Region passes from the accessibility service are coalesced to one per 150 ms with the latest
+  rectangles. While the screen is off the virtual display's surface is detached so the compositor
+  stops producing frames; it is reattached on screen on. A `PowerBudget` scales the work: plugged in,
+  the policy's interval and the detector on crops over 160 px; on battery, double the interval; under
+  20 percent, four times the interval and the detector stays off.
+- *Server.* `POST /api/v1/judge` keeps a hash to verdict cache so the same borderline crop asked by
+  two devices (or the same device twice) is answered without a second inference.
+
+Where the quality comes from when a device does less: the ask band (ADR-022). The device model is
+the gate and the server model is the judge. A battery device runs the smallest classifier only and
+sends anything between `ask` and `cover` to the server, which is plugged in. Safety does not scale
+with battery: unsure is covered everywhere; what degrades when the server is far or unreachable is
+the false-blur rate and the time to unblur, never what gets through.
+
+Rejected: frame differencing on every phone frame (keeps a core awake to notice that nothing
+changed; pulling on demand gets the same answer for free), scoring every video frame, lowering
+protection on low battery (a bypass without a partner code, ADR-007), judging `canvas` content.
+Addendum, scrolling (2026-11-02): Windows tiles are fixed screen positions, so a page scrolled by
+half a tile looked like motion everywhere. Each sweep now keeps a grayscale thumbnail of every
+screen at one eighth size, estimates the vertical shift since the last sweep by comparing the two
+thumbnails at every shift (about 5 ms per 2048 by 1152 screen on a desktop PC), moves the overlay's
+patches and the kept findings by that shift, and compares each tile with the content that scrolled
+into its place. Only the newly revealed strip runs. A wrong estimate costs passes, not coverage:
+any tile whose content does not match at the estimated shift runs as before.
+
+### ADR-022 - Unsure means covered: blur first, ask the server's bigger model, then revise
+**2026-11-01.** The small on-device model is allowed to be jumpy because the cost no longer lands
+on anyone. Between the `ask` threshold (default 0.60) and `cover` (0.85) a device covers the image
+at once and posts the crop to `POST /api/v1/judge`, where the second-opinion model scores it in
+memory and stores nothing. A safe answer unblurs the image and no event exists; an explicit answer
+keeps it covered and records the usual `image_covered` event. Above `cover` the device covers and
+reports without asking; below `ask` it shows the image. If the server cannot be reached the image
+stays covered (fails closed). The browser extension does this now (the background revises the tab
+when the answer arrives), and a click on any covered image asks the server again on demand, then
+either unblurs it or says "kept covered"; the phone and Windows helper follow once they have run on
+real devices.
+Cost accepted: borderline crops leave the device even when harmless, over the tailnet only, and are
+dropped the moment they are scored. Rejected: a lower device threshold alone (more false blurs that
+never clear), sending everything to the server (every image would leave the device).
+
+### ADR-021 - Tuning without a positives set: the household's own screens, numbers only, and a coverage lever
+**2026-11-01.** Watchman is tuned on the screens of the household that runs it rather than on a benchmark, and no
+explicit material is collected for it: nothing in the repo or the tooling downloads any, the
+models are weight files only, and nobody (the assistant included) looks at originals. Three tools:
+`models/eval/score.py` measures false alarms on the household's own photo library in place;
+`models/eval/screenshots.py` runs the phone's pipeline over a folder of phone screenshots (whole
+screen, then avatar-sized windows) and prints positions, sizes, hashes and scores, saving nothing;
+the extension popup's "Score this page" lists every image on the open tab with its score, kept
+locally. Thresholds are then set from those numbers on the settings page. The second lever is
+`coverage`: which NudeNet labels count as explicit (explicit only; revealing, adding underwear and
+swimwear; strict, adding bare bellies and armpits). The policy carries the label set and every
+client uses it instead of the manifest default. Rejected: a curated positives folder (households
+do not want that material on the household's hardware, and the dataset behind NudeNet has a
+documented contamination problem), sending samples through chat.
+
+### ADR-020 - iOS: a broadcast extension that reports, Safari that blurs, everything else by Screen Time
+**2026-11-01.** iOS lets no app see or draw over another, so the client is three pieces. The
+ReplayKit broadcast extension takes the latest frame every whole-screen interval, scores it whole
+and in six tiles with the Marqo int8 classifier on ONNX Runtime (CoreML or CPU), records flagged
+tiles as `image_flagged` events with a 512 px crop and `detail.covered = false`, so the server's
+second opinion decides what partners see, and heartbeats as capture granted while it runs; starting
+and stopping it are protection events. The Safari web extension is the shared WebExtension from
+`clients/extension` (the Firefox build, whose background page carries the engine iframe). Blocked
+apps and web limits come from Screen Time with a partner-held passcode, not from code, until the
+Family Controls entitlement is granted. The app and both extensions share one app group container
+through the `WatchmanCore` Swift package (API, hash, queue, decisions), which `swift test` checks on
+macOS; the app itself is built on a macOS runner without signing (ADR-012). Rejected: a VPN or
+content filter (needs supervision), scoring on the server (frames must not leave the phone).
+
+### ADR-019 - Android: accessibility finds the images, MediaProjection sees them, Kotlin does the work
+**2026-11-01.** The Flutter app is setup, status and pause codes only, over one MethodChannel. The
+accessibility service knows the foreground app, the image rectangles on screen (ImageView nodes)
+and the browser address bar, and blocks apps from the policy with the block screen plus a home
+action. The capture service holds a MediaProjection session (consent asked by an invisible
+activity, declining is a tamper event), keeps the latest frame, crops each reported rectangle and
+judges it at its own size: dHash, known-bad list, decision cache, Marqo int8 classifier for every
+crop and NudeNet 320n as well for crops over 160 px, ONNX Runtime with NNAPI when available. Covered
+regions get pixelated patches on a touch-transparent overlay; over 40% explicit shows the block
+screen. A foreground service heartbeats and flushes the queue, models come verified from the
+household server, and pairing, policy and the queue live in EncryptedSharedPreferences. Device
+admin reports its own removal. Rejected: scoring in Dart (no ONNX on the UI thread, and the
+services must outlive the Flutter engine), a VPN-based blocker (would fight Tailscale, ADR-006).
+
+### ADR-018 - Windows: GDI capture, a DirectML detector over tiles, an overlay excluded from capture
+**2026-11-01.** The per-user helper captures each monitor with GDI (CopyFromScreen) every
+whole-screen interval, runs NudeNet 640m with ONNX Runtime on DirectML over the whole frame and
+over 640 px tiles at native resolution (so small images are seen at their own size, ADR-002), merges
+the explicit boxes and covers each with a pixelated patch on a topmost click-through window that
+carries WDA_EXCLUDEFROMCAPTURE, so the next frame still shows what is underneath. Over 40% of the
+screen explicit becomes a full block. Findings go to the SYSTEM service over a named pipe as JSON
+lines with a 512 px JPEG crop; the service queues events (DPAPI-sealed files under ProgramData),
+heartbeats, downloads and verifies the model, and restarts the helper in the console session when
+it dies. The sweep is spread over the interval: one inference per tick (every 384 ms at the
+default 5 s), never a burst, because the Covenant Eyes stutter came from bursts. When a full-screen
+window that is not a browser is in front (a game), the sweep collapses to one whole-frame pass per
+interval with NudeNet 320n on the CPU at below-normal thread priority, so the GPU is never shared
+with the game. Measured on a desktop PC: 15 to 18 ms per 640 px inference on the RTX 4070 through
+DirectML (295 ms for the first, warm-up), 17 ms for the game-mode CPU pass, capture 24 to 34 ms.
+Rejected for now: Windows Graphics Capture (needs a D3D device and WinRT interop for little gain at
+this rate), UI Automation image positions (later; the browser extension already handles browsers),
+a native-messaging host for the extension (later).
+### ADR-017 - Extension: an engine page scores, the content script holds images back, errors blur
+**2026-11-01.** The content script's stylesheet hides every `img` until the background has judged
+it, so nothing explicit is painted. Scoring needs a canvas and WebAssembly, which Chrome's service
+worker lacks, so an "engine page" does it: an offscreen document on Chrome, an iframe inside the
+background page on Firefox. The engine fetches the image itself (extension host permissions), hashes
+it, runs the Marqo classifier with ONNX Runtime Web (WASM, `wasm-unsafe-eval` in the extension CSP)
+and keeps a 512 px JPEG for the server. When the engine cannot answer within six seconds the image
+is shown blurred, never sharp: protection fails closed. The int8 model is quantised on MatMul only
+because ONNX Runtime Web has no WASM kernel for ConvInteger. Verified end to end in Chromium with
+Playwright against the dev server (`clients/extension/e2e/run.mjs`). Rejected: scoring in the
+content script (cross-origin canvases are tainted), asking a native helper first (later, as an
+optimisation on Windows).
+
+### ADR-016 - Settings codes: partners unlock protection settings the same way they unlock a pause
+**2026-11-01.** Once any device is paired, the keys in `LOCKED_KEYS` (thresholds, strict mode, app
+lists, intervals, retention, pause and peek limits) and partner removal need a one-time settings
+code issued by a partner on the Codes page. Same code table as pause codes, `purpose = settings`,
+single use, 24 hours. Rejected: an admin password (the admin is usually the protected person),
+locking the whole settings page (household name and SMTP must stay editable).
+
+### ADR-015 - The server derives protection events from heartbeats
+**2026-11-01.** Every heartbeat carries the device's state. The server compares it with the last
+one and raises `protection_changed` (severity `protection`, alerts) when any field turns off, and
+`tamper` on a safe-mode boot or when a device goes silent past the gap. Client-sent
+`protection_changed` events are stored for the record but do not alert, so a device cannot be
+silenced by not sending them and partners never get two alerts for one change. Clients send a
+heartbeat at once on any state change (contract unchanged).
+
+### ADR-014 - First login becomes admin; no passwords anywhere
+**2026-11-01.** The portal identifies people only by Tailscale identity headers from the sidecar.
+On a fresh server the first login to reach the portal becomes the admin and is sent to setup.
+Safe because the node is reachable only on the household's own tailnet (ADR-006). Rejected: a
+bootstrap token in the compose file (one more secret to lose; the tailnet already gates access).
+
+### ADR-013 - Portal look: achromatic ledger, Harbour colours, self-hosted Geist
+**2026-11-01.** The portal and the emails follow one style: ink and white chrome with no brand
+colour on buttons or navigation, one hue (petrol, `#156d7a`) on the mark and on the main data
+element, pale status pills, flat panels with a tone step and no shadows, Geist served from the
+server (OFL 1.1) so no partner's browser calls Google. The signature element is the watch strip:
+seven days by 24 hours of heartbeat coverage per device. Rejected: purple or indigo accents, the
+olive greens, a dark navy sidebar, icon-topped KPI tiles. The direction was chosen
+from `docs/brand/logo-options.html`. The mark, chosen from Gemini candidates on
+2026-11-01, is a W whose outer strokes are ink and whose inner V is the light of a small
+watchtower standing in the valley: `docs/brand/mark.svg` (traced), `mark-reference.jpg` (the
+Gemini original).
+
+### ADR-012 - iOS is built and checked in CI, tested by friends through TestFlight
+**2026-11-01.** The project has no Apple device to build on. The iOS app (Swift, XcodeGen project) is built on a
+GitHub macOS runner; the Safari extension shares its code with `clients/extension`, whose logic is
+tested in Playwright WebKit on Windows/Linux. Device testing happens with an iPhone-owning friend
+through TestFlight from a maintainer's Apple developer account. Rejected: Flutter for iOS (extensions
+must be native anyway), skipping iOS (most interested friends use iPhone).
+
+### ADR-011 - One model format: ONNX everywhere
+**2026-11-01.** All platforms run ONNX models through ONNX Runtime (DirectML on Windows, NNAPI or
+XNNPACK on Android, CoreML on iOS, WebGPU or WASM in the extension, CPU or CUDA on the server).
+One export, one preprocessing spec in `models/manifest.json`. Rejected: LiteRT on Android plus ONNX
+elsewhere (two conversions to keep in step).
+
+### ADR-010 - Models
+**2026-11-01.** Small crops and the extension: Marqo nsfw-image-detection-384 (Apache-2.0, about
+6M parameters) exported to ONNX. Larger images and region boxes: NudeNet 320n (phone) and 640m (PC,
+server), MIT per PyPI 3.4.2. Server second opinion: AdamCodd vit-base-nsfw-detector (Apache-2.0,
+ONNX int8). Rejected: a single whole-screen classifier (misses small images, the Covenant Eyes flaw).
+
+### ADR-009 - AGPL-3.0
+**2026-11-01.** Watchman is AGPL-3.0. Anyone running it can read what watches their
+screen, and modified hosted copies must share source.
+
+### ADR-008 - Settings, not constants; one server per household
+**2026-11-01.** Every household-specific value is a server setting with a default, edited on the
+settings page; protection-weakening settings need a partner code once protection is on. Each
+household runs its own server; there is no central service and no server talks to another.
+
+### ADR-007 - Nothing pauses protection without a partner code
+**2026-11-01.** Pauses come only from one-time partner codes with a configurable maximum length. No
+allow-listed apps, no admin override. Every pause appears in the digest.
+
+### ADR-006 - Partners connect per partner: Tailscale node share or email only
+**2026-11-01.** The server runs as its own Tailscale node (default name `watchman`). A linked
+partner gets that one node shared into their tailnet and uses the portal (peeks, review, codes).
+An email-only partner gets digests and alerts with heavy blur and receives pause codes by email
+when the protected person requests one. Identity on the portal comes from Tailscale identity
+headers; there are no passwords. Rejected: public hosting, Funnel, a central relay.
+
+### ADR-005 - Reports
+**2026-11-01.** Digest on a configurable day and time (default Sunday 19:00) to the protected person and all partners. Immediate alerts to the same people only for
+explicit content confirmed by the second opinion and for protection turned off.
+
+### ADR-004 - Partners never see originals
+**2026-11-01.** After the second opinion the server stores a heavy blur and a medium blur and
+deletes the original. Email and lists show heavy blur. Linked partners may press and hold to see
+the medium blur for 3 seconds, then a cooldown (default 24 hours per partner). Every peek is logged
+and shown to the protected person. Images are kept 7 days by default, event text 1 year.
+
+### ADR-003 - Real-time blur in the first version, two methods
+**2026-11-01.** Browsers: the extension holds every image back until scored, so explicit images
+are never painted. Apps: cover on sight, an overlay patch over just the offending image (Android
+overlay window; Windows click-through overlay excluded from capture). A full block screen when
+most of the screen is explicit.
+
+### ADR-002 - Every image is judged at its own size
+**2026-11-01.** Clients find image regions (accessibility tree, UI Automation, DOM, or a tiled
+region finder), crop them at full resolution and score each crop. A whole-screen pass still runs
+every few seconds. A perceptual-hash cache skips images already judged and covers known-bad ones
+instantly.
+
+### ADR-001 - Local judging, tailnet only
+**2026-11-01.** Screens are judged on the device. Only flagged crops and events go to the
+household's own server over Tailscale. No cloud models, no telemetry.

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Review{% endblock %}
+{% block content %}
+<div class="titlerow">
+  <div><h1>Review</h1>
+    <p class="finding">{% if items %}{{ items|length }} item{{ 's' if items|length != 1 }} waiting{% if person %} for {{ person.name }}{% endif %}.{% else %}Nothing waiting{% if person %} for {{ person.name }}{% endif %}.{% endif %}</p></div>
+</div>
+{% if not person %}<p class="empty">No one is set up for you to see yet.</p>{% else %}
+<div class="inbox">
+  <div class="inbox-list">
+    {% if items %}
+    <ul class="rows">
+      {% for e in items %}
+      <li class="row {% if selected and selected.id == e.id %}sel{% endif %}">
+        <a class="row-link" href="/review?person={{ person.id }}&item={{ e.id }}">
+          {% if e.image_status == 'stored' %}<img class="thumb" src="/images/{{ e.id }}/heavy" width="44" height="44" alt="">{% else %}<span class="thumb none"></span>{% endif %}
+          <div class="row-main">
+            <div class="t1">{{ e.app or 'device' }}{% if e.region %}{% set r = json.loads(e.region) %}, {{ r.w }} px{% endif %}</div>
+            <div class="t2">{% if e.severity == 'explicit' %}<span class="pill neg">Explicit</span>{% else %}<span class="pill warn">Review</span>{% endif %} {{ when(e.occurred_at) }}</div>
+          </div>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">Items both models agree on arrive here as explicit; disagreements as review.</p>
+    {% endif %}
+    {% if recent %}
+    <h2 class="sub-h">Already reviewed</h2>
+    <ul class="rows quiet">
+      {% for e in recent %}
+      <li class="row"><a class="row-link" href="/review?person={{ person.id }}&item={{ e.id }}">
+        <div class="row-main"><div class="t1">{{ e.app or 'device' }}</div><div class="t2">{{ 'Talked about' if e.review_state == 'talked' else 'False alarm' }} · {{ when(e.occurred_at) }}</div></div></a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="inbox-detail">
+    {% if selected %}{% set e = selected %}{% set dt = json.loads(e.detail or '{}') %}{% set sc = json.loads(e.scores or '{}') %}
+    <div class="detail-head">
+      <h2>{{ 'Confirmed explicit' if e.severity == 'explicit' else 'Needs a second look' }}</h2>
+      <span class="t2">{{ when(e.occurred_at, '%A %d %B, %H:%M') }}</span>
+    </div>
+    <div class="detail-body">
+      <div class="peek" id="peek">
+        {% if e.image_status == 'stored' %}
+        <img id="peek-img" src="/images/{{ e.id }}/heavy" width="256" height="256" alt="blurred image">
+        {% if partner %}
+        <button id="peek-btn" class="btn ghost" type="button" data-id="{{ e.id }}" {% if next_peek %}disabled{% endif %}>Hold to peek ({{ settings.peek_seconds }} s)</button>
+        <p class="t2" id="peek-note">{% if next_peek %}Next peek {{ when(next_peek) }}.{% else %}One peek per {{ settings.peek_cooldown_hours }} hours. Every peek is shown to {{ person.name }}.{% endif %}</p>
+        {% endif %}
+        {% elif e.image_status == 'expired' %}<p class="empty">The image was deleted after {{ settings.image_retention_days }} days.</p>
+        {% else %}<p class="empty">No image was kept for this item.</p>{% endif %}
+      </div>
+      <dl class="facts">
+        <dt>Where</dt><dd>{{ e.app or 'unknown app' }}{% if e.url %}<br><span class="t2">{{ e.url }}</span>{% endif %}{% if e.title %}<br><span class="t2">{{ e.title }}</span>{% endif %}</dd>
+        <dt>Device score</dt><dd class="num">{{ '%.2f'|format(sc.classifier) if sc.classifier is defined else '–' }}{% if sc.detector is defined and sc.detector is not none %} · detector {{ '%.2f'|format(sc.detector) }}{% endif %}</dd>
+        <dt>Second opinion</dt><dd class="num">{{ '%.2f'|format(e.second_opinion) if e.second_opinion is not none else 'not yet' }}</dd>
+        {% if e.region %}{% set r = json.loads(e.region) %}<dt>Size on screen</dt><dd class="num">{{ r.w }} × {{ r.h }} px of {{ r.screen_w }} × {{ r.screen_h }}</dd>{% endif %}
+        {% if sc.labels %}<dt>Detector labels</dt><dd>{{ sc.labels|join(', ')|lower|replace('_',' ') }}</dd>{% endif %}
+        <dt>What happened</dt><dd>{{ 'Covered before it was seen' if e.action == 'covered' else 'Blocked' if e.action == 'blocked' else 'Noted only' }}</dd>
+        {% if e.review_state != 'open' %}<dt>Reviewed</dt><dd>{{ 'Talked about' if e.review_state == 'talked' else 'False alarm' }} by {{ e.reviewed_by }}, {{ when(e.reviewed_at) }}</dd>{% endif %}
+      </dl>
+    </div>
+    {% if partner %}
+    <form class="detail-actions" method="post" action="/review/{{ e.id }}">
+      {% if e.review_state == 'open' %}
+      <button class="btn primary" name="state" value="talked">Talked about it</button>
+      <button class="btn" name="state" value="false_alarm">False alarm</button>
+      {% else %}
+      <button class="btn" name="state" value="open">Reopen</button>
+      {% endif %}
+    </form>
+    {% endif %}
+    {% else %}
+    <p class="empty">Choose an item.</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('peek-btn');
+  if (!btn) return;
+  var img = document.getElementById('peek-img'), note = document.getElementById('peek-note');
+  var heavy = img.src, timer = null, busy = false;
+  function reblur() { img.src = heavy; btn.textContent = 'Hold to peek ({{ settings.peek_seconds }} s)'; }
+  function start(ev) {
+    ev.preventDefault();
+    if (busy || btn.disabled) return;
+    busy = true;
+    fetch('/peek/' + btn.dataset.id, {method: 'POST'}).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) { note.textContent = d.error.message; busy = false; return; }
+      img.src = d.url;
+      btn.textContent = 'Peeking';
+      note.textContent = 'Next peek ' + new Date(d.next_peek_at).toLocaleString() + '. This peek is logged.';
+      btn.disabled = true;
+      timer = setTimeout(function () { reblur(); busy = false; }, d.seconds * 1000);
+    }).catch(function () { busy = false; });
+  }
+  function stop() { if (timer) { clearTimeout(timer); timer = null; reblur(); busy = false; } }
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointerleave', stop);
+  btn.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') start(e); });
+  btn.addEventListener('keyup', stop);
+})();
+</script>
+{% endif %}
+{% endblock %}

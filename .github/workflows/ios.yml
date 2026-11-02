@@ -1,0 +1,37 @@
+name: ios
+
+on:
+  push:
+    paths: ["clients/ios/**", "clients/extension/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["clients/ios/**", "clients/extension/**", ".github/workflows/ios.yml"]
+
+jobs:
+  core:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: clients/ios/WatchmanCore
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+
+  app:
+    runs-on: macos-15
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci && node build.mjs
+        working-directory: clients/extension
+      - run: brew install xcodegen
+      - run: xcodegen generate
+        working-directory: clients/ios
+      - run: >
+          xcodebuild build -project Watchman.xcodeproj -scheme Watchman
+          -destination "generic/platform=iOS Simulator" -configuration Debug
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+          -skipPackagePluginValidation -skipMacroValidation | tail -40
+        working-directory: clients/ios

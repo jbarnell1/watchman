@@ -1,0 +1,102 @@
+# XcodeGen project for the iOS client. `xcodegen generate` writes Watchman.xcodeproj (not committed).
+# Three targets: the app, the ReplayKit broadcast extension (accountability frames), and the Safari
+# web extension (the shared WebExtension from clients/extension, built first by CI).
+name: Watchman
+options:
+  bundleIdPrefix: app.watchman
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  WatchmanCore:
+    path: WatchmanCore
+  onnxruntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager
+    from: "1.20.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Watchman:
+    type: application
+    platform: iOS
+    sources: [Watchman]
+    dependencies:
+      - package: WatchmanCore
+      - target: WatchmanBroadcast
+      - target: WatchmanSafari
+    info:
+      path: Watchman/Info.plist
+      properties:
+        CFBundleDisplayName: Watchman
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAppTransportSecurity: { NSAllowsLocalNetworking: true }
+    entitlements:
+      path: Watchman/Watchman.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.watchman]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.watchman.ios
+
+  WatchmanBroadcast:
+    type: app-extension
+    platform: iOS
+    sources: [Broadcast]
+    dependencies:
+      - package: WatchmanCore
+      - package: onnxruntime
+        product: onnxruntime
+    info:
+      path: Broadcast/Info.plist
+      properties:
+        CFBundleDisplayName: Watchman Screen Report
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    entitlements:
+      path: Broadcast/Broadcast.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.watchman]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.watchman.ios.broadcast
+
+  WatchmanSafari:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SafariExtension
+      - path: ../extension/dist/firefox
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: WatchmanCore
+    info:
+      path: SafariExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Watchman
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.watchman.ios.safari
+
+schemes:
+  Watchman:
+    build:
+      targets:
+        Watchman: all
+    run:
+      config: Debug

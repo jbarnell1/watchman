@@ -1,0 +1,34 @@
+name: windows
+
+on:
+  push:
+    paths: ["clients/windows/**", "models/test-vectors/**", "docs/brand/mark.ico", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["clients/windows/**", "models/test-vectors/**", "docs/brand/mark.ico", ".github/workflows/windows.yml"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: clients/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test --configuration Release
+      - run: dotnet publish src/Watchman.Service -c Release -r win-x64 --self-contained false -o publish/service
+      - run: dotnet publish src/Watchman.Helper -c Release -r win-x64 --self-contained false -o publish/helper
+      - run: dotnet tool install --global wix --version 5.0.2
+      - run: wix extension add -g WixToolset.UI.wixext/5.0.2
+      - run: >
+          wix build installer/Watchman.wxs -arch x64
+          -d ServicePublish=${{ github.workspace }}/clients/windows/publish/service
+          -d HelperPublish=${{ github.workspace }}/clients/windows/publish/helper
+          -d Brand=${{ github.workspace }}/docs/brand
+          -o publish/Watchman-0.1.0.msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watchman-windows
+          path: clients/windows/publish/Watchman-0.1.0.msi
