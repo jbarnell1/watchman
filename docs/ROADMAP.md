@@ -27,6 +27,47 @@ screen-off surface detach, a power budget and the ask band on Android; a judge c
 Unmeasured until the devices run: the Pixel's milliseconds per crop and battery per hour, and the
 laptop's. The numbers go in the status pages.
 
+## Tuning in daily use (from 2026-11-02)
+
+The Pixel is the test device; the owner uses it normally and every change is measured, not
+guessed. Numbers only: no picture leaves the phone for tuning beyond what the product already sends.
+
+Where we start, on a looping Instagram reel, unplugged:
+
+| Build | Watchman | Covenant Eyes |
+|---|---|---|
+| Before ADR-035 | 110 mAh an hour | about 4 |
+| ADR-035 only | about 225 mAh an hour | |
+| ADR-036 to 039 | 63 mAh an hour, 2 to 4 classifier runs a minute | 5.5 |
+
+Targets: under 30 mAh an hour on a reel and under 10% of the phone's drain in a normal day; a
+false-alarm share in the review queue under 10%; no picture the owner reports as missed.
+
+Week 1, measure and label:
+- The owner marks each review item talked or false alarm (false alarms also clear the known-bad
+  list, ADR-035). The digest and Devices page show the false-alarm share per app.
+- A "missed something" action in the phone's notification records the scores, sizes and app of
+  what was on screen (numbers only) as a `miss_reported` event, so misses become data.
+- Metrics per app, not only per device: classifier runs, covers, asks lifted, battery minutes.
+- A what-if page on the server: replay the stored scores of the last days against other
+  thresholds (ask, sure, cover, detector) and show how many covers, asks and reports each would
+  have made, before anything is changed.
+- Scan the screen as soon as the accessibility service reconnects (ADR-039 follow-up).
+
+Week 2, tune from the data:
+- Thresholds and watch levels per app from the false-alarm share and the cost per app; move
+  low-risk apps to checked (ADR-037).
+- Video cadence (5 s today) against battery and misses on reels and YouTube.
+- A cheap pixel-difference check per track, so unchanged flat pictures skip the hash and cache.
+
+Week 3, bigger steps:
+- GPU through LiteRT for the classifier, measured against 68 ms on the CPU.
+- Windows: desktop duplication capture (changed and moved rectangles from the OS), UI Automation
+  regions, watch levels and strict mode.
+- Extension: strict mode, force-install through browser policy, CSS background images, canvas,
+  cross-origin frames.
+- Research: picture embeddings in place of fingerprints, evaluated on the owner's local folder.
+
 ## Known-bad list (ADR-035)
 
 The server lists a picture only on strong evidence and removes it on contrary evidence; the phone
