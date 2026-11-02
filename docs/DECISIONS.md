@@ -24,6 +24,13 @@ screenshots (1,546 windows, numbers only): the sorter costs about 6 ms a window 
 against 76 ms for the classifier, but agrees with it poorly (correlation 0.06), would have cleared
 11 to 13 of the 28 windows the server confirmed, and fires on 313 windows the server did not. So it
 only orders the work: every picture is still classified and nothing is cleared on its say-so.
+Measured on the Pixel after install: the classifier and detector both chose plain CPU (68 and 31 ms
+on a plain picture; XNNPACK 183 and 69), and live classifier runs fell from about 250 ms to 120 ms.
+The sorter took 36 ms there (64 ms live), only half the classifier's time rather than the desktop's
+thirteenth, so sorting a screen of N new pictures delayed the first classifier run by N sorter runs
+and added half again to the work. The phone therefore keeps the sorter only when it measures at
+least four times cheaper than the classifier at load (`gate_off` counts the phones where it is not);
+on the owner's Pixel it is off. The code and manifest entry stay for phones where it pays.
 Rejected: the sorter as a gate that skips the classifier (misses too many), a single faster model
 in place of the classifier (no candidate matched it), NNAPI or the Tensor TPU (not reachable from
 ONNX Runtime for these models).

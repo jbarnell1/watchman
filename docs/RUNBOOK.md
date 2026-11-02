@@ -160,6 +160,10 @@ if the name does not resolve there, use the node's tailnet IP in the URL. A red 
 the tile, means the server is down or a model file is missing or does not match the manifest:
 run `models/fetch.py` and restart the server.
 
+The server serves `models/cache/manifest.json`, which `fetch.py` writes only after every file
+checks out. After pulling a change to `models/manifest.json`, run `models/fetch.py` after pulling
+and restart the server, or devices keep seeing the old manifest.
+
 ## iOS
 
 Built only in CI (`ios.yml`): `swift test` for `clients/ios/WatchmanCore`, then XcodeGen and an
