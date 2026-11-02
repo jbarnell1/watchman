@@ -52,6 +52,7 @@ Week 1, measure and label:
 - A what-if page on the server: replay the stored scores of the last days against other
   thresholds (ask, sure, cover, detector) and show how many covers, asks and reports each would
   have made, before anything is changed.
+- Built: the what-if page (`/whatif`, ADR-041), linked from Settings beside the thresholds.
 - Scan the screen as soon as the accessibility service reconnects (ADR-039 follow-up).
 
 Week 2, tune from the data:

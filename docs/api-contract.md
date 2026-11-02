@@ -208,6 +208,7 @@ Server-rendered pages under `/`. Roles: `admin`, `protected`, `partner`. A login
 | `/codes` | partner | Issue a pause code (length up to the cap) or a settings code (ADR-016) |
 | `/devices` | all who see the person | Devices, last heartbeat, state; admin and protected create pairing codes; admin revokes (alerts) |
 | `/settings?area=general|protection|email|people` | admin | All settings; locked ones need a partner settings code once a device is paired |
+| `/whatif?days=&ask=&sure=&cover=&flag=&detector_cover=&second_opinion=` | admin or partner | Replays the stored scores of the last 1, 7 or 30 days against proposed thresholds: covered, asked, reported, explicit, review and false-alarm counts per app, now and proposed (ADR-041). Numbers only; changes nothing |
 | `/setup` | first login | First-run wizard |
 | `/auth/login?next=` | anyone (OIDC mode only) | Starts the sign-in: redirect to the provider with state, nonce and a PKCE challenge |
 | `/auth/callback` | the provider's redirect (OIDC mode only) | Checks state, redeems the code, validates the ID token, sets the session cookie, goes to `next` |

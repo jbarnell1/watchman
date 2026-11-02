@@ -23,6 +23,22 @@ While moving, each blur is stretched along the scroll by 60 ms of travel each si
 px). Metrics `scroll_event_gap_ms`, `scroll_events` and `scroll_unknown_delta` measure what apps
 really send. Still behind `follow_scroll`, off by default. Not pursued yet: shell-level input
 access through Shizuku or ADB (raw touch at full rate), which needs pairing after every reboot.
+### ADR-041 - A what-if page replays stored scores against other thresholds
+**2026-11-02.** Tuning week 1 (ROADMAP) needs to see what a threshold change would do before it is
+made. The portal's What if page (`/whatif`, the admin or a partner of the person) takes proposed
+values for ask, sure, cover, flag, detector cover and second opinion, prefilled with the person's
+current ones, and a window of 1, 7 or 30 days. It runs the scores stored on each image event
+(`image_covered`, `image_flagged`, `screen_blocked`) through the device's decision once with each
+set (`server/app/services/whatif.py`, mirroring `Decide.kt` and `Pipeline.kt`) and shows per app
+and in total: covered, asked, reported, explicit by second opinion, partner review items, and the
+known false alarms each set would still raise. Pictures covered by the known-bad list bypass
+thresholds and are counted on their own. It reads numbers only, never an image, and changes nothing.
+The limitation is stated on the page: events exist only for pictures the device already acted on,
+and a safe answer to an ask stores nothing (ADR-022). Raising a line is a fair estimate; lowering
+one can only count what it adds among these pictures, never the ones that were not reported. An
+asked picture with no second opinion on record counts as reported, as it was. Rejected: logging
+every score on the device to replay everything, which sends far more about what is on screen than
+the product needs (CLAUDE.md, privacy); and simulating on the phone, which has no history.
 
 ### ADR-040 - Scroll-following is a setting; strict mode covers new pictures until judged
 **2026-11-02.** The owner found blurs that move with a scroll (ADR-032) not effective enough to
