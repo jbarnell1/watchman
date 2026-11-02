@@ -88,10 +88,6 @@ def test_yolov8_decode_with_nms_and_unletterbox():
 
 
 def test_positives_sum_and_unbatched_layout():
-    import numpy as np
-    from PIL import Image
-    from watchman_models.preprocess import classifier_input
-    from watchman_models.runner import classifier_score
     out = {"kind": "softmax", "labels": ["a", "b", "c"], "positive": "b", "positives": ["b", "c"]}
     logits = np.log(np.array([0.5, 0.3, 0.2]))
     assert abs(classifier_score(logits, out) - 0.5) < 1e-9
