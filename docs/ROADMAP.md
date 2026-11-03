@@ -12,7 +12,7 @@ This page tracks build status; `docs/DECISIONS.md` has the reasons behind it.
 | Browser extension: hold-back blur, pairing, events | `main` | built; 21 unit tests; end to end in Chromium with the real model |
 | Windows: service, helper with capture and overlay, installer | `main` | built; 19 Core tests; self-test on a desktop PC (17 ms per pass, spread over the interval; game mode on the CPU); MSI built in CI; not yet installed as a service |
 | Android: setup, accessibility, capture, overlay, scoring, queue | `main` | built; Dart and Kotlin unit tests; debug APK builds; not yet run on the Pixel |
-| iOS: app, broadcast extension, Safari extension, CI build | `main` | built; Swift core tests and the unsigned simulator build pass in CI; untested on a device |
+| iOS: app and Safari extension (broadcast extension removed, ADR-049), CI build | `main` | built; Swift core tests and the unsigned simulator build pass in CI; untested on a device |
 | Integration hardening: OIDC sign-in (ADR-027), gitleaks, Dependabot, `/healthz` for Gatus and Homepage, setup scripts, the `watchman-models` artifact | `slice/hardening` | built; server and models tests pass; OIDC tested against a fake provider only, not yet against Pocket ID |
 | First household integration: server, Windows, Android, extension | | in progress |
 

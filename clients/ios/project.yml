@@ -1,6 +1,6 @@
 # XcodeGen project for the iOS client. `xcodegen generate` writes Watchman.xcodeproj (not committed).
-# Three targets: the app, the ReplayKit broadcast extension (accountability frames), and the Safari
-# web extension (the shared WebExtension from clients/extension, built first by CI).
+# Two targets: the app (pairing, partner codes, heartbeats) and the Safari web extension (the
+# shared WebExtension from clients/extension, built first by CI), which blurs and reports (ADR-049).
 name: Watchman
 options:
   bundleIdPrefix: app.watchman
@@ -12,9 +12,6 @@ options:
 packages:
   WatchmanCore:
     path: WatchmanCore
-  onnxruntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager
-    from: "1.20.0"
 
 settings:
   base:
@@ -31,7 +28,6 @@ targets:
     sources: [Watchman]
     dependencies:
       - package: WatchmanCore
-      - target: WatchmanBroadcast
       - target: WatchmanSafari
     info:
       path: Watchman/Info.plist
@@ -47,30 +43,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.watchman.ios
-
-  WatchmanBroadcast:
-    type: app-extension
-    platform: iOS
-    sources: [Broadcast]
-    dependencies:
-      - package: WatchmanCore
-      - package: onnxruntime
-        product: onnxruntime
-    info:
-      path: Broadcast/Info.plist
-      properties:
-        CFBundleDisplayName: Watchman Screen Report
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
-          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
-    entitlements:
-      path: Broadcast/Broadcast.entitlements
-      properties:
-        com.apple.security.application-groups: [group.app.watchman]
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.watchman.ios.broadcast
 
   WatchmanSafari:
     type: app-extension

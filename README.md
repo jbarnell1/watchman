@@ -6,7 +6,7 @@ and immediate alerts to the accountability partners you choose. It runs on your 
 your own Tailscale tailnet; nothing goes to a cloud service.
 
 - Android, Windows, and browsers (Chrome, Edge, Firefox): real-time blur and accountability.
-- iPhone: screen accountability, Safari image blur, Screen Time locks (Apple allows no more).
+- iPhone: Safari image blur and reports; other apps blocked with Screen Time or your blocking app (Apple allows no more).
 - Partners never see original images, only blurred versions.
 - Nothing pauses protection without a partner code.
 
