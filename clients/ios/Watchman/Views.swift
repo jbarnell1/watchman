@@ -1,4 +1,3 @@
-import ReplayKit
 import SwiftUI
 import WatchmanCore
 
@@ -56,30 +55,25 @@ struct StatusView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(paused ? "Paused by a partner code" : (model.broadcasting ? "Screen report on" : "Screen report off"))
+                    Text(paused ? "Paused by a partner code" : "Paired")
                         .font(.title2.weight(.medium))
-                        .foregroundStyle(paused ? warning : (model.broadcasting ? .primary : negative))
+                        .foregroundStyle(paused ? warning : .primary)
                     Text(statusLine).foregroundStyle(muted).font(.subheadline)
                     if let e = model.lastError { Text(e).foregroundStyle(negative).font(.caption) }
                 }
                 .padding(.vertical, 4)
             }
-            Section("What this phone can do") {
-                row("Screen report (broadcast)", model.broadcasting)
-                row("Model on the phone", model.modelReady)
-                row("Safari image blur", true, note: "Turn on the Watchman extension in Settings, Safari, Extensions.")
+            Section("Turn on protection") {
+                Text("Settings, Apps, Safari, Extensions: turn on Watchman and allow it on every website. It holds images back until they are judged, blurs explicit ones and reports them to your server.")
+                Text("Then make Safari the only way onto the web: block other browsers and the apps your household chooses with Screen Time (with a passcode your partner holds) or your blocking app.")
+                    .foregroundStyle(muted)
             }
-            Section {
-                BroadcastPickerView().frame(height: 44)
-                Text("Tap the button and choose Watchman, then Start Broadcast. The red indicator means the report is running. Stopping it is reported to your partners.")
-                    .font(.caption).foregroundStyle(muted)
-            } header: { Text("Start the screen report") }
             Section {
                 Button("Partner code or pause request") { showPause = true }
                 if model.queued > 0 { Text("\(model.queued) event\(model.queued == 1 ? "" : "s") waiting to send.").font(.caption).foregroundStyle(muted) }
             }
             Section {
-                Text("iPhone lets no app see or cover another app, so this phone reports what it saw rather than blurring it, except in Safari where the extension holds images back. Blocked apps and web limits come from Screen Time with a passcode your partner holds.")
+                Text("iPhone lets no app see or cover another app, so Watchman works in Safari only. Blocked apps and web limits come from Screen Time or your blocking app.")
                     .font(.caption).foregroundStyle(muted)
             }
         }
@@ -150,16 +144,4 @@ struct PauseView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
     }
-}
-
-/// The system control that starts the broadcast extension.
-struct BroadcastPickerView: UIViewRepresentable {
-    func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
-        let v = RPSystemBroadcastPickerView()
-        v.preferredExtension = "app.watchman.ios.broadcast"
-        v.showsMicrophoneButton = false
-        return v
-    }
-
-    func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) {}
 }

@@ -167,11 +167,11 @@ and restart the server, or devices keep seeing the old manifest.
 ## iOS
 
 Built only in CI (`ios.yml`): `swift test` for `clients/ios/WatchmanCore`, then XcodeGen and an
-unsigned simulator build of the app with both extensions. Device builds go through TestFlight from
+unsigned simulator build of the app with the Safari extension. Device builds go through TestFlight from
 your Apple developer account: set `DEVELOPMENT_TEAM` in `clients/ios/project.yml`, add the
-app group `group.app.watchman` to the three identifiers, and archive from Xcode or a signed CI job.
-On the phone: pair, start the screen report from the app's broadcast button (choose Watchman), and
-turn the Watchman extension on under Settings, Safari, Extensions. Screen Time locks are set by the
+app group `group.app.watchman` to the two identifiers, and archive from Xcode or a signed CI job.
+On the phone: pair, then turn the Watchman extension on under Settings, Apps, Safari, Extensions,
+allowed on every website. Screen Time locks are set by the
 partner with their own passcode.
 
 ## Locks

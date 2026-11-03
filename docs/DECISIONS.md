@@ -8,6 +8,19 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-049 - iOS: Safari blurs and reports; no screen recording
+**2026-11-03.** The broadcast extension of ADR-020 needs the person to start a screen recording,
+shows the system's red recording indicator the whole time (no app can hide it) and stops after a
+restart. The owner rejected the same kind of indicator on Android (ADR-026) and rejects it here.
+So the iPhone client is the app (pairing, partner codes, heartbeats) and the Safari web
+extension, which holds images back, blurs explicit ones and reports them, and checks addresses
+and searches as in every browser. Everything outside Safari is the household's to lock: other
+browsers and chosen apps are blocked with Screen Time (passcode held by a partner) or an existing
+blocking app, so Safari is the only way onto the web. The app reports protection as unknown, not
+off, because iOS does not tell it whether the extension is on. Removed: the broadcast target, its
+ONNX Runtime package and the app's model download. Supersedes the broadcast part of ADR-020.
+Not built: a content filter or VPN (ADR-020 still applies).
+
 ### ADR-048 - Peeks by tap, a cooldown in seconds, and an optional peek at your own items
 **2026-11-03.** While tuning, the owner could not tell true from false positives: the owner is
 the protected person and the admin, and only partners could peek. A tap on the picture or the

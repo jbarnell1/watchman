@@ -9,7 +9,7 @@ This page is the engineering view; `docs/DECISIONS.md` has the reasons.
  ┌──────────────────────────────┐                          ┌────────────────────────────────────┐
  │ Android app (Flutter+Kotlin) │──┐                       │ tailscale sidecar  (node "watchman")│
  │ Windows service + helper     │──┼─ HTTPS over tailnet ──│   serve :443 -> server:8030          │
- │ iOS app + broadcast ext      │──┤   /api/v1 (bearer)    │ server (FastAPI, SQLite, ONNX)       │
+ │ iOS app + Safari extension   │──┤   /api/v1 (bearer)    │ server (FastAPI, SQLite, ONNX)       │
  │ Browser extension (all)      │──┘                       │   intake, second opinion, blur store │
  └──────────────────────────────┘                          │   heartbeat watch, digest, alerts    │
                                                            │   portal (Tailscale identity)        │

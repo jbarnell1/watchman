@@ -25,7 +25,7 @@ server/              Python 3.12, FastAPI, SQLite, ONNX Runtime. Docker Compose 
 clients/extension/   WebExtension (MV3, TypeScript): Chrome, Edge, Firefox desktop + Android, Safari (via clients/ios).
 clients/windows/     C# .NET 10: SYSTEM service, per-user helper (capture + overlay), installer.
 clients/android/     Flutter UI + Kotlin services (accessibility, capture, overlay, ONNX Runtime).
-clients/ios/         Swift: app, ReplayKit broadcast extension, Safari web extension wrapper. XcodeGen project; built in CI on macOS.
+clients/ios/         Swift: app and Safari web extension wrapper (ADR-049). XcodeGen project; built in CI on macOS.
 models/              Model manifest, fetch/export scripts, evaluation harness. Weights are never committed.
 ```
 

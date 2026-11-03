@@ -14,7 +14,6 @@
 | esbuild, vitest, pngjs, Playwright | MIT / Apache-2.0 | extension build and tests | dev only |
 | ONNX Runtime Android | MIT | Android app | |
 | OkHttp, Gson, AndroidX security-crypto, Kotlin coroutines | Apache-2.0 | Android app | |
-| ONNX Runtime iOS (onnxruntime-swift-package-manager) | MIT | iOS broadcast extension | |
 | XcodeGen | MIT | iOS project generation, CI only | |
 
 Add a row whenever code or a model is borrowed or adapted.
