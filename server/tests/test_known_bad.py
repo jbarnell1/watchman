@@ -44,6 +44,7 @@ def test_decisive_bits_tell_flat_crops_from_detailed_ones():
 
 
 def test_only_strong_detailed_confirmations_join_the_list(ctx, client, device, clock, opinion, mailer):
+    ctx.settings.set("covered_reports", "all", "owner")  # every covered picture goes to review
     _, headers = device
     # Explicit by the second opinion but under the known-bad line: alerted, not listed.
     ev, _ = _report(client, headers, clock, "00000000ffffffff")

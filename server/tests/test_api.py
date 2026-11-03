@@ -178,6 +178,7 @@ def test_events_are_idempotent_and_ask_for_images(client, device, clock):
 
 
 def test_image_upload_stores_blurs_and_never_the_original(ctx, client, device, clock, opinion, mailer):
+    ctx.settings.set("covered_reports", "all", "owner")  # every covered picture goes to review
     _, headers = device
     ev_id = str(uuid.uuid4())
     client.post("/api/v1/events", headers=headers, json={"events": [{
@@ -324,3 +325,33 @@ def test_miss_reported_is_accepted_as_info_without_an_upload(ctx, client, device
         "action": "none", "detail": {"regions": [{"w": 1344, "h": 2992, "classifier": 0.41, "detector": 0.2}]}}]})
     assert r.json()["accepted"] == [ev_id] and r.json()["upload"] == []
     assert ctx.events.get(ev_id)["severity"] == "info"
+
+
+def test_covered_pictures_reach_partners_only_at_a_high_second_opinion(ctx, client, device, clock, opinion, mailer):
+    """ADR-046: by default a covered picture stays on the record unless the server is nearly sure."""
+    _, headers = device
+
+    def report(kind: str, h: str, second: float) -> str:
+        ev_id = str(uuid.uuid4())
+        client.post("/api/v1/events", headers=headers, json={"events": [{
+            "id": ev_id, "type": kind, "occurred_at": iso(clock.now()), "app": "com.instagram.android",
+            "action": "covered" if kind == "image_covered" else "none", "scores": {"classifier": 0.9},
+            "hash": h, "has_image": True}]})
+        assert ctx.events.get(ev_id)["severity"] == "info"
+        opinion.fixed = second
+        client.put(f"/api/v1/events/{ev_id}/image", headers=headers, content=jpeg_bytes())
+        return ctx.events.get(ev_id)["severity"]
+
+    assert report("image_covered", "1111000011110000", 0.2) == "info"
+    assert report("image_covered", "2222000022220000", 0.8) == "info"   # explicit enough, but it was covered
+    assert mailer.sent == []
+    assert report("image_covered", "3333000033330000", 0.95) == "explicit"
+    assert len(mailer.sent) == 1
+    # Not covered on the device: reported at the second-opinion line as before.
+    assert report("image_flagged", "4444000044440000", 0.8) == "explicit"
+
+
+def test_reporting_every_covered_picture_again_is_free_and_stopping_it_is_loosening():
+    from app.services.locks import loosens
+    assert loosens("covered_reports", "all", "high_score")
+    assert not loosens("covered_reports", "high_score", "all")

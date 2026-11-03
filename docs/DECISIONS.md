@@ -8,6 +8,18 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-046 - Covered pictures reach partners only when the server is nearly sure
+**2026-11-03.** The phone covers on the side of caution (ADR-033), so most covered pictures are
+buttons, skin tones and false alarms, and putting every one in partner review buries the few that
+matter. A covered picture was never seen sharp; what is left to talk about is one that was
+unmistakable, which is what a deliberate search produces. New setting `covered_reports`:
+`high_score` (default) keeps covered pictures on the record as info and makes them explicit,
+alerted and in the digest, only at a second opinion of `thresholds.covered_report` (0.90) or
+above; `all` restores review for every covered picture. A picture that was not covered is
+reported as before. Both settings are in the protection lock group: switching to `high_score`
+or raising the line loosens. The what-if page replays with the household's choice. Not done:
+counting many covers in a short time as a search in its own right.
+
 ### ADR-045 - Without the finger, blurs lift while a list scrolls
 **2026-11-03.** Blurs moved by scroll events never lined up with the picture (ADR-042), and
 moving them cost battery for nothing. Now a scroll event lifts the blurs inside the list that

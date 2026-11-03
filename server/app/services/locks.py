@@ -21,7 +21,7 @@ from app.settings import PERSON_KEYS, Settings, effective
 LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
     "protection": ("Thresholds, coverage and posture",
                    ("thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
-                    "follow_scroll")),
+                    "follow_scroll", "covered_reports")),
     "apps": ("Blocked, risky and not-watched apps, watch levels, protected browser",
              ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser", "watch_default", "realtime_apps",
               "checked_apps")),
@@ -44,6 +44,7 @@ FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scr
 # Lists where adding is stronger and removing anything is weaker.
 LISTS = {"blocked_apps", "risky_apps", "realtime_apps"}
 WATCH_RANK = {"checked": 0, "realtime": 1}
+COVERED_RANK = {"high_score": 0, "all": 1}
 
 
 def group_of(key: str) -> str | None:
@@ -84,6 +85,8 @@ def loosens(key: str, old: Any, new: Any, current: Settings | None = None) -> bo
         return bool(set(old or []) - set(new or []))
     if key == "watch_default":
         return WATCH_RANK.get(new, 0) < WATCH_RANK.get(old, 0)
+    if key == "covered_reports":
+        return COVERED_RANK.get(new, 0) < COVERED_RANK.get(old, 0)
     if key == "checked_apps":
         # Every app added is watched less, unless it was not watched at all before.
         was_off = set(current.exempt_apps) if current is not None else set()
@@ -125,6 +128,7 @@ def needs_code(current: Settings, changes: dict[str, Any]) -> list[str]:
 LABELS = {
     "thresholds": "thresholds", "strict_mode": "strict mode", "coverage": "coverage",
     "cover_on_device": "blur on the device", "follow_scroll": "blurs following a scroll",
+    "covered_reports": "which covered pictures partners see",
     "ask_server": "asking the server",
     "person_overrides": "a person's own values", "blocked_apps": "blocked apps", "risky_apps": "risky apps",
     "protected_browser": "the protected browser", "exempt_apps": "apps not watched",

@@ -1,7 +1,9 @@
 """Event intake and the image pipeline.
 
 Severity at intake:
-  image_covered, screen_blocked   review (until the second opinion says explicit)
+  image_covered, screen_blocked   review until the second opinion says explicit; with
+                                  covered_reports high_score, info unless the second opinion
+                                  reaches thresholds.covered_report (ADR-046)
   image_flagged                   info, promoted by the second opinion
   url_blocked, search_flagged, app_blocked, pause_*, daily_stats   info
   miss_reported (the person says something should have been covered; numbers only)   info
@@ -45,10 +47,13 @@ REPEAT_WINDOW = timedelta(minutes=10)
 ALERT_WINDOW = timedelta(minutes=30)
 
 
-def _initial_severity(event: dict) -> str:
+COVERED_TYPES = {"image_covered", "screen_blocked"}
+
+
+def _initial_severity(event: dict, covered_reports: str) -> str:
     t = event["type"]
-    if t in ("image_covered", "screen_blocked"):
-        return SEVERITY_REVIEW
+    if t in COVERED_TYPES:
+        return SEVERITY_REVIEW if covered_reports == "all" else SEVERITY_INFO
     if t == "tamper":
         return SEVERITY_PROTECTION
     return SEVERITY_INFO
@@ -59,6 +64,7 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
         raise ApiError(f"at most {MAX_BATCH} events per call")
     accepted, duplicates, upload, rejected = [], [], [], []
     recent = ctx.events.recent_image_hashes(device["id"], ctx.clock.now() - REPEAT_WINDOW)
+    covered_reports = ctx.settings.load().covered_reports
     with ctx.conn:
         for ev in events:
             # A malformed event is named in `rejected` and skipped; the rest of the batch still
@@ -76,7 +82,7 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
             if ctx.events.exists(ev["id"]):
                 duplicates.append(ev["id"])
                 continue
-            severity = _initial_severity(ev)
+            severity = _initial_severity(ev, covered_reports)
             image_status = "none"
             if ev["type"] in IMAGE_TYPES and ev.get("has_image"):
                 if ev.get("hash") and ctx.events.hash_has_image(device["person_id"], ev["hash"]):
@@ -147,10 +153,10 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
     del image, data  # the original lives only in this function
 
     settings = ctx.settings.load()
-    confirmed = score >= settings.thresholds.second_opinion
+    confirmed = score >= report_line(settings, event["type"])
     if confirmed:
         severity = SEVERITY_EXPLICIT
-    elif event["type"] == "image_flagged":
+    elif event["type"] == "image_flagged" or settings.covered_reports != "all":
         severity = SEVERITY_INFO
     else:
         severity = SEVERITY_REVIEW
@@ -163,6 +169,16 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
             ctx.settings.bump_policy()
     if confirmed and not event["alerted_at"] and not _alerted_lately(ctx, event):
         alerts.explicit_alert(ctx, ctx.events.get(event_id), heavy_webp)
+
+
+def report_line(settings, event_type: str) -> float:
+    """The second opinion at which an image event becomes explicit and reaches partners. A picture
+    the device covered needs thresholds.covered_report as well, unless every covered picture is
+    reported (ADR-046)."""
+    t = settings.thresholds
+    if event_type in COVERED_TYPES and settings.covered_reports != "all":
+        return max(t.second_opinion, t.covered_report)
+    return t.second_opinion
 
 
 def _labels(event: sqlite3.Row) -> list[str]:
