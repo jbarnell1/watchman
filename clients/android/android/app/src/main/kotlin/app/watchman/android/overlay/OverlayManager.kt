@@ -16,6 +16,7 @@ import app.watchman.android.core.Pixels
 import app.watchman.android.core.ScrollPredictor
 import android.graphics.RectF
 import android.view.Choreographer
+import app.watchman.android.core.Metrics
 
 /**
  * One full-screen, touch-transparent overlay window. Each covered region gets a pixelated copy of
@@ -122,18 +123,37 @@ class OverlayManager(private val context: Context) {
     }
 
     /**
-     * A real scroll event (main thread): move the blurs to where the content is, then keep them
-     * moving every frame until the next event (ADR-042). Returns how many patches moved now.
+     * A real scroll event inside [area] (main thread). With [follow] (blurs follow a scroll), the
+     * blurs move with the event and are predicted between events (ADR-042). Otherwise the blurs in
+     * [area] are lifted: a blur moved by scroll events never lined up, and the region pass after
+     * the list settles covers the pictures again where they are (ADR-045). Returns true when
+     * blurs followed.
      */
-    fun scrolled(dx: Int, dy: Int, area: Rect?): Int {
-        val t = System.nanoTime() / 1_000_000
+    fun scrolled(dx: Int, dy: Int, known: Boolean, area: Rect?, follow: Boolean): Boolean {
         scrollArea = area
-        val moved = shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
-        if (!animating && (predX.active || predY.active)) {
-            animating = true
-            Choreographer.getInstance().postFrameCallback(frame)
+        if (follow && known) {
+            val t = System.nanoTime() / 1_000_000
+            shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
+            if (!animating && (predX.active || predY.active)) {
+                animating = true
+                Choreographer.getInstance().postFrameCallback(frame)
+            }
+            return true
         }
-        return moved
+        val lifted = lift(area)
+        if (lifted > 0) Metrics.shared.count("patches_lifted_on_scroll", lifted.toLong())
+        return false
+    }
+
+    /** Lift every blur inside [area] (all when null), except app switcher blanks. Returns how many. */
+    fun lift(area: Rect?): Int {
+        val n = synchronized(patches) {
+            val before = patches.size
+            patches.removeAll { !it.solid && (area == null || Rect.intersects(area, it.region)) }
+            before - patches.size
+        }
+        if (n > 0) main.post { if (patches.isEmpty()) hide() else view?.invalidate() }
+        return n
     }
 
     fun shift(dx: Int, dy: Int, area: Rect?): Int {

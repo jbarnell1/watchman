@@ -119,8 +119,11 @@ can run different postures.
 `exempt_apps` are apps not watched at all (ADR-030): while one is in front nothing is judged,
 covered or reported. Android applies it today.
 
-`follow_scroll` (ADR-040, default false): true moves blurs with a scroll the app reports before the
-next check; false or absent leaves them in place until the next check. `strict_mode` (ADR-040): in `risky_apps`, a picture
+`follow_scroll` (ADR-040, default false): true moves blurs with each scroll event and predicts
+them between events (ADR-042); false or absent lifts the blurs in the list that moved, and the
+next check after the list settles covers the pictures again where they are (ADR-045).
+
+`strict_mode` (ADR-040): in `risky_apps`, a picture
 that appears is covered at once from its position alone and stays covered until it is judged.
 Android applies both.
 

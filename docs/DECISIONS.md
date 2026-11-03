@@ -8,6 +8,40 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-045 - Without the finger, blurs lift while a list scrolls
+**2026-11-03.** Blurs moved by scroll events never lined up with the picture (ADR-042), and
+moving them cost battery for nothing. Now a scroll event lifts the blurs inside the list that
+moved, unless the household turned `follow_scroll` on (ADR-042). The region pass and strict-mode covers wait
+until the list has had no scroll event for 150 ms, then cover the pictures where they are; a
+picture judged before is a cache hit, so the cover comes back without a model run, and the
+screenshot is taken with no blur in the way. The cost: a covered picture shows while its list is
+moving. It is still judged and reported when the list stops, and the owner chose this trade.
+Metric `patches_lifted_on_scroll`.
+
+### ADR-044 - Blurs follow the finger when Shizuku runs (tried and removed)
+**2026-11-02.** Prediction between scroll events (ADR-042) still trails a list, because the only
+signal an app gets is Android's scroll event every 100 ms. The finger itself is the signal that
+leads: while a finger drags a list, the content moves with it one to one past the touch slop.
+An app cannot read other apps' touches, but the shell user can read the touchscreen's input
+device. Shizuku (Apache-2.0) runs a helper with shell rights, started once through Wireless
+debugging after each restart, and lets an allowed app start its own code there. Watchman starts
+a small reader (`TouchService`) that only reads the touchscreen and writes one finger's down,
+move and up into a pipe; it never injects, records or sends touches. On the phone a finger that
+comes down inside the list that last scrolled moves the blurs on every touch sample; scroll
+events then only correct drift (a collapsing header, the end of the list), ignoring drift smaller
+than 50 ms of travel; a drag that no scroll event confirms within 250 ms is undone; at lift the
+finger's speed hands over to the predictor as a fling. Landscape and the first scroll in an app
+stay on scroll events. It only moves blurs while `follow_scroll` is on and changes nothing that is
+judged or covered, so losing Shizuku loses smoothness, not protection, and is not a partner
+event. Risk: Wireless debugging left on gives anyone holding the phone adb; reporting that, and
+how it fits with a future Device Owner mode that could turn debugging off, is follow-up work.
+Metrics: `finger_touches`, `finger_gestures`, `finger_unconfirmed`, `finger_correction_px`.
+A custom Android build was considered and set aside: an unlocked bootloader breaks Play
+Integrity, and the household would carry Android's monthly security updates.
+**Removed the same day.** On the Pixel the owner found it no smoother than prediction (ADR-042),
+and it needed Wireless debugging left on. The reader, the Shizuku dependency and the setup card
+are gone; blurs lift while a list scrolls instead (ADR-045).
+
 ### ADR-043 - Misses become data; the screen is scanned when accessibility reconnects
 **2026-11-02.** Tuning needs misses, and a miss leaves no event. The phone's notification now has
 a Missed something action: it scores the whole screen and every reported picture at once and sends
