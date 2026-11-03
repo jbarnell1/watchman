@@ -31,6 +31,7 @@ class WatchmanService : Service() {
         const val CHANNEL = "watchman"
         const val NOTIFICATION_ID = 1
         private const val TAG = "WatchmanService"
+        const val ACTION_MISSED = "app.watchman.android.MISSED"
         @Volatile var running = false
         @Volatile var lastHeartbeatAt: Long = 0
         @Volatile var lastError: String? = null
@@ -188,11 +189,26 @@ class WatchmanService : Service() {
             .setContentText(getString(app.watchman.android.R.string.notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentIntent(open)
+            .addAction(Notification.Action.Builder(null, getString(app.watchman.android.R.string.missed_action),
+                PendingIntent.getService(this, 1, Intent(this, WatchmanService::class.java).setAction(ACTION_MISSED),
+                    PendingIntent.FLAG_IMMUTABLE)).build())
             .setOngoing(true)
             .build()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_MISSED) {
+            val watcher = app.watchman.android.capture.ScreenWatcher.instance
+            val main = android.os.Handler(mainLooper)
+            if (watcher == null) toast(getString(app.watchman.android.R.string.missed_not_running))
+            else watcher.reportMiss { n ->
+                main.post { toast(getString(if (n >= 0) app.watchman.android.R.string.missed_thanks else app.watchman.android.R.string.missed_not_running)) }
+            }
+        }
+        return START_STICKY
+    }
+
+    private fun toast(text: String) = android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
 
     override fun onBind(intent: Intent?): IBinder? = null
 

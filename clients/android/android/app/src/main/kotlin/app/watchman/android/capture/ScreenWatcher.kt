@@ -348,6 +348,35 @@ class ScreenWatcher(private val service: AccessibilityService) {
         }
     }
 
+    /**
+     * The person says something on screen should have been covered (ADR-043). Score the whole
+     * screen and every reported picture now and send the numbers as a `miss_reported` event: no
+     * image. Returns at once; [done] runs on this watcher's thread with how many regions were scored.
+     */
+    fun reportMiss(done: (Int) -> Unit) {
+        handler.post {
+            val policy = state.policy
+            val pipe = pipeline
+            if (policy == null || !ensureModels() || pipe == null) { done(-1); return@post }
+            val front = app.watchman.android.access.WatchAccessibilityService.foregroundPackage
+            takeDisplay { frame ->
+                if (frame == null) { done(-1); return@takeDisplay }
+                val whole = Rect(0, 0, frame.width, frame.height)
+                val pictures = lastRegions?.takeIf { it.first == front }?.third.orEmpty()
+                    .map { rectOf(it) }.filter { Rect(it).intersect(whole) }
+                val scored = pipe.scoreAll(frame, listOf(whole) + pictures, PowerBudget.detectorAllowed(power()), policy.explicitLabels)
+                metrics.count("misses_reported")
+                state.record(WatchmanEvent(
+                    type = "miss_reported", occurredAt = Iso.now(), app = front,
+                    url = app.watchman.android.access.WatchAccessibilityService.lastUrl,
+                    detail = mapOf("regions" to scored, "level" to policy.levelOf(front).name.lowercase(),
+                        "thresholds" to policy.thresholds),
+                ), null)
+                done(scored.size)
+            }
+        }
+    }
+
     /** A new app came to the front: look at it now instead of at the next tick, whatever its level. */
     fun foregroundChanged() {
         handler.post { scheduleTick(0) }

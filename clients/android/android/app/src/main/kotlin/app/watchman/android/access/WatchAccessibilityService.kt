@@ -41,6 +41,16 @@ class WatchAccessibilityService : AccessibilityService() {
         instance = this
         watcher = ScreenWatcher(this)
         AppState.get(this).onChanged?.invoke()
+        // After a (re)connect nothing reports the screen until the app changes something, and a
+        // playing video changes nothing the tree shows: look at what is on screen now (ADR-043).
+        android.os.Handler(mainLooper).postDelayed({
+            val root = rootInActiveWindow ?: return@postDelayed
+            val pkg = root.packageName?.toString() ?: return@postDelayed
+            if (pkg == OWN_PACKAGE) return@postDelayed
+            if (foregroundPackage.isEmpty()) foregroundPackage = pkg
+            val regions = imageRegions(root)
+            if (regions.isNotEmpty()) watcher?.judgeRegions(pkg, lastUrl, regions)
+        }, 500)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
