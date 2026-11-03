@@ -153,11 +153,19 @@ async def review(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
     elif items:
         selected = items[0]
     partner = v.partner_rows.get(person["id"]) if person else None
-    next_peek = peeks.next_peek_at(ctx, partner["id"]) if partner else None
+    # The protected person peeks at their own items only when the household allows it (ADR-048).
+    self_peek = (partner is None and person is not None and v.is_protected(person["id"])
+                 and ctx.settings.load().self_peek)
+    if partner:
+        next_peek = peeks.next_peek_at(ctx, partner["id"])
+    elif self_peek:
+        next_peek = peeks.next_peek_at(ctx, None, person["id"])
+    else:
+        next_peek = None
     recent = [e for e in (ctx.events.timeline(person["id"], limit=200) if person else [])
               if e["severity"] in ("review", "explicit") and e["review_state"] != "open"][:20]
     return _page(request, ctx, v, "review.html", person, items=items, selected=selected,
-                 partner=partner, next_peek=next_peek, recent=recent)
+                 partner=partner, can_peek=bool(partner) or self_peek, next_peek=next_peek, recent=recent)
 
 
 @router.post("/review/{event_id}")
@@ -184,9 +192,11 @@ async def peek(event_id: str, request: Request, ctx: Context = Depends(get_ctx))
     if event is None:
         raise NotFound("no such item")
     partner = v.partner_rows.get(event["person_id"])
-    if partner is None:
-        raise Forbidden("only a linked partner can peek")
-    return JSONResponse(peeks.start_peek(ctx, partner["id"], event_id))
+    if partner is not None:
+        return JSONResponse(peeks.start_peek(ctx, partner["id"], event_id))
+    if v.is_protected(event["person_id"]) and ctx.settings.load().self_peek:
+        return JSONResponse(peeks.start_peek(ctx, None, event_id, person_id=event["person_id"]))
+    raise Forbidden("only a linked partner can peek")
 
 
 @router.get("/images/{event_id}/heavy")
@@ -206,7 +216,8 @@ async def image_medium(event_id: str, request: Request, ctx: Context = Depends(g
     v = require_viewer(ctx, request)
     event = ctx.events.get(event_id)
     token = request.query_params.get("t", "")
-    if event is None or not v.is_partner_of(event["person_id"]):
+    # The token is the gate; it comes only from a peek this viewer was allowed to start.
+    if event is None or not (v.is_partner_of(event["person_id"]) or v.is_protected(event["person_id"])):
         raise NotFound("no such image")
     with ctx.conn:
         ok = ctx.codes.consume_peek_token(event_id, token)
@@ -373,7 +384,8 @@ AREAS: dict[str, list[str]] = {
                    "blocked_apps", "exempt_apps", "protected_browser",
                    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
                    "sample_interval_s", "whole_screen_interval_s", "max_pause_minutes",
-                   "heartbeat_gap_minutes", "peek_seconds", "peek_cooldown_hours", "second_opinion_device"],
+                   "heartbeat_gap_minutes", "peek_seconds", "peek_cooldown_seconds",
+                   "self_peek", "second_opinion_device"],
     "email": ["smtp"],
     "people": [],
 }
@@ -403,7 +415,8 @@ def _parse_setting(key: str, form) -> object:
         return value
     if key in ("risky_apps", "blocked_apps", "exempt_apps", "realtime_apps", "checked_apps"):
         return [line.strip() for line in str(form.get(key, "")).splitlines() if line.strip()]
-    if key in ("strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll", "block_whole_screen"):
+    if key in ("strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll", "block_whole_screen",
+               "self_peek"):
         return form.get(key) == "on"
     if key == "unlocked_groups":
         # Checked means locked; the setting stores the groups left unlocked.

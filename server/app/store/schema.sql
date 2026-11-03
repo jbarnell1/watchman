@@ -166,6 +166,17 @@ CREATE TABLE IF NOT EXISTS peeks (
   token_used_at TEXT
 );
 
+-- Peeks by the protected person at their own items, when self_peek is on (ADR-048).
+CREATE TABLE IF NOT EXISTS self_peeks (
+  id          TEXT PRIMARY KEY,
+  event_id    TEXT NOT NULL REFERENCES events(id),
+  person_id   TEXT NOT NULL REFERENCES people(id),
+  at          TEXT NOT NULL,
+  token_hash  TEXT NOT NULL,
+  token_expires_at TEXT NOT NULL,
+  token_used_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS digests (
   id           TEXT PRIMARY KEY,
   person_id    TEXT NOT NULL REFERENCES people(id),

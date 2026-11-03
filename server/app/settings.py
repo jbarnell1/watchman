@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Thresholds(BaseModel):
@@ -54,7 +54,13 @@ class Settings(BaseModel):
     image_retention_days: int = 7
     event_retention_days: int = 365
     peek_seconds: int = Field(default=3, ge=1, le=3)   # the light-blur peek, three seconds at most (ADR-031)
-    peek_cooldown_hours: int = 24
+    # Between two peeks by the same viewer. A day by default (ADR-031); seconds so a household that
+    # is testing can set it short (ADR-048).
+    peek_cooldown_seconds: int = Field(default=86400, ge=5)
+    # The protected person may peek at their own covered pictures, to tell true from false
+    # positives while a household tunes. Off by default, own peeks are not reported, and turning it
+    # on is loosening (ADR-048).
+    self_peek: bool = False
     thresholds: Thresholds = Field(default_factory=Thresholds)
     strict_mode: bool = True
     # Which detector labels count as explicit: explicit (bare only), revealing (adds underwear and
@@ -119,11 +125,22 @@ class Settings(BaseModel):
     setup_complete: bool = False
     policy_version: int = 1
 
+    @model_validator(mode="before")
+    @classmethod
+    def _cooldown_in_seconds(cls, data: Any) -> Any:
+        # Stored settings from before ADR-048 have the cooldown in hours.
+        if isinstance(data, dict) and "peek_cooldown_hours" in data:
+            data = dict(data)
+            hours = data.pop("peek_cooldown_hours")
+            data.setdefault("peek_cooldown_seconds", int(hours) * 3600)
+        return data
+
 
 LOCKED_KEYS = frozenset({
     "block_whole_screen", "follow_scroll", "covered_reports",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
-    "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
+    "image_retention_days", "peek_seconds", "peek_cooldown_seconds",
+    "self_peek", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s",
     "whole_screen_interval_s", "max_pause_minutes", "heartbeat_gap_minutes",

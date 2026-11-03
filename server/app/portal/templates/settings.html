@@ -123,8 +123,10 @@
     <div class="pair three">
       <div><label for="max_pause_minutes">Max pause, min</label><input id="max_pause_minutes" name="max_pause_minutes" type="number" min="1" value="{{ settings.max_pause_minutes }}"></div>
       <div><label for="peek_seconds">Peek length, s</label><input id="peek_seconds" name="peek_seconds" type="number" min="1" max="3" value="{{ settings.peek_seconds }}"></div>
-      <div><label for="peek_cooldown_hours">Peek cooldown, h</label><input id="peek_cooldown_hours" name="peek_cooldown_hours" type="number" min="1" value="{{ settings.peek_cooldown_hours }}"></div>
+      <div><label for="peek_cooldown_seconds">Peek cooldown, s</label><input id="peek_cooldown_seconds" name="peek_cooldown_seconds" type="number" min="5" value="{{ settings.peek_cooldown_seconds }}"></div>
     </div>
+    <p class="t2">86400 is a day. A short cooldown such as 15 suits a household that is tuning.</p>
+    <label class="check"><input type="checkbox" name="self_peek" {% if settings.self_peek %}checked{% endif %}> The protected person may peek at their own items, to tell true from false alarms while tuning. {{ lock('self_peek') }}</label>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Second opinion</h2><p>Where the server runs its own model on each flagged crop.</p></div><div class="spanel">
     <label for="second_opinion_device">Device</label><select id="second_opinion_device" name="second_opinion_device"><option value="cpu" {% if settings.second_opinion_device == 'cpu' %}selected{% endif %}>CPU</option><option value="cuda" {% if settings.second_opinion_device == 'cuda' %}selected{% endif %}>GPU (CUDA)</option></select>
