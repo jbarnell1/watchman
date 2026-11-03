@@ -2,8 +2,9 @@
 
 Severity at intake:
   image_covered, screen_blocked   review until the second opinion says explicit; with
-                                  covered_reports high_score, info unless the second opinion
-                                  reaches thresholds.covered_report (ADR-046)
+                                  covered_reports exposed, info unless the server's detector
+                                  finds bare nudity or the second opinion reaches
+                                  thresholds.covered_report (ADR-046)
   image_flagged                   info, promoted by the second opinion
   url_blocked, search_flagged, app_blocked, pause_*, daily_stats   info
   miss_reported (the person says something should have been covered; numbers only)   info
@@ -147,13 +148,15 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
         image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
 
     score = ctx.second_opinion.score(image)
+    labels = ctx.detector.labels(image)
     decisive = decisive_bits(image)
     heavy_webp = blur.to_webp(blur.heavy(image))
     medium_webp = blur.to_webp(blur.medium(image))
     del image, data  # the original lives only in this function
 
     settings = ctx.settings.load()
-    confirmed = score >= report_line(settings, event["type"])
+    exposed = max((s for label, s in labels.items() if label in ctx.detector.explicit), default=0.0)
+    confirmed = reaches_partners(settings, event["type"], score, exposed)
     if confirmed:
         severity = SEVERITY_EXPLICIT
     elif event["type"] == "image_flagged" or settings.covered_reports != "all":
@@ -165,20 +168,21 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
         ctx.blobs.put(event_id, "medium", medium_webp)
         ctx.events.add_image(event_id, blur.OUTPUT_SIZE, blur.OUTPUT_SIZE)
         ctx.events.set_second_opinion(event_id, score, severity, "stored")
+        ctx.events.set_server_labels(event_id, labels)
         if event["hash"] and _update_known_bad(ctx, event, score, decisive, settings):
             ctx.settings.bump_policy()
     if confirmed and not event["alerted_at"] and not _alerted_lately(ctx, event):
         alerts.explicit_alert(ctx, ctx.events.get(event_id), heavy_webp)
 
 
-def report_line(settings, event_type: str) -> float:
-    """The second opinion at which an image event becomes explicit and reaches partners. A picture
-    the device covered needs thresholds.covered_report as well, unless every covered picture is
-    reported (ADR-046)."""
+def reaches_partners(settings, event_type: str, second: float, exposed: float) -> bool:
+    """Whether an image event becomes explicit and reaches partners. A picture the device covered
+    needs bare nudity from the server's detector ([exposed], its best explicit-label score) or a
+    second opinion at thresholds.covered_report, unless every covered picture is reported (ADR-046)."""
     t = settings.thresholds
     if event_type in COVERED_TYPES and settings.covered_reports != "all":
-        return max(t.second_opinion, t.covered_report)
-    return t.second_opinion
+        return exposed >= t.server_exposed or second >= max(t.second_opinion, t.covered_report)
+    return second >= t.second_opinion
 
 
 def _labels(event: sqlite3.Row) -> list[str]:

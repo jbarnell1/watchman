@@ -155,9 +155,10 @@ Response 200: `{"accepted": ["uuid"], "duplicates": ["uuid"], "upload": ["uuid"]
 may skip images for hashes it already holds, and for look-alikes of an image the same device
 reported in the last 10 minutes, which it records with image status `repeat` and severity info,
 ADR-035). Covered pictures (`image_covered`, `screen_blocked`) start as review when the household
-setting `covered_reports` is `all`; with `high_score` (the default, ADR-046) they start as info
-and become explicit, reaching partners, only when the second opinion reaches
-`thresholds.covered_report` (0.90). `image_flagged`, a picture that was not covered, becomes
+setting `covered_reports` is `all`; with `exposed` (the default, ADR-046) they start as info and
+become explicit, reaching partners, only when the server's own detector finds bare nudity at
+`thresholds.server_exposed` (0.50) or the second opinion reaches `thresholds.covered_report`
+(0.95). `image_flagged`, a picture that was not covered, becomes
 explicit at `thresholds.second_opinion` either way. A malformed event (no `id`, `type` or `occurred_at`,
 or an unknown `type`) is listed in `rejected` with the reason and skipped; the rest of the batch is
 taken. Clients drop rejected events from their queue rather than send them again.
