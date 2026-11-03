@@ -45,10 +45,10 @@
     <div class="detail-body">
       <div class="peek" id="peek">
         {% if e.image_status == 'stored' %}
-        <img id="peek-img" src="/images/{{ e.id }}/heavy" width="256" height="256" alt="blurred image">
-        {% if partner %}
-        <button id="peek-btn" class="btn ghost" type="button" data-id="{{ e.id }}" {% if next_peek %}disabled{% endif %}>Hold to peek ({{ settings.peek_seconds }} s)</button>
-        <p class="t2" id="peek-note">{% if next_peek %}Next peek {{ when(next_peek) }}.{% else %}One peek per {{ settings.peek_cooldown_hours }} hours. Every peek is shown to {{ person.name }}.{% endif %}</p>
+        <img id="peek-img" src="/images/{{ e.id }}/heavy" width="256" height="256" alt="blurred image"{% if can_peek %} style="cursor:pointer"{% endif %}>
+        {% if can_peek %}{% set cd = settings.peek_cooldown_seconds %}
+        <button id="peek-btn" class="btn ghost" type="button" data-id="{{ e.id }}" {% if next_peek %}disabled{% endif %}>Peek ({{ settings.peek_seconds }} s)</button>
+        <p class="t2" id="peek-note">{% if next_peek %}Next peek {{ when(next_peek) }}.{% else %}Tap the picture or the button. One peek per {{ (cd // 3600) ~ ' hours' if cd >= 7200 else (cd ~ ' seconds') }}. {% if partner %}Every peek is shown to {{ person.name }}.{% endif %}{% endif %}</p>
         {% endif %}
         {% elif e.image_status == 'expired' %}<p class="empty">The image was deleted after {{ settings.image_retention_days }} days.</p>
         {% else %}<p class="empty">No image was kept for this item.</p>{% endif %}
@@ -85,7 +85,7 @@
   if (!btn) return;
   var img = document.getElementById('peek-img'), note = document.getElementById('peek-note');
   var heavy = img.src, timer = null, busy = false;
-  function reblur() { img.src = heavy; btn.textContent = 'Hold to peek ({{ settings.peek_seconds }} s)'; }
+  function reblur() { img.src = heavy; btn.textContent = 'Peek ({{ settings.peek_seconds }} s)'; }
   function start(ev) {
     ev.preventDefault();
     if (busy || btn.disabled) return;
@@ -96,15 +96,15 @@
       btn.textContent = 'Peeking';
       note.textContent = 'Next peek ' + new Date(d.next_peek_at).toLocaleString() + '. This peek is logged.';
       btn.disabled = true;
-      timer = setTimeout(function () { reblur(); busy = false; }, d.seconds * 1000);
+      timer = setTimeout(function () { timer = null; reblur(); busy = false; }, d.seconds * 1000);
+      // The button comes back when the cooldown ends.
+      setTimeout(function () { btn.disabled = false; }, Math.max(0, new Date(d.next_peek_at) - new Date()));
     }).catch(function () { busy = false; });
   }
-  function stop() { if (timer) { clearTimeout(timer); timer = null; reblur(); busy = false; } }
-  btn.addEventListener('pointerdown', start);
-  btn.addEventListener('pointerup', stop);
-  btn.addEventListener('pointerleave', stop);
-  btn.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') start(e); });
-  btn.addEventListener('keyup', stop);
+  // A tap starts a peek and the timer ends it; a second tap ends it early (ADR-048).
+  function toggle(ev) { if (timer) { ev.preventDefault(); clearTimeout(timer); timer = null; reblur(); busy = false; } else start(ev); }
+  btn.addEventListener('click', toggle);
+  img.addEventListener('click', toggle);
 })();
 </script>
 {% endif %}

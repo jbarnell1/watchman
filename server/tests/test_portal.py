@@ -72,7 +72,7 @@ def test_review_peek_and_marking(ctx, client, household, device, clock, opinion)
     _, headers = device
     ev_id = _covered_event(ctx, client, headers, clock, opinion, 0.3)
     r = client.get("/review", headers=as_login(PARTNER))
-    assert r.status_code == 200 and "Needs a second look" in r.text and "Hold to peek" in r.text
+    assert r.status_code == 200 and "Needs a second look" in r.text and "Peek (3 s)" in r.text
     # Heavy blur is visible to everyone who may see the person; medium only through a peek token.
     assert client.get(f"/images/{ev_id}/heavy", headers=as_login(PROTECTED)).status_code == 200
     assert client.get(f"/images/{ev_id}/medium?t=bogus", headers=as_login(PARTNER)).status_code == 404
@@ -172,7 +172,7 @@ PROTECTION_FORM = {
     "blocked_apps": "com.android.chrome\ncom.brave.browser\ncom.opera.browser\ncom.microsoft.emmx\n"
                     "com.duckduckgo.mobile.android\ncom.sec.android.app.sbrowser",
     "sample_interval_s": "180", "whole_screen_interval_s": "5", "max_pause_minutes": "60", "heartbeat_gap_minutes": "30",
-    "peek_seconds": "3", "peek_cooldown_hours": "24", "second_opinion_device": "cpu",
+    "peek_seconds": "3", "peek_cooldown_seconds": "86400", "second_opinion_device": "cpu",
     "watch_default": "realtime", "checked_interval_s": "60", "checked_apps": "",
     "realtime_apps": "\n".join([
         "com.instagram.android", "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
@@ -358,3 +358,26 @@ def test_follow_scroll_is_off_by_default_and_can_be_turned_on(ctx, client, house
     assert "saved=1" in r.headers["location"]
     policy = client.get("/api/v1/policy", headers=headers).json()
     assert policy["follow_scroll"] is True and policy["strict_mode"] is True
+
+
+def test_own_peeks_are_off_by_default_and_never_reported_when_on(ctx, client, household, device, clock, opinion):
+    """ADR-048: a tuning household lets the protected person peek; own peeks only set the cooldown."""
+    _, headers = device
+    ctx.settings.set("covered_reports", "all", "owner")
+    ev_id = _covered_event(ctx, client, headers, clock, opinion, 0.3)
+    assert client.post(f"/peek/{ev_id}", headers=as_login(PROTECTED)).status_code == 403
+    ctx.settings.set("self_peek", True, "owner")
+    ctx.settings.set("peek_cooldown_seconds", 15, "owner")
+    r = client.post(f"/peek/{ev_id}", headers=as_login(PROTECTED))
+    assert r.status_code == 200
+    assert client.get(r.json()["url"], headers=as_login(PROTECTED)).status_code == 200
+    assert client.post(f"/peek/{ev_id}", headers=as_login(PROTECTED)).status_code == 429
+    clock.advance(seconds=16)
+    assert client.post(f"/peek/{ev_id}", headers=as_login(PROTECTED)).status_code == 200
+    person_id = ctx.events.get(ev_id)["person_id"]
+    assert ctx.codes.peeks_for_person(person_id) == []
+
+
+def test_a_cooldown_stored_in_hours_becomes_seconds():
+    from app.settings import Settings
+    assert Settings.model_validate({"peek_cooldown_hours": 24}).peek_cooldown_seconds == 86400

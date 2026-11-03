@@ -27,7 +27,7 @@ LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
               "checked_apps")),
     "timing": ("Timing and silence alerts", ("sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes",
                                               "checked_interval_s")),
-    "pauses": ("Pauses and peeks", ("max_pause_minutes", "peek_seconds", "peek_cooldown_hours")),
+    "pauses": ("Pauses and peeks", ("max_pause_minutes", "peek_seconds", "peek_cooldown_seconds", "self_peek")),
     "retention": ("How long blurred images are kept", ("image_retention_days",)),
     "partners": ("Removing a partner", ()),
 }
@@ -36,7 +36,7 @@ COVERAGE_RANK = {"explicit": 0, "revealing": 1, "strict": 2}
 # Lower is stronger: more images covered, more often looked at, sooner noticed, shorter pauses.
 LOWER_IS_STRONGER = {"sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes", "max_pause_minutes",
                      "checked_interval_s",
-                     "peek_cooldown_hours"}
+                     "peek_cooldown_seconds"}
 # Higher is stronger: partners see more for longer.
 HIGHER_IS_STRONGER = {"image_retention_days", "peek_seconds"}
 # On is stronger.
@@ -85,6 +85,9 @@ def loosens(key: str, old: Any, new: Any, current: Settings | None = None) -> bo
         return bool(set(old or []) - set(new or []))
     if key == "watch_default":
         return WATCH_RANK.get(new, 0) < WATCH_RANK.get(old, 0)
+    if key == "self_peek":
+        # The protected person seeing more of what was covered is weaker.
+        return bool(new) and not bool(old)
     if key == "covered_reports":
         return COVERED_RANK.get(new, 0) < COVERED_RANK.get(old, 0)
     if key == "checked_apps":
@@ -138,6 +141,7 @@ LABELS = {
     "checked_interval_s": "how often checked apps are looked at",
     "sample_interval_s": "the sample interval",
     "whole_screen_interval_s": "the whole-screen interval", "heartbeat_gap_minutes": "the silence alert",
-    "max_pause_minutes": "the longest pause", "peek_seconds": "peek length", "peek_cooldown_hours": "peek cooldown",
+    "max_pause_minutes": "the longest pause", "peek_seconds": "peek length", "peek_cooldown_seconds": "peek cooldown",
+    "self_peek": "peeking at your own items",
     "image_retention_days": "image retention", "unlocked_groups": "the locks", "locks_on": "turning locks off",
 }

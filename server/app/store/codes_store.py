@@ -101,35 +101,41 @@ class CodesStore:
             (person_id, limit),
         ).fetchall()
 
-    # Peeks
+    # Peeks. The protected person's own peeks (ADR-048) live in self_peeks, only for the cooldown:
+    # they are not shown to partners.
 
-    def last_peek(self, partner_id: str) -> sqlite3.Row | None:
+    def last_peek(self, partner_id: str | None = None, person_id: str | None = None) -> sqlite3.Row | None:
+        """A partner's last peek, or with [person_id] the protected person's own last peek (ADR-048)."""
+        table, col, who = _peek_table(partner_id, person_id)
         return self.conn.execute(
-            "SELECT * FROM peeks WHERE partner_id = ? ORDER BY at DESC LIMIT 1", (partner_id,)
+            f"SELECT * FROM {table} WHERE {col} = ? ORDER BY at DESC LIMIT 1", (who,)
         ).fetchone()
 
-    def add_peek(self, event_id: str, partner_id: str, token_seconds: int = 5) -> str:
+    def add_peek(self, event_id: str, partner_id: str | None = None, token_seconds: int = 5,
+                 person_id: str | None = None) -> str:
         now = self.clock.now()
         token = secrets.token_urlsafe(24)
+        table, col, who = _peek_table(partner_id, person_id)
         self.conn.execute(
-            "INSERT INTO peeks(id, event_id, partner_id, at, token_hash, token_expires_at) "
+            f"INSERT INTO {table}(id, event_id, {col}, at, token_hash, token_expires_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), event_id, partner_id, iso(now), hash_code(token),
+            (str(uuid.uuid4()), event_id, who, iso(now), hash_code(token),
              iso(now + timedelta(seconds=token_seconds))),
         )
         return token
 
     def consume_peek_token(self, event_id: str, token: str) -> bool:
         now = iso(self.clock.now())
-        row = self.conn.execute(
-            "SELECT id FROM peeks WHERE event_id = ? AND token_hash = ? AND token_used_at IS NULL "
-            "AND token_expires_at > ?",
-            (event_id, hash_code(token), now),
-        ).fetchone()
-        if row is None:
-            return False
-        self.conn.execute("UPDATE peeks SET token_used_at = ? WHERE id = ?", (now, row["id"]))
-        return True
+        for table in ("peeks", "self_peeks"):
+            row = self.conn.execute(
+                f"SELECT id FROM {table} WHERE event_id = ? AND token_hash = ? AND token_used_at IS NULL "
+                "AND token_expires_at > ?",
+                (event_id, hash_code(token), now),
+            ).fetchone()
+            if row is not None:
+                self.conn.execute(f"UPDATE {table} SET token_used_at = ? WHERE id = ?", (now, row["id"]))
+                return True
+        return False
 
     def peeks_for_person(self, person_id: str, limit: int = 50) -> list[sqlite3.Row]:
         return self.conn.execute(
@@ -159,3 +165,7 @@ class CodesStore:
             "INSERT INTO digests(id, person_id, period_start, period_end, sent_at) VALUES (?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), person_id, iso(start), iso(end), iso(self.clock.now())),
         )
+
+
+def _peek_table(partner_id: str | None, person_id: str | None) -> tuple[str, str, str | None]:
+    return ("self_peeks", "person_id", person_id) if person_id else ("peeks", "partner_id", partner_id)

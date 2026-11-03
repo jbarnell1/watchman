@@ -8,6 +8,18 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-048 - Peeks by tap, a cooldown in seconds, and an optional peek at your own items
+**2026-11-03.** While tuning, the owner could not tell true from false positives: the owner is
+the protected person and the admin, and only partners could peek. A tap on the picture or the
+button now starts the peek (still the medium blur, still `peek_seconds`, three at most); a
+second tap ends it early. The cooldown is `peek_cooldown_seconds` (default a day, as ADR-031;
+stored hours are converted) so a household that is tuning can set 15. New setting `self_peek`,
+off by default: the protected person may peek at their own items under the same rules. Own
+peeks go to a `self_peeks` table used only for the cooldown and are not reported: the owner tests
+with another accountability service in place and asked for no reports of their own peeks.
+Turning it on is loosening, in the pauses and peeks lock group, so with locks on it needs a
+partner code (ADR-007). Marking items stays with partners.
+
 ### ADR-047 - The whole-screen block is a setting, off by default, with Continue anyway
 **2026-11-03.** The block screen for a mostly covered screen (ADR-036) stopped the owner watching
 a health video: sure covers on a few frames were enough to take the whole screen. New setting
