@@ -171,6 +171,9 @@ class FingerScroll(private val slopPx: Int) {
         return correction
     }
 
+    /** A scroll event with no distance: the drag scrolls something, but there is nothing to correct. */
+    fun confirm() { confirmed = true }
+
     /**
      * Run a little after the drag starts: a drag that no scroll event confirmed moved nothing, so
      * the blurs go back. Returns how far to move them.

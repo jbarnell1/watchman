@@ -80,12 +80,10 @@ class WatchAccessibilityService : AccessibilityService() {
             lastScrollPkg = pkg
             lastScrollAt = now
             metrics.count(if (ScrollShift.known(dx, dy)) "scroll_events" else "scroll_unknown_delta")
-            // Only when the household turned scroll-following on; off by default (ADR-040).
-            if (ScrollShift.known(dx, dy) && AppState.get(this).policy?.followScroll == true) {
-                val area = android.graphics.Rect()
-                event.source?.getBoundsInScreen(area)
-                watcher?.shiftPatches(ScrollShift.of(dx), ScrollShift.of(dy), if (area.isEmpty) null else area)
-            }
+            // Blurs follow the finger or lift until the list settles (ADR-044, ADR-045).
+            val area = android.graphics.Rect()
+            event.source?.getBoundsInScreen(area)
+            watcher?.scrolled(ScrollShift.of(dx), ScrollShift.of(dy), ScrollShift.known(dx, dy), if (area.isEmpty) null else area)
         }
         if (pkg in browserPackages) lastUrl = readUrl(rootInActiveWindow) ?: lastUrl
         val regions = imageRegions(rootInActiveWindow)

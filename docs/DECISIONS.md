@@ -8,6 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-045 - Without the finger, blurs lift while a list scrolls
+**2026-11-03.** Blurs moved by scroll events never lined up with the picture (ADR-042), and
+moving them cost battery for nothing. Now a scroll event lifts the blurs inside the list that
+moved, unless the finger is being followed (ADR-044). The region pass and strict-mode covers wait
+until the list has had no scroll event for 150 ms, then cover the pictures where they are; a
+picture judged before is a cache hit, so the cover comes back without a model run, and the
+screenshot is taken with no blur in the way. The cost: a covered picture shows while its list is
+moving. It is still judged and reported when the list stops, and the owner chose this trade.
+Metric `patches_lifted_on_scroll`.
+
 ### ADR-044 - Blurs follow the finger when Shizuku runs
 **2026-11-02.** Prediction between scroll events (ADR-042) still trails a list, because the only
 signal an app gets is Android's scroll event every 100 ms. The finger itself is the signal that

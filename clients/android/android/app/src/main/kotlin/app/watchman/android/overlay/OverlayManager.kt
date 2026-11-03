@@ -126,22 +126,43 @@ class OverlayManager(private val context: Context) {
     }
 
     /**
-     * A real scroll event (main thread): move the blurs to where the content is, then keep them
-     * moving every frame until the next event (ADR-042). Returns how many patches moved now.
+     * A real scroll event inside [area] (main thread). With [follow] (blurs follow a scroll and
+     * Shizuku feeds the finger), a blur the finger is moving is only corrected (ADR-044) and a
+     * fling it handed over keeps moving (ADR-042). Otherwise the blurs in [area] are lifted: a
+     * blur moved by scroll events never lined up, and the region pass after the list settles
+     * covers the pictures again where they are (ADR-045). Returns true when blurs followed.
      */
-    fun scrolled(dx: Int, dy: Int, area: Rect?): Int {
+    fun scrolled(dx: Int, dy: Int, known: Boolean, area: Rect?, follow: Boolean): Boolean {
         val t = System.nanoTime() / 1_000_000
         scrollArea = area
-        if (finger.following) {
-            // The finger is moving the blurs; the event only corrects the drift (ADR-044).
+        if (follow && finger.following) {
+            if (!known) { finger.confirm(); return true }
             val correction = finger.event(if (vertical) dy else dx, t)
             Metrics.shared.time("finger_correction_px", kotlin.math.abs(correction).toDouble())
-            return if (correction != 0) shiftAxis(correction) else 0
+            if (correction != 0) shiftAxis(correction)
+            return true
         }
-        if (dx != 0 || dy != 0) vertical = kotlin.math.abs(dy) >= kotlin.math.abs(dx)
-        val moved = shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
-        startFrames()
-        return moved
+        if (known && !finger.following) vertical = kotlin.math.abs(dy) >= kotlin.math.abs(dx)
+        if (follow && known && (predX.active || predY.active)) {
+            shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
+            startFrames()
+            return true
+        }
+        predX.stop(); predY.stop()
+        val lifted = lift(area)
+        if (lifted > 0) Metrics.shared.count("patches_lifted_on_scroll", lifted.toLong())
+        return false
+    }
+
+    /** Lift every blur inside [area] (all when null), except app switcher blanks. Returns how many. */
+    fun lift(area: Rect?): Int {
+        val n = synchronized(patches) {
+            val before = patches.size
+            patches.removeAll { !it.solid && (area == null || Rect.intersects(area, it.region)) }
+            before - patches.size
+        }
+        if (n > 0) main.post { if (patches.isEmpty()) hide() else view?.invalidate() }
+        return n
     }
 
     private fun startFrames() {

@@ -55,6 +55,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
     companion object {
         private const val TAG = "ScreenWatcher"
         const val REGION_COALESCE_MS = 400L
+        /** A list counts as still moving until this long after its last scroll event (ADR-045). */
+        const val SCROLL_SETTLE_MS = 150L
         const val MIN_FRAME_AGE_MS = 1000L
         /** How long a whole-screen check waits for the system's screenshot before moving on. */
         const val SCREENSHOT_TIMEOUT_MS = 5_000L
@@ -331,8 +333,9 @@ class ScreenWatcher(private val service: AccessibilityService) {
             val policy = state.policy
             if (policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
             // Strict mode in risky apps: new pictures are covered now, from their position alone,
-            // and the region pass below lifts the ones judged safe (ADR-040).
-            if (policy != null && policy.strictMode && policy.coverOnDevice != false && pkg in policy.riskyApps) {
+            // and the region pass below lifts the ones judged safe (ADR-040). Not while a list is
+            // moving: the next scroll event would lift the cover again (ADR-045).
+            if (!scrolling() && policy != null && policy.strictMode && policy.coverOnDevice != false && pkg in policy.riskyApps) {
                 val fresh = tracker.fresh(regions)
                 if (fresh.isNotEmpty()) {
                     metrics.count("strict_covers", fresh.size.toLong())
@@ -342,12 +345,17 @@ class ScreenWatcher(private val service: AccessibilityService) {
             pendingRegions = Triple(pkg, url, regions)
             if (regionPassScheduled) return@post
             regionPassScheduled = true
-            handler.postDelayed({
-                regionPassScheduled = false
-                val (p, u, r) = pendingRegions ?: return@postDelayed
-                pendingRegions = null
-                lastRegions = Triple(p, u, r)
-                regionPass(p, u, r)
+            handler.postDelayed(object : Runnable {
+                override fun run() {
+                    // A pass while the list moves would cover where pictures were: wait until it settles.
+                    val wait = scrollSettlesAt - android.os.SystemClock.uptimeMillis()
+                    if (wait > 0) { handler.postDelayed(this, wait); return }
+                    regionPassScheduled = false
+                    val (p, u, r) = pendingRegions ?: return
+                    pendingRegions = null
+                    lastRegions = Triple(p, u, r)
+                    regionPass(p, u, r)
+                }
             }, REGION_COALESCE_MS)
         }
     }
@@ -386,10 +394,19 @@ class ScreenWatcher(private val service: AccessibilityService) {
         handler.post { scheduleTick(0) }
     }
 
-    /** The page scrolled by (dx, dy) inside [area]: patches move with it now, the next pass confirms. */
-    fun shiftPatches(dx: Int, dy: Int, area: Rect?) {
-        val moved = overlay.scrolled(dx, dy, area)
-        if (moved > 0) metrics.count("patches_scrolled", moved.toLong())
+    @Volatile private var scrollSettlesAt = 0L
+
+    private fun scrolling() = android.os.SystemClock.uptimeMillis() < scrollSettlesAt
+
+    /**
+     * The page scrolled by (dx, dy) inside [area]; [known] is false when the app did not say how
+     * far. Blurs follow the finger when they may and Shizuku runs (ADR-044); otherwise they lift
+     * and the region pass waits for the list to settle before covering again (ADR-045).
+     */
+    fun scrolled(dx: Int, dy: Int, known: Boolean, area: Rect?) {
+        val follow = state.policy?.followScroll == true && app.watchman.android.touch.FingerFeed.state == "on"
+        if (!overlay.scrolled(dx, dy, known, area, follow)) scrollSettlesAt = android.os.SystemClock.uptimeMillis() + SCROLL_SETTLE_MS
+        if (!known) return
         // The pictures the timed tick re-checks moved too.
         lastRegions = lastRegions?.let { (p, u, r) ->
             Triple(p, u, r.map { g ->
