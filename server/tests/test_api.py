@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import uuid
 
 from PIL import Image
@@ -178,6 +179,7 @@ def test_events_are_idempotent_and_ask_for_images(client, device, clock):
 
 
 def test_image_upload_stores_blurs_and_never_the_original(ctx, client, device, clock, opinion, mailer):
+    ctx.settings.set("covered_reports", "all", "owner")  # every covered picture goes to review
     _, headers = device
     ev_id = str(uuid.uuid4())
     client.post("/api/v1/events", headers=headers, json={"events": [{
@@ -205,6 +207,7 @@ def test_confirmed_explicit_alerts_and_shares_the_hash(ctx, client, device, cloc
         "id": ev_id, "type": "image_covered", "occurred_at": iso(clock.now()), "app": "org.mozilla.firefox",
         "action": "covered", "scores": {"classifier": 0.95}, "hash": "1111222233334444", "has_image": True}]})
     opinion.fixed = 0.91
+    ctx.detector.fixed = {"FEMALE_BREAST_EXPOSED": 0.8, "FACE_FEMALE": 0.9}   # the server sees bare nudity
     client.put(f"/api/v1/events/{ev_id}/image", headers=headers, content=jpeg_bytes())
     ev = ctx.events.get(ev_id)
     assert ev["severity"] == "explicit" and ev["alerted_at"]
@@ -324,3 +327,70 @@ def test_miss_reported_is_accepted_as_info_without_an_upload(ctx, client, device
         "action": "none", "detail": {"regions": [{"w": 1344, "h": 2992, "classifier": 0.41, "detector": 0.2}]}}]})
     assert r.json()["accepted"] == [ev_id] and r.json()["upload"] == []
     assert ctx.events.get(ev_id)["severity"] == "info"
+
+
+def test_covered_pictures_reach_partners_only_at_a_high_second_opinion(ctx, client, device, clock, opinion, mailer):
+    """ADR-046: by default a covered picture stays on the record unless the server is nearly sure."""
+    _, headers = device
+
+    ids: list[str] = []
+
+    def report(kind: str, h: str, second: float) -> str:
+        ev_id = str(uuid.uuid4())
+        ids.append(ev_id)
+        client.post("/api/v1/events", headers=headers, json={"events": [{
+            "id": ev_id, "type": kind, "occurred_at": iso(clock.now()), "app": "com.instagram.android",
+            "action": "covered" if kind == "image_covered" else "none", "scores": {"classifier": 0.9},
+            "hash": h, "has_image": True}]})
+        assert ctx.events.get(ev_id)["severity"] == "info"
+        opinion.fixed = second
+        client.put(f"/api/v1/events/{ev_id}/image", headers=headers, content=jpeg_bytes())
+        return ctx.events.get(ev_id)["severity"]
+
+    assert report("image_covered", "1111000011110000", 0.2) == "info"
+    assert report("image_covered", "2222000022220000", 0.8) == "info"   # explicit enough, but it was covered
+    # Revealing is not reported: covered breasts and a bare belly at any confidence.
+    ctx.detector.fixed = {"FEMALE_BREAST_COVERED": 0.9, "BELLY_EXPOSED": 0.9}
+    assert report("image_covered", "5555000055550000", 0.8) == "info"
+    assert mailer.sent == []
+    # Bare nudity the server's detector finds is reported whatever the second opinion says.
+    ctx.detector.fixed = {"BUTTOCKS_EXPOSED": 0.6}
+    assert report("image_covered", "6666000066660000", 0.3) == "explicit"
+    # The tags are kept with the event for the review page.
+    assert json.loads(ctx.events.get(ids[-1])["scores"])["server_labels"] == {"BUTTOCKS_EXPOSED": 0.6}
+    ctx.detector.fixed = {}
+    # The backstop for what the detector does not tag: a second opinion of 0.95.
+    assert report("image_covered", "3333000033330000", 0.95) == "explicit"
+    assert len(mailer.sent) == 2
+    # Not covered on the device: reported at the second-opinion line as before.
+    assert report("image_flagged", "4444000044440000", 0.8) == "explicit"
+
+
+def test_reporting_every_covered_picture_again_is_free_and_stopping_it_is_loosening():
+    from app.services.locks import loosens
+    assert loosens("covered_reports", "all", "exposed")
+    assert not loosens("covered_reports", "exposed", "all")
+
+
+def test_server_detector_keeps_each_labels_best_score():
+    """ADR-046: YOLOv8 output decoded to one score per label, weak ones dropped."""
+    import numpy as np
+    from PIL import Image
+
+    from app.clients.detector import OnnxDetector
+
+    names = ["FACE_FEMALE", "BUTTOCKS_EXPOSED", "BELLY_COVERED"]
+    raw = np.zeros((1, 4 + len(names), 5), dtype=np.float32)
+    raw[0, 4, 0], raw[0, 4, 3] = 0.4, 0.7       # face: best 0.7
+    raw[0, 5, 2] = 0.55                          # buttocks exposed
+    raw[0, 6, 1] = 0.1                           # below KEEP: dropped
+
+    class Session:
+        def run(self, _outputs, feeds):
+            assert next(iter(feeds.values())).shape == (1, 3, 640, 640)
+            return [raw]
+
+    d = OnnxDetector.__new__(OnnxDetector)
+    d.input = {"size": 640, "scale": 255.0, "mean": [0, 0, 0], "std": [1, 1, 1]}
+    d.names, d.session, d.input_name = names, Session(), "images"
+    assert d.labels(Image.new("RGB", (300, 200), (90, 90, 90))) == {"FACE_FEMALE": 0.7, "BUTTOCKS_EXPOSED": 0.55}

@@ -29,6 +29,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from app.clients.detector import EXPLICIT
 from app.settings import Thresholds
 
 IMAGE_TYPES = frozenset({"image_covered", "image_flagged", "screen_blocked"})
@@ -99,7 +100,8 @@ def _num(value: Any) -> float | None:
         return None
 
 
-def judge(ev: Any, t: Thresholds, cover_on_device: bool = True, ask_server: bool = True) -> Tally:
+def judge(ev: Any, t: Thresholds, cover_on_device: bool = True, ask_server: bool = True,
+          covered_reports: str = "all") -> Tally:
     """What one non known-bad image event would have produced under `t`, as a tally of 0s and 1s."""
     scores = _scores(ev)
     classifier = _num(scores.get("classifier")) or 0.0
@@ -116,11 +118,11 @@ def judge(ev: Any, t: Thresholds, cover_on_device: bool = True, ask_server: bool
         decision = "safe"
 
     out = Tally()
-    explicit_answer = second is not None and second >= t.second_opinion
-    if cover_on_device and ask_server and t.ask <= score < t.sure:
+    asking = cover_on_device and ask_server and t.ask <= score < t.sure
+    if asking:
         # Pipeline: cover first, ask; a safe answer lifts the blur and nothing is reported.
         out.covered = out.asked = 1
-        reported = explicit_answer or second is None
+        reported = (second is not None and second >= t.second_opinion) or second is None
         covered_report = True
     else:
         out.covered = int(decision == "cover")
@@ -129,17 +131,26 @@ def judge(ev: Any, t: Thresholds, cover_on_device: bool = True, ask_server: bool
     if not reported:
         return out
     out.reported = 1
-    out.explicit = int(explicit_answer)
+    # Covered pictures need bare nudity from the server's detector or the higher line to reach
+    # partners, unless all are reported (ADR-046). Pictures from before the server tagged count on
+    # the second opinion alone.
+    if covered_report and covered_reports != "all":
+        tags = scores.get("server_labels") or {}
+        exposed = max((float(s) for label, s in tags.items() if label in EXPLICIT), default=0.0)
+        out.explicit = int(exposed >= t.server_exposed or
+                           (second is not None and second >= max(t.second_opinion, t.covered_report)))
+    else:
+        out.explicit = int(second is not None and second >= t.second_opinion)
     # Intake: covered pictures start as review, flagged ones as info until explicit; a look-alike of
     # one just reported is a repeat and carries no review of its own (ADR-035).
-    if _field(ev, "image_status") != "repeat" and (covered_report or out.explicit):
+    if _field(ev, "image_status") != "repeat" and ((covered_report and covered_reports == "all") or out.explicit):
         out.review = 1
     out.false_alarms = int(_field(ev, "review_state") == "false_alarm")
     return out
 
 
 def replay(events: Iterable[Any], current: Thresholds, proposed: Thresholds,
-           cover_on_device: bool = True, ask_server: bool = True) -> Replay:
+           cover_on_device: bool = True, ask_server: bool = True, covered_reports: str = "all") -> Replay:
     """Counts per app and in total for both threshold sets. Non-image events are ignored."""
     apps: dict[str, AppReplay] = {}
     total = AppReplay(app="All apps")
@@ -154,8 +165,8 @@ def replay(events: Iterable[Any], current: Thresholds, proposed: Thresholds,
             row.known_bad += 1
             total.known_bad += 1
             continue
-        now = judge(ev, current, cover_on_device, ask_server)
-        then = judge(ev, proposed, cover_on_device, ask_server)
+        now = judge(ev, current, cover_on_device, ask_server, covered_reports)
+        then = judge(ev, proposed, cover_on_device, ask_server, covered_reports)
         row.current.add(now)
         row.proposed.add(then)
         total.current.add(now)

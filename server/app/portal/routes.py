@@ -255,7 +255,8 @@ async def whatif_page(request: Request, ctx: Context = Depends(get_ctx)) -> Resp
     proposed = _proposed_thresholds(mine.thresholds, request.query_params)
     now = ctx.clock.now()
     result = whatif.replay(ctx.events.between(person["id"], now - timedelta(days=days), now),
-                           mine.thresholds, proposed, mine.cover_on_device, mine.ask_server)
+                           mine.thresholds, proposed, mine.cover_on_device, mine.ask_server,
+                           ctx.settings.load().covered_reports)
     return _page(request, ctx, v, "whatif.html", person, days=days, day_choices=WHATIF_DAYS,
                  current=mine.thresholds, proposed=proposed, keys=WHATIF_KEYS, result=result,
                  measures=whatif.MEASURES, changed=proposed != mine.thresholds,
@@ -367,7 +368,7 @@ AREAS: dict[str, list[str]] = {
                 "event_retention_days", "ntfy_url", "adguard_url"],
     "protection": ["locks_on", "unlocked_groups", "cover_on_device", "ask_server", "strict_mode", "coverage",
                    "follow_scroll",
-                   "thresholds",
+                   "thresholds", "covered_reports",
                    "risky_apps",
                    "blocked_apps", "exempt_apps", "protected_browser",
                    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
@@ -380,7 +381,8 @@ AREAS: dict[str, list[str]] = {
 
 def _parse_setting(key: str, form) -> object:
     if key == "thresholds":
-        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure", "known_bad")
+        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure", "known_bad", "covered_report",
+                "server_exposed")
         return {k: float(form.get(f"thresholds.{k}", 0)) for k in keys}
     if key == "smtp":
         return {
@@ -390,6 +392,11 @@ def _parse_setting(key: str, form) -> object:
             "from_address": str(form.get("smtp.from_address", "")).strip(),
             "starttls": form.get("smtp.starttls") == "on",
         }
+    if key == "covered_reports":
+        value = str(form.get(key, "exposed"))
+        if value not in ("exposed", "all"):
+            raise ApiError("unknown choice for covered pictures")
+        return value
     if key == "watch_default":
         value = str(form.get(key, "realtime"))
         if value not in ("realtime", "checked"):

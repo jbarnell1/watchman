@@ -31,6 +31,12 @@ class Thresholds(BaseModel):
     # only at this second opinion or above. At 0.70 Instagram's buttons on a tan reel joined it and
     # pulled their look-alikes in after them (ADR-035).
     known_bad: float = 0.90
+    # With covered_reports "exposed" (ADR-046), a picture the device covered reaches partners when
+    # the server's detector finds bare nudity at server_exposed or above, or, for what the detector
+    # did not tag, when the second opinion reaches covered_report. Revealing pictures stay blurred
+    # on the device and on the record, without a report.
+    server_exposed: float = 0.50
+    covered_report: float = 0.95
 
 
 class Smtp(BaseModel):
@@ -64,6 +70,10 @@ class Settings(BaseModel):
     # Blurs move with a scroll the app reports, before the next check confirms them (ADR-032).
     # Off by default: the owner found it not effective; blurs then wait for the next check (ADR-040).
     follow_scroll: bool = False
+    # What partners see of pictures the device covered (ADR-046): all puts every one in review;
+    # exposed keeps them on the record and reports only bare nudity the server's detector finds,
+    # or a second opinion at thresholds.covered_report. Pictures not covered are reported as before.
+    covered_reports: str = "exposed"   # exposed | all
     risky_apps: list[str] = Field(default_factory=lambda: [
         "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
     ])
@@ -109,7 +119,7 @@ class Settings(BaseModel):
 
 
 LOCKED_KEYS = frozenset({
-    "follow_scroll",
+    "follow_scroll", "covered_reports",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",

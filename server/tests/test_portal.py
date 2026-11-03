@@ -68,6 +68,7 @@ def _covered_event(ctx, client, headers, clock, opinion, score: float) -> str:
 
 
 def test_review_peek_and_marking(ctx, client, household, device, clock, opinion):
+    ctx.settings.set("covered_reports", "all", "owner")  # every covered picture goes to review
     _, headers = device
     ev_id = _covered_event(ctx, client, headers, clock, opinion, 0.3)
     r = client.get("/review", headers=as_login(PARTNER))
@@ -166,7 +167,7 @@ def test_locked_settings_need_a_partner_code(ctx, client, household, device):
 PROTECTION_FORM = {
     "cover_on_device": "on", "ask_server": "on", "strict_mode": "on", "coverage": "explicit",
     "thresholds.cover": "0.85", "thresholds.flag": "0.85", "thresholds.ask": "0.60", "thresholds.sure": "0.97", "thresholds.detector_cover": "0.55",
-    "thresholds.second_opinion": "0.70", "thresholds.known_bad": "0.90", "protected_browser": "org.mozilla.firefox",
+    "thresholds.second_opinion": "0.70", "thresholds.known_bad": "0.90", "thresholds.covered_report": "0.95", "thresholds.server_exposed": "0.50", "covered_reports": "exposed", "protected_browser": "org.mozilla.firefox",
     "risky_apps": "com.google.android.youtube\norg.mozilla.firefox\ncom.reddit.frontpage",
     "blocked_apps": "com.android.chrome\ncom.brave.browser\ncom.opera.browser\ncom.microsoft.emmx\n"
                     "com.duckduckgo.mobile.android\ncom.sec.android.app.sbrowser",

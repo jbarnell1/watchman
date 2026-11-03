@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from app.clients.blobs import BlobStore
+from app.clients.detector import Detector, FakeDetector
 from app.clients.identity import IdentityProvider
 from app.clients.mailer import Mailer
 from app.clients.second_opinion import SecondOpinion
@@ -34,6 +35,7 @@ class Context:
     events: EventsStore
     codes: CodesStore
     judge_cache: JudgeCache = field(default_factory=JudgeCache)
+    detector: Detector = field(default_factory=FakeDetector)
     models_verified: int = 0        # manifest files present with the right sha256, counted at startup
 
     @classmethod

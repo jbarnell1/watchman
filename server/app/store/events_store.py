@@ -48,6 +48,18 @@ class EventsStore:
             (score, severity, image_status, event_id),
         )
 
+    def set_server_labels(self, event_id: str, labels: dict[str, float]) -> None:
+        """The server detector's labels join the device's scores as `server_labels` (ADR-046)."""
+        row = self.conn.execute("SELECT scores FROM events WHERE id = ?", (event_id,)).fetchone()
+        try:
+            scores = json.loads(row["scores"] or "{}") if row else {}
+        except ValueError:
+            scores = {}
+        if not isinstance(scores, dict):
+            scores = {}
+        scores["server_labels"] = labels
+        self.conn.execute("UPDATE events SET scores = ? WHERE id = ?", (json.dumps(scores), event_id))
+
     def set_image_status(self, event_id: str, status: str) -> None:
         self.conn.execute("UPDATE events SET image_status = ? WHERE id = ?", (status, event_id))
 
