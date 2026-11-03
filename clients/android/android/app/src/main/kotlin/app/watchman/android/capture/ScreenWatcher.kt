@@ -121,6 +121,10 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
     init {
         instance = this
+        // Finger samples from Shizuku move the blurs, only while blurs follow a scroll (ADR-044).
+        app.watchman.android.touch.FingerFeed.listener = { kind, x, y, t ->
+            if (state.policy?.followScroll == true) overlay.touch(kind, x, y, t)
+        }
         service.registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
@@ -548,6 +552,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
     fun stop() {
         stopped = true
+        app.watchman.android.touch.FingerFeed.listener = null
         handler.removeCallbacks(flush)
         instance = null
         handler.removeCallbacks(tick)

@@ -25,6 +25,7 @@ class Status {
     this.provider,
     this.budget,
     this.work,
+    this.finger,
   });
 
   final bool paired;
@@ -48,6 +49,8 @@ class Status {
   final String? budget;
   /// Frames pulled, screens judged, screens skipped as unchanged, crops asked of the server.
   final String? work;
+  /// Finger tracking through Shizuku (ADR-044): unavailable, not_allowed, starting, on or failed.
+  final String? finger;
 
   bool get allPermissionsGranted => accessibility && overlay && deviceAdmin && batteryUnrestricted;
 
@@ -81,6 +84,7 @@ class Status {
         provider: m['provider'] as String?,
         budget: m['budget'] as String?,
         work: m['work'] as String?,
+        finger: m['finger'] as String?,
       );
 }
 

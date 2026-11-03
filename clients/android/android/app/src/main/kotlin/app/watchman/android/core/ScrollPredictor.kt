@@ -39,6 +39,20 @@ class ScrollPredictor {
         return take(correction)
     }
 
+    /** A finger came down: a fling in progress stops (ADR-044). */
+    fun stop() { velocity = 0.0; predictedSinceEvent = 0.0; remainder = 0.0 }
+
+    /**
+     * The finger lifted at [velocity] px per ms (ADR-044): keep moving as a fling, with [pending]
+     * px already applied since the last real event so the next event corrects only the rest.
+     */
+    fun handOff(velocity: Double, pending: Double, tMs: Long) {
+        this.velocity = velocity
+        predictedSinceEvent = pending
+        lastEventAt = tMs
+        lastFrameAt = tMs
+    }
+
     /** One display frame at [tMs]. Returns how far to move the blur for this frame. */
     fun onFrame(tMs: Long): Int {
         if (!active) return 0

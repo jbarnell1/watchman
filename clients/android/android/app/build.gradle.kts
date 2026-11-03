@@ -74,6 +74,9 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     // QR pairing: Google's scanner UI runs in Play services, so the app needs no camera permission.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // Optional finger tracking through Shizuku (ADR-044); without Shizuku running it does nothing.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }

@@ -72,10 +72,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- Shizuku hands its binder to the app through this provider (ADR-044). -->
+        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false" android:enabled="true" android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
 
     <queries>
+        <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />

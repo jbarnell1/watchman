@@ -16,6 +16,10 @@ import app.watchman.android.core.Pixels
 import app.watchman.android.core.ScrollPredictor
 import android.graphics.RectF
 import android.view.Choreographer
+import android.view.ViewConfiguration
+import app.watchman.android.core.FingerScroll
+import app.watchman.android.core.Metrics
+import app.watchman.android.core.Touch
 
 /**
  * One full-screen, touch-transparent overlay window. Each covered region gets a pixelated copy of
@@ -128,12 +132,67 @@ class OverlayManager(private val context: Context) {
     fun scrolled(dx: Int, dy: Int, area: Rect?): Int {
         val t = System.nanoTime() / 1_000_000
         scrollArea = area
+        if (finger.following) {
+            // The finger is moving the blurs; the event only corrects the drift (ADR-044).
+            val correction = finger.event(if (vertical) dy else dx, t)
+            Metrics.shared.time("finger_correction_px", kotlin.math.abs(correction).toDouble())
+            return if (correction != 0) shiftAxis(correction) else 0
+        }
+        if (dx != 0 || dy != 0) vertical = kotlin.math.abs(dy) >= kotlin.math.abs(dx)
         val moved = shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
+        startFrames()
+        return moved
+    }
+
+    private fun startFrames() {
         if (!animating && (predX.active || predY.active)) {
             animating = true
             Choreographer.getInstance().postFrameCallback(frame)
         }
-        return moved
+    }
+
+    private val finger = FingerScroll(ViewConfiguration.get(context).scaledTouchSlop)
+    /** The axis the last scroll event moved along; the finger is followed on that axis only. */
+    private var vertical = true
+    private val confirm = Runnable {
+        val back = finger.check(System.nanoTime() / 1_000_000)
+        if (back != 0) { shiftAxis(back); Metrics.shared.count("finger_unconfirmed") }
+    }
+
+    private fun shiftAxis(d: Int): Int = if (vertical) shift(0, d, scrollArea) else shift(d, 0, scrollArea)
+
+    /**
+     * A finger sample from Shizuku (main thread, screen pixels; ADR-044). A finger that comes down
+     * inside the list that last scrolled moves the blurs with it; scroll events then only correct.
+     */
+    fun touch(kind: Int, x: Int, y: Int, tMs: Long) {
+        // Touch times are uptime; frames and events use nanoTime. Both are the monotonic clock.
+        val t = System.nanoTime() / 1_000_000
+        when (kind) {
+            Touch.DOWN -> {
+                val area = scrollArea ?: return
+                if (!area.contains(x, y)) return
+                predX.stop(); predY.stop()
+                finger.down(if (vertical) y else x, t)
+                Metrics.shared.count("finger_gestures")
+            }
+            Touch.MOVE -> {
+                val wasDragging = finger.dragging
+                val step = finger.move(if (vertical) y else x, t)
+                if (!wasDragging && finger.dragging) main.postDelayed(confirm, FingerScroll.CONFIRM_MS + 20)
+                if (step != 0) shiftAxis(step)
+            }
+            Touch.UP, Touch.MULTI -> {
+                if (!finger.following) return
+                main.removeCallbacks(confirm)
+                val lift = finger.up(t, fling = kind == Touch.UP)
+                if (lift.correction != 0) shiftAxis(lift.correction)
+                if (lift.velocity != 0.0) {
+                    (if (vertical) predY else predX).handOff(lift.velocity, lift.pending, t)
+                    startFrames()
+                }
+            }
+        }
     }
 
     fun shift(dx: Int, dy: Int, area: Rect?): Int {

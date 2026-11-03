@@ -55,6 +55,9 @@ Week 1, measure and label:
 - Built: the what-if page (`/whatif`, ADR-041), linked from Settings beside the thresholds.
 - Scan the screen as soon as the accessibility service reconnects (ADR-039 follow-up).
 
+- Finger tracking through Shizuku for blurs that follow a scroll (ADR-044): measure
+  `finger_correction_px` and how it feels before deciding whether it stays optional.
+
 Week 2, tune from the data:
 - Thresholds and watch levels per app from the false-alarm share and the cost per app; move
   low-risk apps to checked (ADR-037).

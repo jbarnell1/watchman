@@ -1,6 +1,8 @@
 # Gson reads and writes the data classes in app.watchman.android.core by reflection (policy, manifest,
 # events, pairing). The shrinker must keep their names and fields, and the type signatures Gson walks.
 -keep class app.watchman.android.core.** { *; }
+# Shizuku starts the touch reader by class name in its own process (ADR-044).
+-keep class app.watchman.android.touch.TouchService { *; }
 -keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
 -keep class com.google.gson.** { *; }
 -dontwarn com.google.gson.**
