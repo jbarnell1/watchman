@@ -93,6 +93,7 @@ Response 200:
  "blocked_apps": ["com.android.chrome"],
  "exempt_apps": [],
  "follow_scroll": false,
+ "block_whole_screen": false,
  "watch_default": "realtime",
  "realtime_apps": ["com.instagram.android"],
  "checked_apps": [],
@@ -118,6 +119,10 @@ can run different postures.
 
 `exempt_apps` are apps not watched at all (ADR-030): while one is in front nothing is judged,
 covered or reported. Android applies it today.
+
+`block_whole_screen` (ADR-047, default false): true shows the full block screen when sure covers
+take more than 40% of the screen, with Continue anyway, which sends `block_passed`; false or absent
+only blurs the pictures.
 
 `follow_scroll` (ADR-040, default false): true moves blurs with the finger where the device can
 read it (Android with Shizuku, ADR-044). Otherwise, and when false or absent, a scroll lifts the
@@ -172,6 +177,7 @@ Event `type` values and their `action`:
 | `search_flagged` | a search matched the word list | `flagged` |
 | `app_blocked` | a blocked app was opened | `blocked` |
 | `protection_changed` | optional from clients; the server derives its own from heartbeats (ADR-015) and only those alert; `detail` has `{"field","from","to"}` | `none` |
+| `block_passed` | the person chose Continue anyway on a whole-screen block; the pictures stay blurred; alerts partners | `none` |
 | `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump | `none` |
 | `pause_started` / `pause_ended` | an unlock code took effect / expired | `none` |
 | `miss_reported` | the person taps Missed something: the scores of the whole screen and of each picture on it in `detail.regions` (size, classifier, detector, decisive bits, cached verdict), the app's watch level and the thresholds; never an image | `none` |

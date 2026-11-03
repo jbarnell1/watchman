@@ -38,6 +38,7 @@ def policy_for(ctx: Context, person_id: str) -> dict:
         "cover_on_device": s.cover_on_device,
         "ask_server": s.ask_server,
         "follow_scroll": s.follow_scroll,
+        "block_whole_screen": s.block_whole_screen,
         "coverage": s.coverage,
         "explicit_labels": explicit_labels(s.coverage),
         "risky_apps": s.risky_apps,

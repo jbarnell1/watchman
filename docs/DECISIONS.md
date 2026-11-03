@@ -8,6 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-047 - The whole-screen block is a setting, off by default, with Continue anyway
+**2026-11-03.** The block screen for a mostly covered screen (ADR-036) stopped the owner watching
+a health video: sure covers on a few frames were enough to take the whole screen. New setting
+`block_whole_screen`, default off: the pictures are blurred one by one as everywhere else and
+nothing takes over the screen. When a household turns it on, the block screen offers Continue
+anyway. That goes back to the app with every blur still in place, suppresses the block for that
+app for 10 minutes, and sends `block_passed`, severity protection, which alerts partners at
+once. It is not a pause: nothing stops being judged or blurred, so it needs no partner code
+(ADR-007). Turning the setting off is loosening and sits in the protection lock group.
+
 ### ADR-046 - Covered pictures reach partners only when the server is nearly sure
 **2026-11-03.** The phone covers on the side of caution (ADR-033), so most covered pictures are
 buttons, skin tones and false alarms, and putting every one in partner review buries the few that

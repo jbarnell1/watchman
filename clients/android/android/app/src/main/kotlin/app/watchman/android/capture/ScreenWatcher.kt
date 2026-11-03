@@ -515,10 +515,13 @@ class ScreenWatcher(private val service: AccessibilityService) {
         // detector hits (0.56 to 0.75) that the server then scored 0.01 to 0.11 (ADR-036).
         val sure = covered.filter { !it.ask }
         val area = Coverage.shareOfRects(sure.map { it.region }, frame.width, frame.height)
-        val blocked = coverOnDevice && area > Coverage.BLOCK_SHARE
+        // Only when the household turned the whole-screen block on, and not for an app the person
+        // continued past in the last 10 minutes (ADR-047).
+        val blocked = coverOnDevice && state.policy?.blockWholeScreen == true && area > Coverage.BLOCK_SHARE &&
+            !BlockActivity.passed(pkg)
         // An empty package makes the block screen say what happened (most of the screen was
         // explicit), not that the app is on the household's blocklist.
-        if (blocked) BlockActivity.show(service, "")
+        if (blocked) BlockActivity.show(service, "", front = pkg)
         else if (coverOnDevice) overlay.cover(covered.map { it.region to it }, frame, shot.dx, shot.dy, replace = replace, keep = keep)
         for (f in findings) {
             if (f.ask) ask(f, pkg, url, screen.widthPixels, screen.heightPixels)
