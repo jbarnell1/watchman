@@ -10,7 +10,7 @@ shapes. Weights are never committed; `models/fetch.py` downloads and verifies th
 | `crop_classifier` | Marqo/nsfw-image-detection-384, exported to ONNX fp32 (`crop_classifier_int8` is the dynamic int8 copy) | Apache-2.0 | all clients, extension |
 | `crop_gate` | taufiqdp MobileNetV4-conv-small NSFW classifier (5 classes), ONNX from upstream, pinned revision. Orders the work only, never clears a picture (ADR-034) | Apache-2.0 | Android |
 | `detector_small` | NudeNet 320n ONNX (v3.4 weights) | MIT (PyPI 3.4.2) | Android, iOS |
-| `detector_large` | NudeNet 640m ONNX | MIT | Windows, server |
+| `detector_large` | NudeNet 640m ONNX | MIT | Windows, server (tags every uploaded picture, ADR-046) |
 | `second_opinion` | AdamCodd/vit-base-nsfw-detector ONNX int8 | Apache-2.0 | server |
 
 ## Manifest shape

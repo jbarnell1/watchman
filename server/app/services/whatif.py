@@ -29,6 +29,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from app.clients.detector import EXPLICIT
 from app.settings import Thresholds
 
 IMAGE_TYPES = frozenset({"image_covered", "image_flagged", "screen_blocked"})
@@ -130,11 +131,16 @@ def judge(ev: Any, t: Thresholds, cover_on_device: bool = True, ask_server: bool
     if not reported:
         return out
     out.reported = 1
-    # Covered pictures need the higher line to reach partners unless all are reported (ADR-046).
-    line = t.second_opinion
+    # Covered pictures need bare nudity from the server's detector or the higher line to reach
+    # partners, unless all are reported (ADR-046). Pictures from before the server tagged count on
+    # the second opinion alone.
     if covered_report and covered_reports != "all":
-        line = max(t.second_opinion, t.covered_report)
-    out.explicit = int(second is not None and second >= line)
+        tags = scores.get("server_labels") or {}
+        exposed = max((float(s) for label, s in tags.items() if label in EXPLICIT), default=0.0)
+        out.explicit = int(exposed >= t.server_exposed or
+                           (second is not None and second >= max(t.second_opinion, t.covered_report)))
+    else:
+        out.explicit = int(second is not None and second >= t.second_opinion)
     # Intake: covered pictures start as review, flagged ones as info until explicit; a look-alike of
     # one just reported is a repeat and carries no review of its own (ADR-035).
     if _field(ev, "image_status") != "repeat" and ((covered_report and covered_reports == "all") or out.explicit):

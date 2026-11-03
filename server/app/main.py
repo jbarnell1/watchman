@@ -14,6 +14,7 @@ from starlette.staticfiles import StaticFiles
 
 from app.api.v1 import router as api_router
 from app.clients.blobs import BlobStore
+from app.clients.detector import Detector, OnnxDetector
 from app.clients.identity import (
     IdentityProvider,
     OidcIdentity,
@@ -64,7 +65,9 @@ def build_context(config: Config, clock: Clock | None = None, identity: Identity
     )
     holder["ctx"] = ctx
     if second_opinion is None:
-        ctx.second_opinion = _real_second_opinion(config, ctx.settings.load().second_opinion_device)
+        device = ctx.settings.load().second_opinion_device
+        ctx.second_opinion = _real_second_opinion(config, device)
+        ctx.detector = _real_detector(config, device) or ctx.detector
     ctx.models_verified = health.verified_models(config.models_dir)
     return ctx
 
@@ -90,6 +93,19 @@ def _real_second_opinion(config: Config, device: str) -> SecondOpinion:
         log.warning("no models manifest at %s; using the fake second opinion", manifest)
         return FakeSecondOpinion()
     return OnnxSecondOpinion(manifest, config.models_dir, device=device)
+
+
+def _real_detector(config: Config, device: str) -> Detector | None:
+    """NudeNet 640m from the manifest (ADR-046); without it uploads get no server tags and covered
+    pictures reach partners on the second opinion alone."""
+    manifest = config.models_dir / "manifest.json"
+    if config.fake_second_opinion or not manifest.exists():
+        return None
+    try:
+        return OnnxDetector(manifest, config.models_dir, device=device)
+    except Exception as exc:  # a missing or unreadable model file must not stop the server
+        log.warning("server detector not loaded: %s", exc)
+        return None
 
 
 def create_app(ctx: Context | None = None, config: Config | None = None, run_jobs: bool = True) -> FastAPI:

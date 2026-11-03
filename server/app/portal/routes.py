@@ -393,7 +393,8 @@ AREAS: dict[str, list[str]] = {
 
 def _parse_setting(key: str, form) -> object:
     if key == "thresholds":
-        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure", "known_bad", "covered_report")
+        keys = ("cover", "flag", "detector_cover", "second_opinion", "ask", "sure", "known_bad", "covered_report",
+                "server_exposed")
         return {k: float(form.get(f"thresholds.{k}", 0)) for k in keys}
     if key == "smtp":
         return {
@@ -404,8 +405,8 @@ def _parse_setting(key: str, form) -> object:
             "starttls": form.get("smtp.starttls") == "on",
         }
     if key == "covered_reports":
-        value = str(form.get(key, "high_score"))
-        if value not in ("high_score", "all"):
+        value = str(form.get(key, "exposed"))
+        if value not in ("exposed", "all"):
             raise ApiError("unknown choice for covered pictures")
         return value
     if key == "watch_default":

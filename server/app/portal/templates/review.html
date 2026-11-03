@@ -58,7 +58,8 @@
         <dt>Device score</dt><dd class="num">{{ '%.2f'|format(sc.classifier) if sc.classifier is defined else '–' }}{% if sc.detector is defined and sc.detector is not none %} · detector {{ '%.2f'|format(sc.detector) }}{% endif %}</dd>
         <dt>Second opinion</dt><dd class="num">{{ '%.2f'|format(e.second_opinion) if e.second_opinion is not none else 'not yet' }}</dd>
         {% if e.region %}{% set r = json.loads(e.region) %}<dt>Size on screen</dt><dd class="num">{{ r.w }} × {{ r.h }} px of {{ r.screen_w }} × {{ r.screen_h }}</dd>{% endif %}
-        {% if sc.labels %}<dt>Detector labels</dt><dd>{{ sc.labels|join(', ')|lower|replace('_',' ') }}</dd>{% endif %}
+        {% if sc.labels %}<dt>Phone detector</dt><dd>{{ sc.labels|join(', ')|lower|replace('_',' ') }}</dd>{% endif %}
+        {% if sc.server_labels is defined %}<dt>Server detector</dt><dd>{% for l, s in sc.server_labels|dictsort(by='value', reverse=true) %}{{ l|lower|replace('_',' ') }} <span class="num">{{ '%.2f'|format(s) }}</span>{{ ', ' if not loop.last }}{% else %}nothing found{% endfor %}</dd>{% endif %}
         <dt>What happened</dt><dd>{{ 'Covered before it was seen' if e.action == 'covered' else 'Blocked' if e.action == 'blocked' else 'Noted only' }}</dd>
         {% if e.review_state != 'open' %}<dt>Reviewed</dt><dd>{{ 'Talked about' if e.review_state == 'talked' else 'False alarm' }} by {{ e.reviewed_by }}, {{ when(e.reviewed_at) }}</dd>{% endif %}
       </dl>

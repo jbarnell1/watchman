@@ -31,10 +31,12 @@ class Thresholds(BaseModel):
     # only at this second opinion or above. At 0.70 Instagram's buttons on a tan reel joined it and
     # pulled their look-alikes in after them (ADR-035).
     known_bad: float = 0.90
-    # A picture the device covered reaches partners only at this second opinion or above, when
-    # covered_reports is high_score (ADR-046). The blur already did its job; what is left to talk
-    # about is a picture that was unmistakable.
-    covered_report: float = 0.90
+    # With covered_reports "exposed" (ADR-046), a picture the device covered reaches partners when
+    # the server's detector finds bare nudity at server_exposed or above, or, for what the detector
+    # did not tag, when the second opinion reaches covered_report. Revealing pictures stay blurred
+    # on the device and on the record, without a report.
+    server_exposed: float = 0.50
+    covered_report: float = 0.95
 
 
 class Smtp(BaseModel):
@@ -75,9 +77,9 @@ class Settings(BaseModel):
     # Off by default: the owner found it not effective; blurs then wait for the next check (ADR-040).
     follow_scroll: bool = False
     # What partners see of pictures the device covered (ADR-046): all puts every one in review;
-    # high_score keeps them on the record but reports only those the second opinion scores at
-    # thresholds.covered_report or above. Pictures that were not covered are reported as before.
-    covered_reports: str = "high_score"   # high_score | all
+    # exposed keeps them on the record and reports only bare nudity the server's detector finds,
+    # or a second opinion at thresholds.covered_report. Pictures not covered are reported as before.
+    covered_reports: str = "exposed"   # exposed | all
     # A screen mostly covered by sure covers gives way to the full block screen (ADR-036). Off by
     # default: it stopped a health video on 2026-11-03. When on, the block screen offers Continue
     # anyway, which keeps the blurs and alerts partners (ADR-047).
