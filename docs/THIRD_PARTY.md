@@ -13,7 +13,6 @@
 | ONNX Runtime Web | MIT | browser extension | WASM files copied into the extension at build |
 | esbuild, vitest, pngjs, Playwright | MIT / Apache-2.0 | extension build and tests | dev only |
 | ONNX Runtime Android | MIT | Android app | |
-| Shizuku API and provider (dev.rikka.shizuku 13.1.5) | Apache-2.0 | Android app, optional finger tracking | the Shizuku app itself is installed by the owner |
 | OkHttp, Gson, AndroidX security-crypto, Kotlin coroutines | Apache-2.0 | Android app | |
 | ONNX Runtime iOS (onnxruntime-swift-package-manager) | MIT | iOS broadcast extension | |
 | XcodeGen | MIT | iOS project generation, CI only | |

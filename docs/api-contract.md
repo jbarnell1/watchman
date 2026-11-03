@@ -124,10 +124,11 @@ covered or reported. Android applies it today.
 take more than 40% of the screen, with Continue anyway, which sends `block_passed`; false or absent
 only blurs the pictures.
 
-`follow_scroll` (ADR-040, default false): true moves blurs with the finger where the device can
-read it (Android with Shizuku, ADR-044). Otherwise, and when false or absent, a scroll lifts the
-blurs in the list that moved and the next check after the list settles covers the pictures again
-where they are (ADR-045). `strict_mode` (ADR-040): in `risky_apps`, a picture
+`follow_scroll` (ADR-040, default false): true moves blurs with each scroll event and predicts
+them between events (ADR-042); false or absent lifts the blurs in the list that moved, and the
+next check after the list settles covers the pictures again where they are (ADR-045).
+
+`strict_mode` (ADR-040): in `risky_apps`, a picture
 that appears is covered at once from its position alone and stays covered until it is judged.
 Android applies both.
 

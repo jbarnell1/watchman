@@ -109,7 +109,6 @@ class MainActivity : FlutterActivity() {
             "provider" to ScreenWatcher.provider,
             "budget" to ScreenWatcher.budget,
             "work" to ScreenWatcher.work,
-            "finger" to app.watchman.android.touch.FingerFeed.state,
         )
     }
 
@@ -122,13 +121,6 @@ class MainActivity : FlutterActivity() {
             "deviceAdmin" -> Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
                 .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, WatchmanDeviceAdmin.component(this))
                 .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.device_admin_description))
-            "finger" -> {
-                app.watchman.android.touch.FingerFeed.start(this)
-                if (!app.watchman.android.touch.FingerFeed.requestPermission()) {
-                    packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                        ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/"))
-                } else return
-            }
             else -> return
         }
         startActivity(intent)
