@@ -78,55 +78,12 @@ class _SetupPageState extends State<SetupPage> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 12),
           ],
-          const SizedBox(height: 8),
-          _FingerCard(state: s.finger, onOpen: () => model.bridge.open('finger')),
           const SizedBox(height: 20),
           if (s.allPermissionsGranted)
             FilledButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Done'))
           else
             OutlinedButton(onPressed: model.refresh, child: const Text('Check again')),
         ],
-      ),
-    );
-  }
-}
-
-/// Optional: blurs that follow a scroll move with the finger when Shizuku runs (ADR-044).
-class _FingerCard extends StatelessWidget {
-  const _FingerCard({required this.state, required this.onOpen});
-  final String? state;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final on = state == 'on';
-    final action = switch (state) {
-      'not_allowed' => 'Allow',
-      'failed' => 'Try again',
-      'starting' => null,
-      'on' => null,
-      _ => 'Open Shizuku',
-    };
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Expanded(child: Text('Finger tracking', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16))),
-              Pill(on ? 'On' : 'Optional', kind: on ? PillKind.positive : PillKind.neutral),
-            ]),
-            const SizedBox(height: 6),
-            const Text('When blurs follow a scroll, they move with your finger instead of catching up every tenth '
-                'of a second. Needs the Shizuku app, started through Wireless debugging after each restart.',
-                style: TextStyle(color: muted)),
-            if (action != null) ...[
-              const SizedBox(height: 12),
-              OutlinedButton(onPressed: onOpen, child: Text(action)),
-            ],
-          ],
-        ),
       ),
     );
   }
