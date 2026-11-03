@@ -13,6 +13,9 @@ import android.view.View
 import android.view.WindowManager
 import app.watchman.android.core.Finding
 import app.watchman.android.core.Pixels
+import app.watchman.android.core.ScrollPredictor
+import android.graphics.RectF
+import android.view.Choreographer
 
 /**
  * One full-screen, touch-transparent overlay window. Each covered region gets a pixelated copy of
@@ -24,6 +27,9 @@ class OverlayManager(private val context: Context) {
         /** A patch outlives the pass that drew it by this much; the timed re-check refreshes it sooner. */
         /** A strict-mode cover waits this long for its judgement at most. */
         const val PENDING_MS = 5_000L
+        /** Stretch a moving blur by this many ms of travel on each side, at most [MAX_STRETCH_PX]. */
+        const val STRETCH_MS = 60.0
+        const val MAX_STRETCH_PX = 240.0
         const val HOLD_MS = 30_000L
     }
 
@@ -45,10 +51,14 @@ class OverlayManager(private val context: Context) {
             synchronized(patches) {
                 for (p in patches) {
                     if (p.until < now) continue
-                    val x = (p.region.left - loc[0]).toFloat()
-                    val y = (p.region.top - loc[1]).toFloat()
-                    if (p.bitmap != null) canvas.drawBitmap(p.bitmap, x, y, null)
-                    else canvas.drawRect(x, y, x + p.region.width(), y + p.region.height(), pendingPaint)
+                    // While a scroll is being predicted, stretch each blur along the scroll so a
+                    // prediction error does not uncover the edge of the picture (ADR-042).
+                    val sx = minOf(predX.speed * STRETCH_MS, MAX_STRETCH_PX).toFloat()
+                    val sy = minOf(predY.speed * STRETCH_MS, MAX_STRETCH_PX).toFloat()
+                    val dst = RectF((p.region.left - loc[0]).toFloat() - sx, (p.region.top - loc[1]).toFloat() - sy,
+                        (p.region.right - loc[0]).toFloat() + sx, (p.region.bottom - loc[1]).toFloat() + sy)
+                    if (p.bitmap != null) canvas.drawBitmap(p.bitmap, null, dst, null)
+                    else canvas.drawRect(dst, pendingPaint)
                 }
             }
         }
@@ -96,6 +106,36 @@ class OverlayManager(private val context: Context) {
      * Move every patch inside [area] (all of them when null) by the page's scroll: content scrolled
      * down by dy moves up by dy. A patch that leaves the scrolled area is dropped. Returns how many moved.
      */
+    private val predX = ScrollPredictor()
+    private val predY = ScrollPredictor()
+    private var scrollArea: Rect? = null
+    private var animating = false
+    private val frame = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            val t = frameTimeNanos / 1_000_000
+            val sx = predX.onFrame(t)
+            val sy = predY.onFrame(t)
+            if (sx != 0 || sy != 0) shift(sx, sy, scrollArea) else view?.invalidate()
+            if (predX.active || predY.active) Choreographer.getInstance().postFrameCallback(this)
+            else { animating = false; view?.invalidate() }
+        }
+    }
+
+    /**
+     * A real scroll event (main thread): move the blurs to where the content is, then keep them
+     * moving every frame until the next event (ADR-042). Returns how many patches moved now.
+     */
+    fun scrolled(dx: Int, dy: Int, area: Rect?): Int {
+        val t = System.nanoTime() / 1_000_000
+        scrollArea = area
+        val moved = shift(predX.onEvent(dx, t), predY.onEvent(dy, t), area)
+        if (!animating && (predX.active || predY.active)) {
+            animating = true
+            Choreographer.getInstance().postFrameCallback(frame)
+        }
+        return moved
+    }
+
     fun shift(dx: Int, dy: Int, area: Rect?): Int {
         if (dx == 0 && dy == 0) return 0
         var moved = 0
