@@ -32,6 +32,8 @@ data class Policy(
     @SerializedName("checked_apps") val checkedApps: List<String>? = null,
     @SerializedName("checked_interval_s") val checkedIntervalS: Int? = null,
     @SerializedName("follow_scroll") val followScroll: Boolean? = null,
+    /** Off unless the server says true (ADR-047). */
+    @SerializedName("block_whole_screen") val blockWholeScreen: Boolean? = null,
 ) {
     /** How the app in front is watched (ADR-037). An older server sends no levels: real time. */
     fun levelOf(pkg: String): WatchLevel = when {

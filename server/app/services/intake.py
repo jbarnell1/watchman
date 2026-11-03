@@ -10,6 +10,7 @@ Severity at intake:
   miss_reported (the person says something should have been covered; numbers only)   info
   protection_changed (from a client)   info; the server derives its own from heartbeats
   tamper                          protection, alerts
+  block_passed (Continue anyway on a whole-screen block, ADR-047)   protection, alerts
 
 An image is requested when the event has one and no stored image already carries its hash.
 On upload the server scores it with the second opinion, writes heavy and medium blurs, stores
@@ -38,7 +39,7 @@ MAX_BATCH = 200
 IMAGE_TYPES = {"image_covered", "screen_blocked", "image_flagged"}
 KNOWN_TYPES = IMAGE_TYPES | {
     "url_blocked", "search_flagged", "app_blocked", "protection_changed", "tamper",
-    "pause_started", "pause_ended", "daily_stats", "miss_reported",
+    "pause_started", "pause_ended", "daily_stats", "miss_reported", "block_passed",
 }
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_SIDE = 512
@@ -55,7 +56,7 @@ def _initial_severity(event: dict, covered_reports: str) -> str:
     t = event["type"]
     if t in COVERED_TYPES:
         return SEVERITY_REVIEW if covered_reports == "all" else SEVERITY_INFO
-    if t == "tamper":
+    if t in ("tamper", "block_passed"):
         return SEVERITY_PROTECTION
     return SEVERITY_INFO
 

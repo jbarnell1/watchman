@@ -19,11 +19,19 @@ import android.widget.TextView
 class BlockActivity : Activity() {
     companion object {
         private var lastShown = 0L
-        fun show(context: Context, pkg: String) {
+        private const val PASS_MS = 10 * 60 * 1000L
+        private val passedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+        /** The person chose Continue anyway in [pkg] within the last 10 minutes (ADR-047). */
+        fun passed(pkg: String): Boolean = (passedAt[pkg] ?: 0L) > System.currentTimeMillis() - PASS_MS
+
+        /** [pkg] empty means a mostly covered screen in [front]; otherwise [pkg] is a blocked app. */
+        fun show(context: Context, pkg: String, front: String = "") {
             if (System.currentTimeMillis() - lastShown < 1500) return
             lastShown = System.currentTimeMillis()
             context.startActivity(Intent(context, BlockActivity::class.java)
                 .putExtra("pkg", pkg)
+                .putExtra("front", front)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION))
         }
 
@@ -77,7 +85,37 @@ class BlockActivity : Activity() {
             setPadding(48, 24, 48, 24)
             setOnClickListener { goHome() }
         })
+        val front = intent.getStringExtra("front") ?: ""
+        if (pkg.isEmpty() && front.isNotEmpty()) {
+            root.addView(Button(this).apply {
+                text = "Continue anyway"
+                isAllCaps = false
+                textSize = 15f
+                setTextColor(Color.parseColor("#F2F5F6"))
+                background = GradientDrawable().apply { setStroke(2, Color.parseColor("#5B6B70")); cornerRadius = 28f }
+                setPadding(48, 24, 48, 24)
+                setOnClickListener { continueAnyway(front) }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = 24 })
+            root.addView(TextView(this).apply {
+                text = "The pictures stay blurred. Your partners are told you continued."
+                textSize = 13f
+                setTextColor(Color.parseColor("#8A979B"))
+                gravity = Gravity.CENTER
+                setPadding(0, 16, 0, 0)
+            })
+        }
         setContentView(root)
+    }
+
+    /** Back to the app with the blurs in place; partners are alerted (ADR-047). */
+    private fun continueAnyway(front: String) {
+        passedAt[front] = System.currentTimeMillis()
+        app.watchman.android.core.AppState.get(this).record(app.watchman.android.core.WatchmanEvent(
+            type = "block_passed", occurredAt = app.watchman.android.core.Iso.now(), app = front,
+            url = app.watchman.android.access.WatchAccessibilityService.lastUrl,
+        ), null)
+        finish()
     }
 
     private fun goHome() {

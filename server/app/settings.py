@@ -74,6 +74,10 @@ class Settings(BaseModel):
     # exposed keeps them on the record and reports only bare nudity the server's detector finds,
     # or a second opinion at thresholds.covered_report. Pictures not covered are reported as before.
     covered_reports: str = "exposed"   # exposed | all
+    # A screen mostly covered by sure covers gives way to the full block screen (ADR-036). Off by
+    # default: it stopped a health video on 2026-11-03. When on, the block screen offers Continue
+    # anyway, which keeps the blurs and alerts partners (ADR-047).
+    block_whole_screen: bool = False
     risky_apps: list[str] = Field(default_factory=lambda: [
         "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",
     ])
@@ -119,7 +123,7 @@ class Settings(BaseModel):
 
 
 LOCKED_KEYS = frozenset({
-    "follow_scroll", "covered_reports",
+    "block_whole_screen", "follow_scroll", "covered_reports",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "image_retention_days", "peek_seconds", "peek_cooldown_hours", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
@@ -128,7 +132,7 @@ LOCKED_KEYS = frozenset({
 })
 
 POLICY_KEYS = frozenset({
-    "follow_scroll",
+    "block_whole_screen", "follow_scroll",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "person_overrides",
@@ -137,7 +141,7 @@ POLICY_KEYS = frozenset({
 
 # The protection keys a person may have their own values for.
 PERSON_KEYS = frozenset({
-    "follow_scroll",
+    "block_whole_screen", "follow_scroll",
     "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
     "exempt_apps",
     "thresholds", "strict_mode", "coverage", "cover_on_device", "ask_server", "risky_apps", "blocked_apps",

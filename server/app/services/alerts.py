@@ -60,10 +60,15 @@ def protection_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
         what = {"safe_mode": "booted into safe mode", "silent": "has stopped checking in"}.get(
             detail.get("reason"), f"reported tampering ({detail.get('reason')})")
         line = f"{device['name']} {what}."
+    elif event["type"] == "block_passed":
+        line = (f"{device['name']}: {name} chose Continue anyway on a screen that was mostly covered"
+                f" in {event.get('app') or 'an app'}. The pictures stayed blurred.")
     else:
         word = FIELD_WORDS.get(detail.get("field"), detail.get("field"))
         line = f"{device['name']}: {word} turned off ({detail.get('from')} to {detail.get('to')})."
     subject = f"Watchman: protection changed on {name}'s {device['name']}"
+    if event["type"] == "block_passed":
+        subject = f"Watchman: {name} continued past a block on {device['name']}"
     text = (f"{line}\n\nTime: {event['occurred_at']}\n\n"
             f"This alert goes to {name} and every partner. Nothing pauses protection without a partner code.")
     to = recipients(ctx, device["person_id"])

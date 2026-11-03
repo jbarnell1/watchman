@@ -371,6 +371,23 @@ def test_reporting_every_covered_picture_again_is_free_and_stopping_it_is_loosen
     assert loosens("covered_reports", "all", "exposed")
     assert not loosens("covered_reports", "exposed", "all")
 
+def test_continue_anyway_alerts_partners_and_the_block_is_off_by_default(ctx, client, device, clock, mailer):
+    """ADR-047."""
+    _, headers = device
+    assert client.get("/api/v1/policy", headers=headers).json()["block_whole_screen"] is False
+    ev_id = str(uuid.uuid4())
+    client.post("/api/v1/events", headers=headers, json={"events": [{
+        "id": ev_id, "type": "block_passed", "occurred_at": iso(clock.now()), "app": "com.google.android.youtube"}]})
+    assert ctx.events.get(ev_id)["severity"] == "protection"
+    assert len(mailer.sent) == 1 and "continued past a block" in mailer.sent[0].subject
+    assert "com.google.android.youtube" in mailer.sent[0].text
+
+
+def test_turning_the_whole_screen_block_off_is_loosening():
+    from app.services.locks import loosens
+    assert loosens("block_whole_screen", True, False)
+    assert not loosens("block_whole_screen", False, True)
+
 
 def test_server_detector_keeps_each_labels_best_score():
     """ADR-046: YOLOv8 output decoded to one score per label, weak ones dropped."""
