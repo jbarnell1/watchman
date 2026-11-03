@@ -44,7 +44,7 @@ FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scr
 # Lists where adding is stronger and removing anything is weaker.
 LISTS = {"blocked_apps", "risky_apps", "realtime_apps"}
 WATCH_RANK = {"checked": 0, "realtime": 1}
-COVERED_RANK = {"high_score": 0, "all": 1}
+COVERED_RANK = {"exposed": 0, "all": 1}
 
 
 def group_of(key: str) -> str | None:

@@ -18,17 +18,24 @@ app for 10 minutes, and sends `block_passed`, severity protection, which alerts 
 once. It is not a pause: nothing stops being judged or blurred, so it needs no partner code
 (ADR-007). Turning the setting off is loosening and sits in the protection lock group.
 
-### ADR-046 - Covered pictures reach partners only when the server is nearly sure
+### ADR-046 - Covered pictures reach partners when the server sees bare nudity
 **2026-11-03.** The phone covers on the side of caution (ADR-033), so most covered pictures are
-buttons, skin tones and false alarms, and putting every one in partner review buries the few that
-matter. A covered picture was never seen sharp; what is left to talk about is one that was
-unmistakable, which is what a deliberate search produces. New setting `covered_reports`:
-`high_score` (default) keeps covered pictures on the record as info and makes them explicit,
-alerted and in the digest, only at a second opinion of `thresholds.covered_report` (0.90) or
-above; `all` restores review for every covered picture. A picture that was not covered is
-reported as before. Both settings are in the protection lock group: switching to `high_score`
-or raising the line loosens. The what-if page replays with the household's choice. Not done:
-counting many covers in a short time as a search in its own right.
+buttons, skin tones and revealing pictures, and putting every one in partner review buried the
+few that matter: 821 covered pictures in the first 29 hours. A covered picture was never seen
+sharp; what is left to talk about is nudity. The phone's labels could not decide this: its small
+detector had not run on 621 of the 821. So the server now runs its own detector (NudeNet 640m,
+the manifest's `detector_large`) on every uploaded picture before the original is deleted, and
+stores the labels it finds (exposed, covered, faces and so on, at 0.25 or above) with the event
+as `server_labels`; the review page shows them. New setting `covered_reports`: `exposed`
+(default) keeps covered pictures on the record as info and makes them explicit, alerted and in
+the digest, when the server finds a bare breast, genitals, buttocks or anus at
+`thresholds.server_exposed` (0.50) or above, or, as a backstop for what the detector does not
+tag, when the second opinion reaches `thresholds.covered_report` (0.95). `all` restores review
+for every covered picture. A picture that was not covered is reported as before. Both settings
+are in the protection lock group: switching to `exposed` or raising a line loosens. The what-if
+page replays with the household's choice. Pictures from before the server tagged cannot be
+tagged now (only blurred copies are kept, ADR-004). Not done: counting many covers in a short
+time as a search in its own right.
 
 ### ADR-045 - Without the finger, blurs lift while a list scrolls
 **2026-11-03.** Blurs moved by scroll events never lined up with the picture (ADR-042), and
