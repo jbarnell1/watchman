@@ -3,7 +3,6 @@ package app.watchman.android.core
 import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -279,93 +278,6 @@ class CoreTest {
         repeat(120) { t += 8; tail += p.onFrame(t) }
         assertFalse(p.active)
         assertTrue(tail in 100..400)
-    }
-
-    @Test
-    fun touchscreenIsFoundInGeteventOutput() {
-        val text = """
-add device 1: /dev/input/event3
-  name:     "gpio-keys"
-  events:
-    KEY (0001): KEY_VOLUMEDOWN
-add device 2: /dev/input/event2
-  name:     "fts_ts"
-  events:
-    ABS (0003): ABS_MT_SLOT           : value 0, min 0, max 9, fuzz 0, flat 0, resolution 0
-                ABS_MT_POSITION_X     : value 0, min 0, max 1343, fuzz 0, flat 0, resolution 0
-                ABS_MT_POSITION_Y     : value 0, min 0, max 2991, fuzz 0, flat 0, resolution 0
-"""
-        assertEquals(Touch.Device("/dev/input/event2", 1343, 2991), Touch.findDevice(text))
-        assertNull(Touch.findDevice("add device 1: /dev/input/event0\n  name: \"keys\""))
-    }
-
-    @Test
-    fun decoderTurnsMultiTouchEventsIntoOneFinger() {
-        val d = TouchDecoder()
-        fun abs(code: Int, v: Int) = assertNull(d.feed(TouchDecoder.EV_ABS, code, v, 0))
-        fun syn(t: Long) = d.feed(TouchDecoder.EV_SYN, TouchDecoder.SYN_REPORT, 0, t)
-        abs(TouchDecoder.ABS_MT_SLOT, 0); abs(TouchDecoder.ABS_MT_TRACKING_ID, 7)
-        abs(TouchDecoder.ABS_MT_POSITION_X, 500); abs(TouchDecoder.ABS_MT_POSITION_Y, 1500)
-        assertEquals(TouchDecoder.Sample(Touch.DOWN, 500, 1500, 1), syn(1))
-        abs(TouchDecoder.ABS_MT_POSITION_Y, 1450)
-        assertEquals(TouchDecoder.Sample(Touch.MOVE, 500, 1450, 2), syn(2))
-        assertNull(syn(3))  // nothing changed
-        // A second finger makes it a pinch until every finger lifts.
-        abs(TouchDecoder.ABS_MT_SLOT, 1); abs(TouchDecoder.ABS_MT_TRACKING_ID, 8)
-        assertEquals(Touch.MULTI, syn(4)!!.kind)
-        abs(TouchDecoder.ABS_MT_TRACKING_ID, -1)
-        abs(TouchDecoder.ABS_MT_SLOT, 0); abs(TouchDecoder.ABS_MT_POSITION_Y, 1400)
-        assertNull(syn(5))
-        abs(TouchDecoder.ABS_MT_TRACKING_ID, -1)
-        assertEquals(Touch.UP, syn(6)!!.kind)
-    }
-
-    @Test
-    fun fingerMovesBlursPastTheSlopAndEventsCorrectOnlyRealDrift() {
-        val f = FingerScroll(slopPx = 20)
-        f.down(2000, 0)
-        assertEquals(0, f.move(1990, 8))   // inside the slop
-        assertEquals(10, f.move(1970, 16)) // 30 px of travel, 20 px slop
-        var applied = 10
-        var t = 16L
-        repeat(10) { t += 8; applied += f.move(1970 - 16 * (it + 1), t) }
-        assertEquals(170, applied)
-        // The event agrees within the lag of a 2 px/ms drag: no correction.
-        assertEquals(0, f.event(165, t))
-        // A header that collapsed swallowed 120 px: corrected beyond the allowance.
-        val c = f.event(-120, t + 1)
-        assertTrue(c < -15 && c >= -120)
-        val lift = f.up(t + 2)
-        assertTrue(lift.velocity > 1.5)
-    }
-
-    @Test
-    fun aDragThatScrollsNothingIsUndone() {
-        val f = FingerScroll(slopPx = 20)
-        f.down(1000, 0)
-        val moved = f.move(950, 10) + f.move(900, 20)
-        assertEquals(80, moved)
-        assertEquals(0, f.check(100))  // still waiting for a scroll event
-        assertEquals(-80, f.check(10 + FingerScroll.CONFIRM_MS))
-        assertFalse(f.following)
-        // Lifting without any event undoes it too.
-        f.down(1000, 1000); f.move(900, 1010)
-        assertEquals(-80, f.up(1020).correction)
-    }
-
-    @Test
-    fun predictorTakesOverTheFlingFromTheFinger() {
-        val p = ScrollPredictor()
-        p.handOff(2.0, 30.0, 1_000)
-        assertTrue(p.active)
-        var moved = 0
-        var t = 1_000L
-        repeat(6) { t += 8; moved += p.onFrame(t) }
-        assertTrue(moved in 90..100)
-        // The next event covers the 30 px applied before the lift as well.
-        assertEquals(200 - 30 - moved, p.onEvent(200, 1_100))
-        p.stop()
-        assertFalse(p.active)
     }
 
     @Test

@@ -41,7 +41,6 @@ class WatchAccessibilityService : AccessibilityService() {
         instance = this
         watcher = ScreenWatcher(this)
         AppState.get(this).onChanged?.invoke()
-        app.watchman.android.touch.FingerFeed.start(this)
         // After a (re)connect nothing reports the screen until the app changes something, and a
         // playing video changes nothing the tree shows: look at what is on screen now (ADR-043).
         android.os.Handler(mainLooper).postDelayed({
@@ -80,7 +79,7 @@ class WatchAccessibilityService : AccessibilityService() {
             lastScrollPkg = pkg
             lastScrollAt = now
             metrics.count(if (ScrollShift.known(dx, dy)) "scroll_events" else "scroll_unknown_delta")
-            // Blurs follow the finger or lift until the list settles (ADR-044, ADR-045).
+            // Blurs follow the scroll or lift until the list settles (ADR-042, ADR-045).
             val area = android.graphics.Rect()
             event.source?.getBoundsInScreen(area)
             watcher?.scrolled(ScrollShift.of(dx), ScrollShift.of(dy), ScrollShift.known(dx, dy), if (area.isEmpty) null else area)
