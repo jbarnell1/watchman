@@ -32,6 +32,8 @@ class WatchmanService : Service() {
         const val NOTIFICATION_ID = 1
         private const val TAG = "WatchmanService"
         const val ACTION_MISSED = "app.watchman.android.MISSED"
+        /** UsbManager.ACTION_USB_STATE, hidden from the SDK but sent to every app. */
+        private const val USB_STATE = "android.hardware.usb.action.USB_STATE"
         const val REJECTED_MESSAGE = "The server no longer accepts this device. Protection stays on. Pair again with a new code."
         @Volatile var running = false
         @Volatile var lastHeartbeatAt: Long = 0
@@ -59,6 +61,22 @@ class WatchmanService : Service() {
         }
     }
 
+    /** Android's USB state broadcast: whether a cable is in and adb runs on it. Sticky, so it is read at start too. */
+    private val usbReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) { noteUsb(intent) }
+    }
+
+    private fun noteUsb(intent: Intent?) {
+        if (intent == null || !intent.hasExtra("connected")) return
+        val usb = DebugFlags.Usb(intent.getBooleanExtra("connected", false), intent.getBooleanExtra("adb", false))
+        val before = state.usbDebugging
+        val now = DebugFlags.remember(usb, before)
+        if (now != before) {
+            state.usbDebugging = now
+            if (now == true) scope.launch { heartbeat(force = true) }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         state = AppState.get(this)
@@ -70,6 +88,11 @@ class WatchmanService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
         })
+        try {
+            val filter = android.content.IntentFilter(USB_STATE)
+            noteUsb(if (Build.VERSION.SDK_INT >= 33) registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED)
+                    else registerReceiver(usbReceiver, filter))
+        } catch (e: Exception) { Log.w(TAG, "usb state", e) }
         if (getSystemService(android.os.PowerManager::class.java)?.isInteractive == true) JudgeTally.shared.screenOn()
         scope.launch { aliveLoop() }
         scope.launch { loop() }
@@ -104,12 +127,13 @@ class WatchmanService : Service() {
         }
     }
 
-    /** Developer options and USB debugging, for the heartbeat's `device` field; null when unreadable. */
-    private fun deviceFlags(): Map<String, Boolean>? = try {
+    /** Developer options and USB debugging, for the heartbeat's `device` field; a value is null when unknown. */
+    private fun deviceFlags(): Map<String, Boolean?>? = try {
         val cr = contentResolver
-        mapOf(
-            "developer_options" to (android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0),
-            "usb_debugging" to (android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.ADB_ENABLED, 0) != 0),
+        DebugFlags.decide(
+            android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.ADB_ENABLED, 0),
+            android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0),
+            state.usbDebugging,
         )
     } catch (e: Exception) { null }
 
@@ -295,6 +319,7 @@ class WatchmanService : Service() {
         // A stop inside a partner-code pause already reported itself; see ProtectionGap.decide.
         try { if (state.policy?.isPaused() == true) state.cleanStop = true } catch (_: Exception) { }
         runCatching { unregisterReceiver(screenReceiver) }
+        runCatching { unregisterReceiver(usbReceiver) }
         JudgeTally.shared.screenOff()
         scope.cancel()
         super.onDestroy()

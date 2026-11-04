@@ -171,4 +171,19 @@ class ProtectionTest {
         assertTrue(p.thresholds.cover < 1.0)
         assertTrue(!p.isPaused())
     }
+
+    @Test
+    fun debuggingIsUnknownUntilACableShowsIt() {
+        // Android hides the settings from apps: 0 is not "off".
+        assertEquals(mapOf("developer_options" to null, "usb_debugging" to null), DebugFlags.decide(0, 0, null))
+        // A cable with adb on: both on, and remembered after the cable comes out.
+        val seen = DebugFlags.remember(DebugFlags.Usb(connected = true, adb = true), null)
+        assertEquals(true, DebugFlags.remember(DebugFlags.Usb(connected = false, adb = false), seen))
+        assertEquals(mapOf("developer_options" to true, "usb_debugging" to true), DebugFlags.decide(0, 0, seen))
+        // A cable without adb: debugging is off; developer options stay unknown.
+        val off = DebugFlags.remember(DebugFlags.Usb(connected = true, adb = false), seen)
+        assertEquals(mapOf("developer_options" to null, "usb_debugging" to false), DebugFlags.decide(0, 0, off))
+        // Where the settings can be read (older Android, privileged builds), a 1 wins.
+        assertEquals(mapOf("developer_options" to true, "usb_debugging" to true), DebugFlags.decide(1, 1, false))
+    }
 }

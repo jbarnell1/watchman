@@ -51,6 +51,11 @@ class AppState private constructor(context: Context) {
         get() = prefs.get("alive_at")?.toLongOrNull()
         set(v) { prefs.put("alive_at", v?.toString()) }
 
+    /** The last USB debugging state a connected cable showed; null until one has (see [DebugFlags]). */
+    var usbDebugging: Boolean?
+        get() = prefs.get("usb_debugging")?.let { it == "1" }
+        set(v) { prefs.put("usb_debugging", v?.let { if (it) "1" else "0" }) }
+
     /** Set only by a stop that already reported itself (a partner-code pause). */
     var cleanStop: Boolean
         get() = prefs.get("clean_stop") == "1"
