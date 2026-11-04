@@ -161,3 +161,22 @@ class SecureApps(private val now: () -> Long = { System.currentTimeMillis() },
         for ((k, v) in seconds) ms[k] = (ms[k] ?: 0) + v * 1000
     }
 }
+
+/**
+ * The heartbeat's `device` field. Since Android 14, Settings.Global's ADB_ENABLED and
+ * DEVELOPMENT_SETTINGS_ENABLED read 0 for every ordinary app, so a 0 there means "unknown", not "off".
+ * The USB state broadcast still says whether adb runs on a connected cable; its last reading is kept
+ * across cables and restarts. Debugging needs developer options, so seeing it shows both.
+ */
+object DebugFlags {
+    data class Usb(val connected: Boolean, val adb: Boolean)
+
+    /** What to keep as the last known USB debugging state after a reading, or [kept] when it says nothing. */
+    fun remember(usb: Usb?, kept: Boolean?): Boolean? = if (usb != null && usb.connected) usb.adb else kept
+
+    fun decide(settingsAdb: Int, settingsDev: Int, lastKnownUsb: Boolean?): Map<String, Boolean?> {
+        val usb = if (settingsAdb == 1) true else lastKnownUsb
+        val dev = if (settingsDev == 1 || usb == true) true else null
+        return mapOf("developer_options" to dev, "usb_debugging" to usb)
+    }
+}

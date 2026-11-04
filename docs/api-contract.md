@@ -81,7 +81,9 @@ Optional, ADR-051:
 the seconds nothing was meant to be judged (a partner pause, an app in `exempt_apps`, a secure
 screen), and how many checks ran a model on a frame. Fifteen watched minutes in an hour with
 `judged` 0 raises `tamper` with `detail.reason` `not_judging`. `device` is Android's developer
-options and USB debugging; debugging turning on raises `protection_changed` (`usb_debugging`).
+options and USB debugging, each true, false or null for unknown: since Android 14 apps read both
+settings as 0, so the app reports USB debugging from the last cable it saw and developer options only
+when that shows debugging. Debugging turning on raises `protection_changed` (`usb_debugging`).
 `secure_apps` is seconds per package that a screen the app protects from capture was in front,
 at most 64 packages. Like `metrics`, a client that fails to deliver a heartbeat carries these
 counts to the next one.
