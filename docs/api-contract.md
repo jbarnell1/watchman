@@ -71,6 +71,8 @@ this shape; names are at most 48 characters and 64 of each kind. They are not ke
 Response 200: `{"policy_version": 7, "paused_until": null, "server_time": "..."}`.
 The server compares `state` with the previous heartbeat: a field turning off raises a
 `protection_changed` event and an alert; `safe_mode: true` after `false` raises `tamper`.
+A field the device reported before and now leaves out or sends as `null` counts as turned off
+(ADR-050). While a device stays off or silent, everyone is reminded every `realert_hours`.
 The client fetches `/api/v1/policy` when `policy_version` changed.
 
 ### GET /api/v1/policy/version
@@ -198,7 +200,10 @@ Scored in memory, nothing stored, no event. Devices use it for crops between `th
 
 ### POST /api/v1/unlock
 Body: `{"code": "482-913"}`. Response 200: `{"paused_until": "..."}`. Codes are single use, issued
-by a partner, and carry their own length (capped by the `max_pause_minutes` setting).
+by a partner, and carry their own length (capped by the `max_pause_minutes` setting). A code from
+a partner still in their three-day waiting period does not count. After five wrong codes in 15
+minutes the device gets 429 `rate_limited`; the tenth wrong code in an hour raises a `tamper`
+event with `detail.reason` `code_guessing` (ADR-050).
 
 ### POST /api/v1/unlock/request
 Body: `{"minutes": 30, "reason": "work upload"}`. Emails each email-only partner a code and
@@ -222,9 +227,9 @@ Server-rendered pages under `/`. Roles: `admin`, `protected`, `partner`. A login
 | `/images/{event_id}/medium?t=` | linked partner, with a peek token | the medium blur, once |
 | `/codes` | partner | Issue a pause code (length up to the cap) or a settings code (ADR-016) |
 | `/devices` | all who see the person | Devices, last heartbeat, state; admin and protected create pairing codes; admin revokes (alerts) |
-| `/settings?area=general|protection|email|people` | admin | All settings; locked ones need a partner settings code once a device is paired |
+| `/settings?area=general|protection|email|people` | admin | All settings. With locks on, loosening a locked one needs a partner settings code, paired device or not; every loosening emails everyone at once (ADR-050). Adding a partner beside existing ones needs their settings code and the new partner's codes count after three days |
 | `/whatif?days=&ask=&sure=&cover=&flag=&detector_cover=&second_opinion=` | admin or partner | Replays the stored scores of the last 1, 7 or 30 days against proposed thresholds: covered, asked, reported, explicit, review and false-alarm counts per app, now and proposed (ADR-041). Numbers only; changes nothing |
-| `/setup` | first login | First-run wizard |
+| `/setup` | first login | First-run wizard; 403 once setup is complete (ADR-050) |
 | `/auth/login?next=` | anyone (OIDC mode only) | Starts the sign-in: redirect to the provider with state, nonce and a PKCE challenge |
 | `/auth/callback` | the provider's redirect (OIDC mode only) | Checks state, redeems the code, validates the ID token, sets the session cookie, goes to `next` |
 | `/auth/logout` (GET or POST) | anyone (OIDC mode only) | Clears the session cookie on this browser |

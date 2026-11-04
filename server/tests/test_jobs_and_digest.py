@@ -38,7 +38,7 @@ def test_retention_removes_images_then_events(ctx, client, device, clock, opinio
     assert not ctx.blobs.exists(ev_id)
     assert ctx.events.get(ev_id)["image_status"] == "expired"
     clock.advance(days=360)
-    assert jobs.retention(ctx)[1] == 1
+    assert jobs.retention(ctx)[1] == 2          # the event and the pairing record
     assert ctx.events.get(ev_id) is None
 
 

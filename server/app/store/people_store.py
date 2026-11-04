@@ -64,7 +64,8 @@ class PeopleStore:
     # Partners
 
     def add_partner(self, person_id: str, name: str, email: str, link_type: str,
-                    login: str | None = None) -> str:
+                    login: str | None = None, trusted_at: str | None = None) -> str:
+        """[trusted_at]: when this partner's codes start to count; None is at once (ADR-050)."""
         if link_type not in ("linked", "email"):
             raise ValueError("link_type must be linked or email")
         if link_type == "linked" and not login:
@@ -72,14 +73,17 @@ class PeopleStore:
         pid = str(uuid.uuid4())
         with self.conn:
             self.conn.execute(
-                "INSERT INTO partners(id, person_id, name, email, link_type, login, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO partners(id, person_id, name, email, link_type, login, created_at, trusted_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (pid, person_id, name, email, link_type, login.lower() if login else None,
-                 iso(self.clock.now())),
+                 iso(self.clock.now()), trusted_at),
             )
             if login:
                 self.add_login(login, "partner", person_id, pid)
         return pid
+
+    def is_trusted(self, partner: sqlite3.Row) -> bool:
+        return not partner["trusted_at"] or partner["trusted_at"] <= iso(self.clock.now())
 
     def get_partner(self, partner_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM partners WHERE id = ?", (partner_id,)).fetchone()

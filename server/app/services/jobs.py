@@ -46,6 +46,38 @@ def heartbeat_watch(ctx: Context) -> int:
     return raised
 
 
+def reminders(ctx: Context) -> int:
+    """While a device stays silent or reports protection off, remind everyone every realert_hours
+    (ADR-050). One alert at the start of a gap is easy to miss or explain away."""
+    from app.services.heartbeat import off_fields
+
+    settings = ctx.settings.load()
+    now = ctx.clock.now()
+    every = timedelta(hours=settings.realert_hours)
+    sent = 0
+    for device in ctx.devices.list_active():
+        if not device["reminded_at"] or now - parse_iso(device["reminded_at"]) < every:
+            continue
+        state = (json.loads(device["last_state"] or "null") or {}).get("state") or {}
+        silent = bool(device["silent_reported_at"])
+        off = off_fields(state)
+        if not silent and not off:
+            continue
+        person = ctx.people.get_person(device["person_id"])
+        name = person["name"] if person else "the protected person"
+        since = device["silent_reported_at"] if silent else device["reminded_at"]
+        what = (f"has not checked in since {device['last_heartbeat_at']}" if silent
+                else f"still reports {', '.join(off)} off")
+        alerts.change_alert(ctx, f"{name}'s {device['name']} is still unprotected", [
+            f"{device['name']} {what}.",
+            f"First noticed {since}. You will be reminded every {settings.realert_hours} hours until it is back.",
+        ], device["person_id"])
+        with ctx.conn:
+            ctx.devices.set_reminded(device["id"], iso(now))
+        sent += 1
+    return sent
+
+
 def digests_due(ctx: Context) -> int:
     now = ctx.clock.now()
     sent = 0
@@ -71,8 +103,9 @@ def retention(ctx: Context) -> tuple[int, int]:
 
 
 def tick(ctx: Context) -> dict:
-    out = {"silent": 0, "digests": 0, "images_removed": 0, "events_purged": 0}
-    for name, fn in (("heartbeat", heartbeat_watch), ("digests", digests_due), ("retention", retention)):
+    out = {"silent": 0, "reminders": 0, "digests": 0, "images_removed": 0, "events_purged": 0}
+    for name, fn in (("heartbeat", heartbeat_watch), ("reminders", reminders), ("digests", digests_due),
+                     ("retention", retention)):
         try:
             result = fn(ctx)
         except Exception as exc:
@@ -80,6 +113,8 @@ def tick(ctx: Context) -> dict:
             continue
         if name == "heartbeat":
             out["silent"] = result
+        elif name == "reminders":
+            out["reminders"] = result
         elif name == "digests":
             out["digests"] = result
         else:

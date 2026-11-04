@@ -314,7 +314,8 @@ def test_judge_scores_in_memory_and_keeps_nothing(ctx, client, device, opinion):
     Image.linear_gradient("L").resize((200, 200)).convert("RGB").save(gradient, format="JPEG")
     assert client.post("/api/v1/judge", headers=headers, content=gradient.getvalue()).json()["verdict"] == "explicit"
     assert list(ctx.config.images_dir.iterdir()) == []
-    assert ctx.events.timeline(device[0]["person_id"]) == []
+    # Only the pairing record: nothing about the judged pictures was kept.
+    assert [e["type"] for e in ctx.events.timeline(device[0]["person_id"])] == ["protection_changed"]
     assert client.get("/api/v1/policy", headers=headers).json()["thresholds"]["ask"] == 0.60
     assert client.post("/api/v1/judge", headers=headers, content=b"not an image").status_code == 400
 

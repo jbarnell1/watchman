@@ -7,9 +7,13 @@ Keys in POLICY_KEYS bump the policy version so devices refetch /api/v1/policy.
 
 from __future__ import annotations
 
+import re
 from typing import Any
+from zoneinfo import available_timezones
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
 class Thresholds(BaseModel):
@@ -53,8 +57,9 @@ class Settings(BaseModel):
     timezone: str = "UTC"
     digest_day: str = "sunday"          # monday ... sunday
     digest_time: str = "19:00"          # HH:MM in the household time zone
-    image_retention_days: int = 7
-    event_retention_days: int = 365
+    # Lower bounds so the record cannot be emptied by a setting (ADR-050).
+    image_retention_days: int = Field(default=7, ge=1)
+    event_retention_days: int = Field(default=365, ge=30)
     peek_seconds: int = Field(default=3, ge=1, le=3)   # the light-blur peek, three seconds at most (ADR-031)
     # Between two peeks by the same viewer. A day by default (ADR-031); seconds so a household that
     # is testing can set it short (ADR-048).
@@ -120,12 +125,36 @@ class Settings(BaseModel):
     locks_on: bool = False
     max_pause_minutes: int = 60
     heartbeat_gap_minutes: int = 30
+    # While a device stays off or silent, partners are reminded this often (ADR-050).
+    realert_hours: int = Field(default=6, ge=1, le=48)
     smtp: Smtp = Field(default_factory=Smtp)
     ntfy_url: str = ""                  # optional push for the household admin
     adguard_url: str = ""               # informational, shown on the devices page
     second_opinion_device: str = "cpu"  # cpu | cuda
     setup_complete: bool = False
     policy_version: int = 1
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, v: str) -> str:
+        # An unknown zone stopped the digest job (ADR-050).
+        if v not in available_timezones() and v != "UTC":
+            raise ValueError(f"unknown time zone {v}")
+        return v
+
+    @field_validator("digest_day")
+    @classmethod
+    def _day(cls, v: str) -> str:
+        if v.lower() not in DAYS:
+            raise ValueError("digest_day must be a day of the week")
+        return v.lower()
+
+    @field_validator("digest_time")
+    @classmethod
+    def _time(cls, v: str) -> str:
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", v):
+            raise ValueError("digest_time must be HH:MM")
+        return v
 
     @model_validator(mode="before")
     @classmethod
@@ -145,7 +174,8 @@ LOCKED_KEYS = frozenset({
     "self_peek", "thresholds", "strict_mode", "coverage",
     "cover_on_device", "ask_server", "person_overrides", "unlocked_groups", "locks_on", "exempt_apps",
     "risky_apps", "blocked_apps", "protected_browser", "sample_interval_s",
-    "whole_screen_interval_s", "max_pause_minutes", "heartbeat_gap_minutes",
+    "whole_screen_interval_s", "max_pause_minutes", "heartbeat_gap_minutes", "realert_hours",
+    "smtp", "ntfy_url", "digest_day", "digest_time", "timezone", "event_retention_days",
 })
 
 POLICY_KEYS = frozenset({

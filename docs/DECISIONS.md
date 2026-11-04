@@ -8,6 +8,38 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-050 - Loosening is loud and gated
+**2026-11-03.** A circumvention review (eight reviewers, each taking the side of a protected
+person who also runs the server, with an AI agent to help) found that most ways around Watchman
+needed no skill: re-run setup, add a partner you control, change the mail server or the digest
+day, or loosen anything while locks were off, and partners heard nothing until the digest, if at
+all. Now:
+- `/setup` runs once. After `setup_complete` it answers 403; later changes go through the
+  settings pages and their locks.
+- A new lock group, reporting: `smtp`, `ntfy_url`, `digest_day`, `digest_time`, `timezone`.
+  Any change to them is loosening, except setting up mail for the first time. Retention moves into
+  the retention group with `event_retention_days`, which has a floor of 30 days (images 1).
+  Unknown time zones and malformed digest times are refused, and a stored value that breaks a
+  rule falls back to its default instead of stopping the digest job.
+- Locks apply once `locks_on` is on, whether or not a device is paired: unpairing every device,
+  loosening and pairing again no longer skips them.
+- Every change that loosens a guarded setting emails the protected person and every partner at
+  once, locks on or off, before the change is saved (so a new mail server is announced through
+  the old one). So do a new device being paired, a partner added and a partner removed (the
+  removed partner hears it too).
+- A partner added beside existing ones needs a settings code from one of them when locks apply,
+  and their own codes count only after three days (`partners.trusted_at`). The first partner of a
+  person needs neither.
+- Partner codes are six digits, so guessing is slowed: five wrong codes in 15 minutes from one
+  device (or on the portal for settings codes) and the next try is refused with 429; the tenth
+  wrong code in an hour raises `tamper` with reason `code_guessing`, which alerts.
+- A device that stays silent or keeps reporting protection off is announced again every
+  `realert_hours` (default 6, in the timing lock group) until it is whole.
+- A state field a device used to report and now leaves out or sends as null counts as off.
+
+Rejected: making `locks_on` default to on. The owner is still tuning, and the immediate alerts
+make loosening visible without stopping that work. Partner keys (ADR-053) turn locks on for good.
+
 ### ADR-049 - iOS: Safari blurs and reports; no screen recording
 **2026-11-03.** The broadcast extension of ADR-020 needs the person to start a screen recording,
 shows the system's red recording indicator the whole time (no app can hide it) and stops after a

@@ -145,9 +145,13 @@ class DevicesStore:
     def purge_heartbeats_before(self, cutoff: datetime) -> int:
         return self.conn.execute("DELETE FROM heartbeats WHERE at < ?", (iso(cutoff),)).rowcount
 
+    def set_reminded(self, device_id: str, when: str | None) -> None:
+        self.conn.execute("UPDATE devices SET reminded_at = ? WHERE id = ?", (when, device_id))
+
     def mark_silent_reported(self, device_id: str) -> None:
+        now = iso(self.clock.now())
         self.conn.execute(
-            "UPDATE devices SET silent_reported_at = ? WHERE id = ?", (iso(self.clock.now()), device_id)
+            "UPDATE devices SET silent_reported_at = ?, reminded_at = ? WHERE id = ?", (now, now, device_id)
         )
 
     def protection_on(self, person_id: str | None = None) -> bool:

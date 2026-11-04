@@ -75,14 +75,15 @@ def household(ctx):
 
 
 @pytest.fixture
-def device(ctx, client, household):
-    """A paired Android device. Returns (device_row, auth_headers)."""
+def device(ctx, client, household, mailer):
+    """A paired Android device. Returns (device_row, auth_headers). The pairing alert is cleared."""
     with ctx.conn:
         code = ctx.devices.create_pairing_code(household["person_id"])
     r = client.post("/api/v1/pair", json={"code": code, "device": {
         "name": "Pixel", "platform": "android", "kind": "app", "app_version": "0.1.0"}})
     assert r.status_code == 200, r.text
     body = r.json()
+    mailer.sent.clear()
     headers = {"Authorization": f"Bearer {body['token']}"}
     return ctx.devices.get(body["device_id"]), headers
 

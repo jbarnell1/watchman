@@ -13,16 +13,32 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app.clients.mailer import Mail
 from app.clients.second_opinion import FakeSecondOpinion
 from app.clock import iso, parse_iso
 from app.portal.viewer import Viewer, pick_person, require_viewer
-from app.services import alerts, digest, health, heartbeat, intake, locks, metrics, pairlink, peeks, unlock, whatif
+from app.services import (
+    alerts,
+    attempts,
+    digest,
+    health,
+    heartbeat,
+    intake,
+    locks,
+    metrics,
+    pairlink,
+    peeks,
+    unlock,
+    whatif,
+)
 from app.services.context import Context
 from app.services.errors import ApiError, Forbidden, NotFound
 from app.settings import PERSON_KEYS, PRESET_LABELS, PRESETS, Thresholds, coerce, effective
 from app.store.events_store import SEVERITY_PROTECTION
 
 router = APIRouter()
+# How long a partner added beside existing ones waits before their codes count (ADR-050).
+PARTNER_WAITING = timedelta(days=3)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
@@ -362,6 +378,8 @@ async def issue_code(request: Request, ctx: Context = Depends(get_ctx)) -> Respo
         raise Forbidden("only a partner can issue codes")
     purpose = str(form.get("purpose", "pause"))
     minutes = int(form.get("minutes", 0) or 0)
+    if not ctx.people.is_trusted(partner):
+        raise Forbidden(f"a new partner's codes count from {partner['trusted_at']} (ADR-050)")
     with ctx.conn:
         if purpose == "settings":
             _, code = ctx.codes.create_code(person_id, partner["id"], 0, purpose="settings")
@@ -384,11 +402,21 @@ AREAS: dict[str, list[str]] = {
                    "blocked_apps", "exempt_apps", "protected_browser",
                    "watch_default", "realtime_apps", "checked_apps", "checked_interval_s",
                    "sample_interval_s", "whole_screen_interval_s", "max_pause_minutes",
-                   "heartbeat_gap_minutes", "peek_seconds", "peek_cooldown_seconds",
+                   "heartbeat_gap_minutes", "realert_hours", "peek_seconds", "peek_cooldown_seconds",
                    "self_peek", "second_opinion_device"],
     "email": ["smtp"],
     "people": [],
 }
+
+
+# Settings sent as one form field of their own; a page without the field leaves the value alone.
+# Checkboxes are not here: an unchecked box is absent, and means off.
+PLAIN_FIELDS = frozenset({
+    "household_name", "timezone", "digest_day", "digest_time", "image_retention_days", "event_retention_days",
+    "ntfy_url", "adguard_url", "realert_hours", "heartbeat_gap_minutes", "sample_interval_s",
+    "whole_screen_interval_s", "checked_interval_s", "max_pause_minutes", "peek_seconds", "peek_cooldown_seconds",
+    "second_opinion_device", "protected_browser", "watch_default", "coverage", "covered_reports",
+})
 
 
 def _parse_setting(key: str, form) -> object:
@@ -440,7 +468,7 @@ async def settings_page(request: Request, ctx: Context = Depends(get_ctx)) -> Re
     if area not in AREAS:
         raise NotFound("no such settings area")
     person = pick_person(v, request)
-    locked = ctx.devices.protection_on() and ctx.settings.load().locks_on
+    locked = locks.locks_apply(ctx)
     people = ctx.people.list_people()
     for_person = ctx.people.get_person(request.query_params.get("for", "")) if request.query_params.get("for") else None
     household = ctx.settings.load()
@@ -464,8 +492,8 @@ def _check_settings_code(ctx: Context, form, changes: dict, group: str | None = 
     """ADR-028: tightening is free; loosening a locked setting (or acting on a locked group, such as
     removing a partner) needs a partner's settings code once a device is paired."""
     current = ctx.settings.load()
-    # Locks apply once a device is paired and the household has turned them on.
-    if not ctx.devices.protection_on() or not current.locks_on:
+    # Locks apply once the household turns them on, paired device or not (ADR-050).
+    if not locks.locks_apply(ctx):
         return
     loosened = locks.needs_code(current, changes)
     if group is not None and group in locks.locked_groups(current):
@@ -474,14 +502,41 @@ def _check_settings_code(ctx: Context, form, changes: dict, group: str | None = 
         return
     code = str(form.get("partner_code", "")).strip()
     if not code:
-        what = ", ".join(locks.LABELS.get(k, "removing a partner" if k == "partners" else k) for k in loosened)
+        what = ", ".join(locks.LABELS.get(k, "adding or removing a partner" if k == "partners" else k)
+                         for k in loosened)
         raise ApiError(f"loosening {what} needs a partner's settings code; tightening never does",
                        code="locked_setting")
+    attempts.check(ctx, "settings")
     # A settings code from any partner of any person on this server unlocks the change.
     for person in ctx.people.list_people():
         if ctx.codes.consume_code(person["id"], code, purpose="settings"):
             return
+    if attempts.failed(ctx, "settings"):
+        unlock.guessing(ctx, None)
     raise ApiError("the partner code is wrong or used", code="unlock_code_invalid")
+
+
+def _alert_loosening(ctx: Context, v: Viewer, changes: dict, person_id: str | None = None) -> None:
+    """Loosening reaches partners at once, locks on or off (ADR-050). Sent before the change is
+    saved, so a change to the mail settings is announced through the ones that worked."""
+    current = ctx.settings.load()
+    keys = locks.loosened(current, changes)
+    if not keys:
+        return
+    person = ctx.people.get_person(person_id) if person_id else None
+    what = ", ".join(locks.LABELS.get(k, k) for k in keys)
+    lines = [f"{v.login} loosened {what}{' for ' + person['name'] if person else ''}."]
+    for k in keys:
+        if k == "smtp":
+            lines.append("  the mail server settings changed")
+        elif k != "person_overrides":
+            lines.append(f"  {locks.LABELS.get(k, k)}: {json.dumps(_plain(getattr(current, k)))} to "
+                         f"{json.dumps(_plain(changes[k]))}")
+    alerts.change_alert(ctx, "a setting was loosened", lines)
+
+
+def _plain(value):
+    return value.model_dump() if hasattr(value, "model_dump") else value
 
 
 @router.post("/settings/{area}")
@@ -499,6 +554,8 @@ async def settings_save(area: str, request: Request, ctx: Context = Depends(get_
         for key in AREAS[area]:
             if for_person and key not in PERSON_KEYS:
                 continue
+            if key in PLAIN_FIELDS and key not in form:
+                continue   # not on the page that was sent: unchanged
             new = _parse_setting(key, form)
             typed = coerce(key, new)
             old = getattr(current, key)
@@ -518,6 +575,8 @@ async def settings_save(area: str, request: Request, ctx: Context = Depends(get_
             values = {"person_overrides": overrides} if overrides != current.person_overrides else {}
         with ctx.conn:
             _check_settings_code(ctx, form, values)
+        _alert_loosening(ctx, v, values, for_person or None)
+        with ctx.conn:
             for key, value in values.items():
                 ctx.settings.set(key, value, login=v.login)
     except ApiError as exc:
@@ -542,6 +601,9 @@ async def settings_reset_person(request: Request, ctx: Context = Depends(get_ctx
         with ctx.conn:
             if overrides != current.person_overrides:
                 _check_settings_code(ctx, form, {"person_overrides": overrides})
+        if overrides != current.person_overrides:
+            _alert_loosening(ctx, v, {"person_overrides": overrides}, for_person)
+            with ctx.conn:
                 ctx.settings.set("person_overrides", overrides, login=v.login)
     except ApiError as exc:
         return RedirectResponse(f"/settings?area=protection&for={for_person}&error={exc.message}", status_code=303)
@@ -569,13 +631,34 @@ async def add_partner(request: Request, ctx: Context = Depends(get_ctx)) -> Resp
     if not v.is_admin:
         raise Forbidden("only the admin can add partners")
     form = await request.form()
+    person_id = str(form.get("person", ""))
+    person = ctx.people.get_person(person_id)
+    if person is None:
+        raise NotFound("no such person")
+    name = str(form.get("name", "")).strip()
+    email = str(form.get("email", "")).strip()
+    existing = ctx.people.partners_for(person_id)
+    # A partner added beside existing ones needs one of them to agree (a settings code, when locks
+    # apply) and their own codes count only after PARTNER_WAITING (ADR-050): otherwise the admin
+    # could add a partner they control and issue codes to themselves.
+    trusted_at = iso(ctx.clock.now() + PARTNER_WAITING) if existing else None
     try:
+        if existing:
+            with ctx.conn:
+                _check_settings_code(ctx, form, {}, group="partners")
+            alerts.change_alert(ctx, f"a partner was added for {person['name']}", [
+                f"{v.login} added {name} ({email}) as a partner for {person['name']}.",
+                f"Their codes count from {trusted_at}. If you did not expect this, talk to {person['name']}.",
+            ], person_id)
         with ctx.conn:
-            ctx.people.add_partner(
-                str(form.get("person", "")), str(form.get("name", "")).strip(),
-                str(form.get("email", "")).strip(), str(form.get("link_type", "email")),
-                str(form.get("login", "")).strip() or None,
+            ctx.people.add_partner(person_id, name, email, str(form.get("link_type", "email")),
+                                   str(form.get("login", "")).strip() or None, trusted_at)
+            ctx.conn.execute(
+                "INSERT INTO settings_changes(at, login, key, old_value, new_value) VALUES (?, ?, ?, ?, ?)",
+                (iso(ctx.clock.now()), v.login, "partner_added", "null", json.dumps(name)),
             )
+    except ApiError as exc:
+        return RedirectResponse(f"/settings?area=people&error={exc.message}", status_code=303)
     except (ValueError, sqlite3.IntegrityError) as exc:
         return RedirectResponse(f"/settings?area=people&error={exc}", status_code=303)
     return RedirectResponse("/settings?area=people&saved=1", status_code=303)
@@ -599,6 +682,10 @@ async def remove_partner(partner_id: str, request: Request, ctx: Context = Depen
                 "INSERT INTO settings_changes(at, login, key, old_value, new_value) VALUES (?, ?, ?, ?, ?)",
                 (iso(ctx.clock.now()), v.login, "partner_removed", json.dumps(partner["name"]), "null"),
             )
+        person = ctx.people.get_person(partner["person_id"])
+        alerts.change_alert(ctx, f"a partner was removed for {person['name'] if person else 'someone'}", [
+            f"{v.login} removed {partner['name']} ({partner['email']}) as a partner."], partner["person_id"])
+        _mail_removed(ctx, partner)
     except ApiError as exc:
         return RedirectResponse(f"/settings?area=people&error={exc.message}", status_code=303)
     return RedirectResponse("/settings?area=people&saved=1", status_code=303)
@@ -618,11 +705,19 @@ async def send_digest_now(request: Request, ctx: Context = Depends(get_ctx)) -> 
 
 # Setup
 
+def _setup_done(ctx: Context) -> None:
+    # Setup sets the mail server, the partner and the locks with no code at all; once done it is
+    # done, and every later change goes through the settings pages and their locks (ADR-050).
+    if ctx.settings.load().setup_complete:
+        raise Forbidden("setup is already done; change things on the settings pages")
+
+
 @router.get("/setup", response_class=HTMLResponse)
 async def setup(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
     v = require_viewer(ctx, request)
     if not v.is_admin:
         raise Forbidden("only the admin can run setup")
+    _setup_done(ctx)
     return _page(request, ctx, v, "setup.html", None, lock_groups=locks.LOCK_GROUPS,
                  timezones=sorted(available_timezones()),
                  error=request.query_params.get("error"))
@@ -633,6 +728,7 @@ async def setup_save(request: Request, ctx: Context = Depends(get_ctx)) -> Respo
     v = require_viewer(ctx, request)
     if not v.is_admin:
         raise Forbidden("only the admin can run setup")
+    _setup_done(ctx)
     form = await request.form()
     name = str(form.get("person_name", "")).strip()
     partner_name = str(form.get("partner_name", "")).strip()
@@ -671,3 +767,10 @@ async def healthz(ctx: Context = Depends(get_ctx)) -> dict:
         "models": ctx.models_verified,
         "second_opinion": "missing" if isinstance(ctx.second_opinion, FakeSecondOpinion) else "loaded",
     }
+
+
+def _mail_removed(ctx: Context, partner: sqlite3.Row) -> None:
+    """The removed partner hears it too: they are the one who would not otherwise notice."""
+    alerts._send(ctx, Mail(to=[partner["email"]], subject="Watchman: you were removed as a partner",
+                           text=f"You were removed as a partner on {ctx.settings.load().household_name}. "
+                                "If you did not expect this, ask why."))

@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS partners (
   email       TEXT NOT NULL,
   link_type   TEXT NOT NULL,       -- linked | email
   login       TEXT,                -- Tailscale login for linked partners
-  created_at  TEXT NOT NULL
+  created_at  TEXT NOT NULL,
+  trusted_at  TEXT                 -- settings codes from this partner count from here (ADR-050)
 );
 
 CREATE TABLE IF NOT EXISTS pairing_codes (
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS devices (
   revoked_at        TEXT,
   last_heartbeat_at TEXT,
   last_state        TEXT,          -- JSON of the heartbeat body
-  silent_reported_at TEXT          -- when a "device silent" tamper event was raised for the current gap
+  silent_reported_at TEXT,         -- when a "device silent" tamper event was raised for the current gap
+  reminded_at       TEXT           -- last alert while this device is off or silent (ADR-050)
 );
 
 -- One row per heartbeat, so the portal can draw coverage and the digest can count protected hours.
@@ -176,6 +178,14 @@ CREATE TABLE IF NOT EXISTS self_peeks (
   token_expires_at TEXT NOT NULL,
   token_used_at TEXT
 );
+
+-- Wrong partner codes, to slow guessing (ADR-050). scope is a device id for pause codes, or
+-- "settings" for settings codes typed on the portal.
+CREATE TABLE IF NOT EXISTS code_attempts (
+  scope       TEXT NOT NULL,
+  at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS code_attempts_scope ON code_attempts(scope, at);
 
 CREATE TABLE IF NOT EXISTS digests (
   id           TEXT PRIMARY KEY,
