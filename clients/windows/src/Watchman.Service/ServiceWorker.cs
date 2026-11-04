@@ -48,6 +48,10 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
             var p = state.Policy;
             if (p is null || p.Version != v.PolicyVersion || p.PausedUntil != v.PausedUntil) state.Policy = await api.PolicyAsync();
         }
+        catch (ApiException ex) when (ex.Status == 401)
+        {
+            Reject();
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log.LogDebug(ex, "policy check");
@@ -94,6 +98,7 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
             }
             _lastHeartbeat = state.Clock.Now;
             _lastReported = reported;
+            state.Rejected = false;
             var policy = state.Policy;
             if (policy is null || policy.Version != r.PolicyVersion || policy.PausedUntil != r.PausedUntil)
             {
@@ -105,9 +110,7 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
         }
         catch (ApiException ex) when (ex.Status == 401)
         {
-            log.LogWarning("token revoked; unpairing");
-            state.Pairing = null;
-            state.Policy = null;
+            Reject();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -119,11 +122,21 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
         }
     }
 
+    /// <summary>A 401 never unpairs (fail closed): pairing, policy, queue and protection stay, the
+    /// heartbeats go on, and the status says to pair again with a new code.</summary>
+    private void Reject()
+    {
+        if (!state.Rejected) log.LogWarning("the server answered 401; protection stays on until this PC pairs again");
+        state.Rejected = true;
+    }
+
     private async Task FlushAsync(CancellationToken ct)
     {
         using var api = state.Api();
         if (api is null) return;
-        var wanted = await state.Queue.FlushAsync(api.EventsAsync);
+        List<string> wanted;
+        try { wanted = await state.Queue.FlushAsync(api.EventsAsync); }
+        catch (ApiException ex) when (ex.Status == 401) { Reject(); return; }
         foreach (var id in wanted)
         {
             if (!state.PendingImages.TryRemove(id, out var jpeg)) continue;

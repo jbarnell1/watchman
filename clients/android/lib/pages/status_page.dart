@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../bridge.dart';
 import '../main.dart';
 import '../theme.dart';
+import 'pair_page.dart';
 
 /// The one question: is protection on right now? Then what each part is doing.
 class StatusPage extends StatelessWidget {
@@ -44,7 +45,18 @@ class StatusPage extends StatelessWidget {
                   : 'Reporting to ${s.serverName ?? s.server}, $heartbeat.',
               style: const TextStyle(color: muted),
             ),
-            if (s.lastError != null) ...[
+            if (s.rejected) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'The server no longer accepts this device. Protection stays on. Pair again with a new code.',
+                style: TextStyle(color: negative),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PairPage())),
+                child: const Text('Pair again'),
+              ),
+            ] else if (s.lastError != null) ...[
               const SizedBox(height: 8),
               Text(s.lastError!, style: const TextStyle(color: negative, fontSize: 12)),
             ],

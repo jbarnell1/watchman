@@ -10,6 +10,10 @@ final class AppModel: ObservableObject {
     @Published var lastHeartbeatAt: Date?
     @Published var lastError: String?
     @Published var queued = 0
+    /// The server answered 401. The pairing, policy and queue stay; heartbeats go on (fail closed).
+    @Published var rejected = false
+
+    static let rejectedMessage = "The server no longer accepts this device. Protection stays on. Pair again with a new code."
 
     private let state = Shared.state
 
@@ -17,6 +21,7 @@ final class AppModel: ObservableObject {
         pairing = state.pairing
         policy = state.policy
         queued = state.queue.count
+        rejected = state.store.get("rejected") != nil
         if let p = state.store.get("last_heartbeat"), let d = Iso.parse(p) { lastHeartbeatAt = d }
         if pairing != nil { await heartbeat() }
     }
@@ -25,6 +30,9 @@ final class AppModel: ObservableObject {
         do {
             let p = try await Api.pair(server: server, code: code, deviceName: name.isEmpty ? UIDevice.current.name : name)
             state.pairing = p
+            // A new code replaces the token and clears the rejected status.
+            state.store.put("rejected", nil)
+            rejected = false
             state.policy = try await Api(server: p.server, token: p.token).policy()
             await refresh()
             return nil
@@ -49,6 +57,8 @@ final class AppModel: ObservableObject {
             state.store.put("last_heartbeat", Iso.now())
             lastHeartbeatAt = Date()
             lastError = nil
+            state.store.put("rejected", nil)
+            rejected = false
             if state.policy?.version != r.policyVersion || state.policy?.pausedUntil != r.pausedUntil {
                 state.policy = try await api.policy()
                 policy = state.policy
@@ -56,8 +66,14 @@ final class AppModel: ObservableObject {
             _ = try await state.queue.flush { try await api.events($0) }
             queued = state.queue.count
         } catch let e as ApiError {
-            if e.status == 401 { state.pairing = nil; state.policy = nil; pairing = nil }
-            lastError = "\(e.code): \(e.message)"
+            // A 401 never unpairs: a fake or hostile server must not switch protection off.
+            if e.status == 401 {
+                state.store.put("rejected", Iso.now())
+                rejected = true
+                lastError = AppModel.rejectedMessage
+            } else {
+                lastError = "\(e.code): \(e.message)"
+            }
         } catch {
             lastError = error.localizedDescription
         }

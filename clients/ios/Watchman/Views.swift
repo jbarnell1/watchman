@@ -7,6 +7,7 @@ private let warning = Color(red: 0.57, green: 0.25, blue: 0.05)
 
 struct PairView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     @State private var server = ""
     @State private var code = ""
     @State private var name = ""
@@ -35,6 +36,8 @@ struct PairView: View {
                     Task {
                         error = await model.pair(server: server.trimmingCharacters(in: .whitespaces), code: code.trimmingCharacters(in: .whitespaces), name: name)
                         busy = false
+                        // Opened from the status page to pair again: go back once the new code took.
+                        if error == nil { dismiss() }
                     }
                 }
                 .disabled(busy || server.isEmpty || code.isEmpty)
@@ -59,9 +62,15 @@ struct StatusView: View {
                         .font(.title2.weight(.medium))
                         .foregroundStyle(paused ? warning : .primary)
                     Text(statusLine).foregroundStyle(muted).font(.subheadline)
-                    if let e = model.lastError { Text(e).foregroundStyle(negative).font(.caption) }
+                    if !model.rejected, let e = model.lastError { Text(e).foregroundStyle(negative).font(.caption) }
                 }
                 .padding(.vertical, 4)
+            }
+            if model.rejected {
+                Section {
+                    Text(AppModel.rejectedMessage).foregroundStyle(negative)
+                    NavigationLink("Pair again") { PairView() }
+                }
             }
             Section("Turn on protection") {
                 Text("Settings, Apps, Safari, Extensions: turn on Watchman and allow it on every website. It holds images back until they are judged, blurs explicit ones and reports them to your server.")

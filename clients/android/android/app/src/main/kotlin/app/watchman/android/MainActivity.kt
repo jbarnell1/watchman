@@ -91,6 +91,7 @@ class MainActivity : FlutterActivity() {
         val pm = getSystemService(PowerManager::class.java)
         return mapOf(
             "paired" to (state.pairing != null),
+            "rejected" to state.rejected,
             "serverName" to state.pairing?.serverName,
             "server" to state.pairing?.server,
             "policyVersion" to state.policy?.version,

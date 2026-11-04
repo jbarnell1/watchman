@@ -47,8 +47,9 @@ class FakeBridge implements Bridge {
   Stream<PairLink> get pairLinks => links.stream;
 }
 
-Status _paired({bool accessibility = true, bool capture = true, String? pausedUntil}) => Status(
+Status _paired({bool accessibility = true, bool capture = true, String? pausedUntil, bool rejected = false}) => Status(
       paired: true,
+      rejected: rejected,
       serverName: 'Example household',
       server: 'https://watchman.test',
       policyVersion: 3,
@@ -128,6 +129,16 @@ void main() {
     expect(find.textContaining('Per image: 32 ms on nnapi'), findsOneWidget);
   });
 
+  testWidgets('a phone the server rejected keeps protecting and offers to pair again', (tester) async {
+    await tester.pumpWidget(WatchmanApp(bridge: FakeBridge(_paired(rejected: true))));
+    await tester.pumpAndSettle();
+    expect(find.text('Protection on'), findsOneWidget);
+    expect(find.textContaining('The server no longer accepts this device. Protection stays on.'), findsOneWidget);
+    await tester.tap(find.text('Pair again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pair this phone'), findsOneWidget);
+  });
+
   testWidgets('a paused phone says so', (tester) async {
     final until = DateTime.now().toUtc().add(const Duration(minutes: 20)).toIso8601String();
     await tester.pumpWidget(WatchmanApp(bridge: FakeBridge(_paired(pausedUntil: until))));
@@ -141,6 +152,7 @@ void main() {
     expect(s.paired, isTrue);
     expect(s.capture, isFalse);
     expect(s.queued, 2);
+    expect(s.rejected, isFalse);
     expect(s.allPermissionsGranted, isTrue);
   });
 }
