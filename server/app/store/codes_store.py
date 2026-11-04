@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from app.clock import Clock, iso
+from app.store.ledger_store import Recorded
 
 
 def hash_code(code: str) -> str:
@@ -20,7 +21,7 @@ def new_unlock_code() -> str:
     return f"{digits[:3]}-{digits[3:]}"
 
 
-class CodesStore:
+class CodesStore(Recorded):
     def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
         self.conn = conn
         self.clock = clock
@@ -28,16 +29,20 @@ class CodesStore:
     # Unlock codes
 
     def create_code(self, person_id: str, partner_id: str, minutes: int, purpose: str = "pause",
-                    valid_hours: int = 24) -> tuple[str, str]:
+                    valid_hours: int = 24, approval: dict | None = None) -> tuple[str, str]:
         now = self.clock.now()
         code = new_unlock_code()
         cid = str(uuid.uuid4())
         self.conn.execute(
             "INSERT INTO unlock_codes(id, code_hash, person_id, partner_id, minutes, purpose, created_at, "
-            "expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "expires_at, signed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (cid, hash_code(code), person_id, partner_id, minutes, purpose, iso(now),
-             iso(now + timedelta(hours=valid_hours))),
+             iso(now + timedelta(hours=valid_hours)), 1 if approval else 0),
         )
+        body = {"partner_id": partner_id, "purpose": purpose, "minutes": minutes}
+        if approval:
+            body["approval"] = approval
+        self.record("code_issued", body, person_id, cid)
         return cid, code
 
     def consume_code(self, person_id: str, code: str, purpose: str = "pause") -> sqlite3.Row | None:
@@ -52,6 +57,7 @@ class CodesStore:
         if row is None:
             return None
         self.conn.execute("UPDATE unlock_codes SET used_at = ? WHERE id = ?", (now, row["id"]))
+        self.record("code_used", {"purpose": purpose}, person_id, row["id"])
         return row
 
     def open_codes(self, person_id: str) -> list[sqlite3.Row]:
@@ -70,6 +76,7 @@ class CodesStore:
             "INSERT INTO pauses(id, person_id, code_id, started_at, ends_at) VALUES (?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), person_id, code_id, iso(now), iso(ends)),
         )
+        self.record("pause", {"code_id": code_id, "minutes": minutes, "ends_at": iso(ends)}, person_id)
         return ends
 
     def active_pause(self, person_id: str) -> sqlite3.Row | None:
@@ -167,6 +174,7 @@ class CodesStore:
             "INSERT INTO digests(id, person_id, period_start, period_end, sent_at) VALUES (?, ?, ?, ?, ?)",
             (str(uuid.uuid4()), person_id, iso(start), iso(end), iso(self.clock.now())),
         )
+        self.record("digest_sent", {"period_start": iso(start), "period_end": iso(end)}, person_id)
 
 
 def _peek_table(partner_id: str | None, person_id: str | None) -> tuple[str, str, str | None]:

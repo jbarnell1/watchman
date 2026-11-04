@@ -8,7 +8,7 @@
   {% for a in areas %}<a class="{% if a == area %}on{% endif %}" href="/settings?area={{ a }}">{{ a|capitalize }}</a>{% endfor %}
 </nav>
 
-{% if saved %}<p class="notice ok">{% if saved == 'digest' %}Digest sent.{% elif saved == 'digest_failed' %}The digest could not be sent. Check the email settings.{% else %}Saved.{% endif %}</p>{% endif %}
+{% if saved %}<p class="notice ok">{% if saved == 'pending' %}That change loosens protection, so it waits for a partner to approve it with their key. They have been emailed a link.{% elif saved == 'digest' %}Digest sent.{% elif saved == 'digest_failed' %}The digest could not be sent. Check the email settings.{% else %}Saved.{% endif %}</p>{% endif %}
 {% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
 
 {% macro lock(key) %}{% if locked and key in locked_keys %}<span class="lock" title="tightening is free; loosening needs a partner's settings code">locked</span>{% endif %}{% endmacro %}

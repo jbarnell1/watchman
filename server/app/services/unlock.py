@@ -14,11 +14,11 @@ from app.services.errors import ApiError
 from app.store.events_store import SEVERITY_INFO, SEVERITY_PROTECTION
 
 
-def issue_code(ctx: Context, person_id: str, partner_id: str, minutes: int) -> str:
+def issue_code(ctx: Context, person_id: str, partner_id: str, minutes: int, approval: dict | None = None) -> str:
     settings = ctx.settings.load()
     if minutes < 1 or minutes > settings.max_pause_minutes:
         raise ApiError(f"a code may grant 1 to {settings.max_pause_minutes} minutes")
-    _, code = ctx.codes.create_code(person_id, partner_id, minutes)
+    _, code = ctx.codes.create_code(person_id, partner_id, minutes, approval=approval)
     return code
 
 
@@ -40,6 +40,14 @@ def redeem(ctx: Context, device: sqlite3.Row, code: str) -> dict:
                        "partner": partner["name"] if partner else None},
         }, device["id"], device["person_id"], SEVERITY_INFO, "none")
         ctx.settings.bump_policy()
+    from app.services import keys
+    if not row["signed"] and keys.sealed(ctx, device["person_id"]):
+        # Partners hold keys but this code was not signed by one: the server issued it on its own,
+        # by email to a partner without a key or otherwise. Everyone hears about it (ADR-053).
+        alerts.change_alert(ctx, f"a pause started from a code no partner signed on {device['name']}", [
+            f"{device['name']} is paused for {row['minutes']} minutes with a code no partner's key signed.",
+            "If no partner gave this code, protection was paused without one.",
+        ], device["person_id"])
     return {"paused_until": iso(ends)}
 
 

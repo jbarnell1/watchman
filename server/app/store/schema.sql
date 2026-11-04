@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS events (
   scores        TEXT,              -- JSON
   region        TEXT,              -- JSON
   hash          TEXT,
+  sealed        TEXT,              -- url and title sealed for partners (ADR-053), JSON envelope
   has_image     INTEGER NOT NULL DEFAULT 0,
   detail        TEXT,              -- JSON
   -- Server-side judgement. image_status: none | wanted | stored | skipped.
@@ -144,7 +145,8 @@ CREATE TABLE IF NOT EXISTS images (
   event_id    TEXT PRIMARY KEY REFERENCES events(id),
   created_at  TEXT NOT NULL,
   width       INTEGER NOT NULL,
-  height      INTEGER NOT NULL
+  height      INTEGER NOT NULL,
+  sealed      INTEGER NOT NULL DEFAULT 0   -- the medium blur is sealed for partners (ADR-053)
 );
 
 CREATE TABLE IF NOT EXISTS known_bad_hashes (
@@ -161,6 +163,7 @@ CREATE TABLE IF NOT EXISTS unlock_codes (
   partner_id  TEXT NOT NULL REFERENCES partners(id),
   minutes     INTEGER NOT NULL,
   purpose     TEXT NOT NULL DEFAULT 'pause',   -- pause | settings
+  signed      INTEGER NOT NULL DEFAULT 0,      -- issued with a partner's signed approval (ADR-053)
   created_at  TEXT NOT NULL,
   expires_at  TEXT NOT NULL,
   used_at     TEXT
@@ -211,6 +214,82 @@ CREATE TABLE IF NOT EXISTS code_attempts (
   at          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS code_attempts_scope ON code_attempts(scope, at);
+
+-- The record (ADR-052): an append-only hash chain, see app/store/ledger_store.py.
+CREATE TABLE IF NOT EXISTS ledger (
+  seq         INTEGER PRIMARY KEY,
+  at          TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  person_id   TEXT,
+  ref         TEXT,
+  body        TEXT NOT NULL,        -- canonical JSON
+  prev        TEXT NOT NULL,
+  hash        TEXT NOT NULL
+);
+
+-- Tokens a partner's own server uses to read the record (ADR-054). Stored hashed.
+CREATE TABLE IF NOT EXISTS witness_tokens (
+  id          TEXT PRIMARY KEY,
+  partner_id  TEXT NOT NULL,
+  token_hash  TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at  TEXT
+);
+
+-- Households this server watches for its own people (ADR-054): another household's server,
+-- read with a witness token, checked every few minutes.
+CREATE TABLE IF NOT EXISTS watching (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL,
+  token       TEXT NOT NULL,
+  email       TEXT NOT NULL,        -- who hears about problems
+  last_seq    INTEGER NOT NULL DEFAULT 0,
+  last_hash   TEXT,
+  keys        TEXT NOT NULL DEFAULT '{}',   -- partner keys seen on that record, pinned (JSON)
+  last_ok_at  TEXT,
+  last_try_at TEXT,
+  last_error  TEXT,
+  down_alerted_at TEXT,
+  last_report TEXT,                 -- the last problem emailed, so it is not repeated every poll
+  last_report_at TEXT,
+  created_at  TEXT NOT NULL
+);
+
+-- Partner keys (ADR-053). The private halves are here only locked with the partner's passphrase.
+CREATE TABLE IF NOT EXISTS partner_keys (
+  partner_id  TEXT PRIMARY KEY,
+  sign_pub    TEXT NOT NULL,        -- ECDSA P-256, SPKI DER, base64
+  enc_pub     TEXT NOT NULL,        -- ECDH P-256, uncompressed point, base64
+  wrapped     TEXT NOT NULL,        -- JSON: salt, iterations, iv, data (the locked private keys)
+  fingerprint TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  active_from TEXT NOT NULL         -- a replaced key approves nothing for three days
+);
+
+-- Single-use nonces a partner's browser signs into an approval (ADR-053).
+CREATE TABLE IF NOT EXISTS challenges (
+  nonce       TEXT PRIMARY KEY,
+  partner_id  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  used_at     TEXT
+);
+
+-- Changes waiting for a partner's signed approval (ADR-053).
+CREATE TABLE IF NOT EXISTS approvals (
+  id          TEXT PRIMARY KEY,
+  kind        TEXT NOT NULL,        -- settings | partner_add | partner_remove
+  person_id   TEXT,                 -- NULL for household settings
+  params      TEXT NOT NULL,        -- JSON
+  summary     TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'waiting',   -- waiting | approved | declined
+  decided_by  TEXT,
+  decided_at  TEXT
+);
 
 CREATE TABLE IF NOT EXISTS digests (
   id           TEXT PRIMARY KEY,

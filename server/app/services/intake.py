@@ -29,7 +29,7 @@ from datetime import timedelta
 
 from PIL import Image
 
-from app.services import alerts, blur
+from app.services import alerts, blur, keys
 from app.services.context import Context
 from app.services.errors import ApiError, NotFound
 from app.services.imagehash import MATCH_TOLERANCE, MIN_DECISIVE_BITS, decisive_bits, dhash, hamming
@@ -86,6 +86,8 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
     accepted, duplicates, upload, rejected = [], [], [], []
     recent = ctx.events.recent_image_hashes(device["id"], ctx.clock.now() - REPEAT_WINDOW)
     covered_reports = ctx.settings.load().covered_reports
+    # Where a page or search was is sealed for partners once they hold keys (ADR-053).
+    sealed_for = keys.keyed_partners(ctx, device["person_id"])
     with ctx.conn:
         for ev in events:
             # A malformed event is named in `rejected` and skipped; the rest of the batch still
@@ -114,6 +116,9 @@ def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:
                 else:
                     image_status = "wanted"
                     upload.append(ev["id"])
+            if sealed_for and (ev.get("url") or ev.get("title")):
+                ev = dict(ev, sealed=keys.seal(json.dumps({"url": ev.get("url"), "title": ev.get("title")}).encode(),
+                                               ev["id"], sealed_for).decode(), url=None, title=None)
             ctx.events.insert(ev, device["id"], device["person_id"], severity, image_status)
             if ev.get("hash"):
                 recent.append(ev["hash"])
@@ -184,9 +189,13 @@ def store_image(ctx: Context, device: sqlite3.Row, event_id: str, data: bytes) -
     else:
         severity = SEVERITY_REVIEW
     with ctx.conn:
-        ctx.blobs.put(event_id, "heavy", heavy_webp)
-        ctx.blobs.put(event_id, "medium", medium_webp)
-        ctx.events.add_image(event_id, blur.OUTPUT_SIZE, blur.OUTPUT_SIZE)
+        # The peekable blur is sealed for partners, unless the person may peek at their own (ADR-053).
+        recipients = [] if settings.self_peek else keys.keyed_partners(ctx, event["person_id"])
+        if recipients:
+            medium_webp = keys.seal(medium_webp, event_id + ":medium", recipients)
+        files = {"heavy": ctx.blobs.put(event_id, "heavy", heavy_webp),
+                 "medium": ctx.blobs.put(event_id, "medium", medium_webp)}
+        ctx.events.add_image(event_id, blur.OUTPUT_SIZE, blur.OUTPUT_SIZE, files, sealed=bool(recipients))
         ctx.events.set_second_opinion(event_id, score, severity, "stored")
         ctx.events.set_server_labels(event_id, labels)
         if event["hash"] and _update_known_bad(ctx, event, score, decisive, settings):

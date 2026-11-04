@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Your key{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>Your partner key</h1>
+  <p class="finding">{% if key %}Your key opens what {{ person.name }}'s devices sealed for partners and signs your approvals. It is locked with your passphrase, which never leaves this browser.{% else %}Set up a key so that only you and the other partners can open what is sealed, and nothing loosens without your signature.{% endif %}</p></div></div>
+
+<p class="notice bad" id="key-error" hidden></p>
+<p class="notice ok" id="key-ok" hidden></p>
+
+{% if key %}
+<section class="panel">
+  <div class="panel-head"><h2>Fingerprint</h2><span class="t2">set up {{ when(key.created_at) }}{% if key.active_from > now %}, approves from {{ when(key.active_from) }}{% endif %}</span></div>
+  <div class="bigcode num" style="font-size:20px">{{ key.fingerprint }}</div>
+  <p class="t2">If you run Watchman at home too, your own server shows the fingerprint it pinned for this household under Watching. They should match.</p>
+</section>
+<section class="panel">
+  <div class="panel-head"><h2>Unlock on this browser</h2><span class="t2" id="state">checking</span></div>
+  <form id="unlock" class="form">
+    <label for="pass">Passphrase</label><input id="pass" type="password" autocomplete="current-password" required>
+    <button class="btn primary">Unlock for 12 hours</button>
+    <button class="btn" type="button" id="lock">Lock now</button>
+  </form>
+</section>
+<section class="panel">
+  <div class="panel-head"><h2>Lost your passphrase?</h2></div>
+  <p class="t2">You can make a new key. Everyone is told at once, and the new key approves nothing for three days. What was sealed for the old key stays sealed.</p>
+  <button class="btn" type="button" id="show-new">Make a new key</button>
+</section>
+{% endif %}
+
+<section class="panel" id="new-key" {% if key %}hidden{% endif %}>
+  <div class="panel-head"><h2>{{ 'A new key' if key else 'Set up your key' }}</h2></div>
+  <form id="setup" class="form">
+    <label for="p1">Passphrase, at least {{ min_passphrase }} characters</label>
+    <input id="p1" type="password" autocomplete="new-password" minlength="{{ min_passphrase }}" required>
+    <label for="p2">The same again</label>
+    <input id="p2" type="password" autocomplete="new-password" minlength="{{ min_passphrase }}" required>
+    <p class="t2">Nobody can recover it, the admin included. Use a phrase you will remember, or keep it in your password manager.</p>
+    <button class="btn primary">Make my key</button>
+  </form>
+</section>
+<script>
+(function () {
+  var S = window.WatchmanSeal, partner = {{ partner.id|tojson }};
+  var err = document.getElementById('key-error'), ok = document.getElementById('key-ok');
+  function fail(e) { err.hidden = false; ok.hidden = true; err.textContent = e.message || String(e); }
+  function done(t) { ok.hidden = false; err.hidden = true; ok.textContent = t; }
+  var state = document.getElementById('state');
+  if (state) S.unlocked().then(function (k) { state.textContent = k[partner] ? 'unlocked here' : 'locked'; });
+  var show = document.getElementById('show-new');
+  if (show) show.addEventListener('click', function () { document.getElementById('new-key').hidden = false; });
+  var setup = document.getElementById('setup');
+  setup.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var a = document.getElementById('p1').value, b = document.getElementById('p2').value;
+    if (a !== b) return fail(new Error('The two passphrases differ'));
+    if (a.length < {{ min_passphrase }}) return fail(new Error('At least {{ min_passphrase }} characters'));
+    setup.querySelector('button').disabled = true;
+    done('Making your key. This takes a few seconds.');
+    S.setup(partner, a).then(function (fp) { done('Your key is ready. Fingerprint ' + fp + '.'); setTimeout(function () { location.reload(); }, 1500); })
+      .catch(function (e) { setup.querySelector('button').disabled = false; fail(e); });
+  });
+  var unlock = document.getElementById('unlock');
+  if (unlock) unlock.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    done('Unlocking.');
+    S.unlock(document.getElementById('pass').value).then(function () { state.textContent = 'unlocked here'; done('Unlocked on this browser for 12 hours.'); })
+      .catch(function () { fail(new Error('That passphrase does not open your key')); });
+  });
+  var lock = document.getElementById('lock');
+  if (lock) lock.addEventListener('click', function () { S.lock().then(function () { state.textContent = 'locked'; done('Locked.'); }); });
+})();
+</script>
+{% endblock %}

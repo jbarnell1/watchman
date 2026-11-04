@@ -243,19 +243,38 @@ Server-rendered pages under `/`. Roles: `admin`, `protected`, `partner`. A login
 |---|---|---|
 | `/` | all | Timeline for the people this login can see |
 | `/review` | partner | Items needing review; mark "talked about" or "false alarm" |
-| `/review/{event_id}` (POST) | partner | `state=talked`, `false_alarm` or `open` |
+| `/review/{event_id}` (POST) | partner | `state=talked`, `false_alarm` or `open`; in a sealed household also a signed approval of `{event_id, state}` (ADR-053) |
 | `/peek/{event_id}` (POST) | linked partner | JSON `{url, seconds, next_peek_at}`; the URL is one-time, valid 5 s; 429 during the cooldown |
 | `/images/{event_id}/heavy` | anyone who may see the person | the heavy blur |
-| `/images/{event_id}/medium?t=` | linked partner, with a peek token | the medium blur, once |
+| `/images/{event_id}/medium?t=` | linked partner, with a peek token | the medium blur, once; in a sealed household a JSON envelope with `X-Watchman-Sealed: 1` that the partner's browser opens |
 | `/codes` | partner | Issue a pause code (length up to the cap) or a settings code (ADR-016) |
 | `/devices` | all who see the person | Devices, last heartbeat, state; admin and protected create pairing codes; admin revokes (alerts) |
 | `/settings?area=general|protection|email|people` | admin | All settings. With locks on, loosening a locked one needs a partner settings code, paired device or not; every loosening emails everyone at once (ADR-050). Adding a partner beside existing ones needs their settings code and the new partner's codes count after three days |
 | `/whatif?days=&ask=&sure=&cover=&flag=&detector_cover=&second_opinion=` | admin or partner | Replays the stored scores of the last 1, 7 or 30 days against proposed thresholds: covered, asked, reported, explicit, review and false-alarm counts per app, now and proposed (ADR-041). Numbers only; changes nothing |
 | `/setup` | first login | First-run wizard; 403 once setup is complete (ADR-050) |
+| `/keys` | partner | Set up, unlock or replace the partner key (ADR-053). `POST /keys` JSON `{partner_id, sign_pub, enc_pub, wrapped}`; `GET /keys/mine`; `POST /keys/challenge` JSON `{partner_id}` gives a single-use `nonce` |
+| `/approve/{id}` | partner with a key | A held change; `POST` with `approval_payload`, `approval_sig`, `approval_partner` applies it; `POST /approve/{id}/decline` |
+| `/record` | all | The record's head, this server's check, waiting changes, witnesses and checkpoints; `GET /record/head`, `GET /record/entry/{seq}`, `POST /record/checkpoint` (a signed approval of `{seq, hash}`), `POST /record/witness` creates a witness token |
+| `/watching` | admin | Households this server watches (ADR-054) |
 | `/auth/login?next=` | anyone (OIDC mode only) | Starts the sign-in: redirect to the provider with state, nonce and a PKCE challenge |
 | `/auth/callback` | the provider's redirect (OIDC mode only) | Checks state, redeems the code, validates the ID token, sets the session cookie, goes to `next` |
 | `/auth/logout` (GET or POST) | anyone (OIDC mode only) | Clears the session cookie on this browser |
 | `/healthz` | none | `{"ok": true, "version": "0.1.0", "models": 5, "second_opinion": "loaded"}`: liveness, the server version, how many manifest files were present with the right sha256 at startup, and whether the second opinion model is loaded (`"missing"` means the fake is in use). No personal data |
+
+## Witness API (ADR-054)
+
+Read only, for a partner's own Watchman server. `Authorization: Bearer wmw_...`, a witness token a
+partner creates on the Record page (stored hashed; revocable there). 401 otherwise.
+
+### GET /api/v1/witness/status
+`{"head": {"seq": 412, "hash": "..."}, "household": "...", "problems": [], "server_time": "..."}`.
+`problems` is this server's own check of its database against the record (ADR-052).
+
+### GET /api/v1/witness/ledger?after=0&limit=500
+`{"entries": [{"seq", "at", "kind", "person_id", "ref", "body", "prev", "hash"}], "head": {...}}`,
+entries after `after` in order, at most 1000. `hash` is sha256 of `prev` + newline + the canonical
+JSON (sorted keys, no spaces) of `[seq, at, kind, person_id, ref, body]`; the first `prev` is 64
+zeros. Bodies hold digests, kinds, names and settings values, never pictures or addresses.
 
 ## Image hash (shared by every client and the server)
 

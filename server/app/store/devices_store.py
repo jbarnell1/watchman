@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from app.clock import Clock, iso, parse_iso
+from app.store.ledger_store import Recorded
 
 PAIRING_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"   # no 0/O/1/I/L
 
@@ -23,7 +24,7 @@ def new_pairing_code() -> str:
     return "-".join(parts)
 
 
-class DevicesStore:
+class DevicesStore(Recorded):
     def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
         self.conn = conn
         self.clock = clock
@@ -76,6 +77,7 @@ class DevicesStore:
             (device_id, person_id, name, platform, kind, app_version, hash_token(token),
              iso(self.clock.now())),
         )
+        self.record("device_paired", {"name": name, "platform": platform, "kind": kind}, person_id, device_id)
         return device_id, token
 
     def by_token(self, token: str) -> sqlite3.Row | None:
@@ -97,6 +99,8 @@ class DevicesStore:
 
     def revoke(self, device_id: str) -> None:
         self.conn.execute("UPDATE devices SET revoked_at = ? WHERE id = ?", (iso(self.clock.now()), device_id))
+        row = self.get(device_id)
+        self.record("device_revoked", {}, row["person_id"] if row else None, device_id)
 
     def record_heartbeat(self, device_id: str, body: dict) -> None:
         now = iso(self.clock.now())

@@ -6,6 +6,7 @@ Layout: <images_dir>/<event_id>.<level>.bin, where level is heavy or medium. The
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 from pathlib import Path
@@ -38,10 +39,16 @@ class BlobStore:
             raise ValueError(level)
         return self.images_dir / f"{event_id}.{level}.bin"
 
-    def put(self, event_id: str, level: str, data: bytes) -> None:
+    def put(self, event_id: str, level: str, data: bytes) -> str:
+        """Store [data] encrypted; returns the sha256 of the file written, for the record (ADR-052)."""
         nonce = secrets.token_bytes(12)
-        sealed = AESGCM(self._key).encrypt(nonce, data, event_id.encode())
-        self._path(event_id, level).write_bytes(nonce + sealed)
+        sealed = nonce + AESGCM(self._key).encrypt(nonce, data, event_id.encode())
+        self._path(event_id, level).write_bytes(sealed)
+        return hashlib.sha256(sealed).hexdigest()
+
+    def file_digest(self, event_id: str, level: str) -> str | None:
+        path = self._path(event_id, level)
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
     def get(self, event_id: str, level: str) -> bytes | None:
         path = self._path(event_id, level)

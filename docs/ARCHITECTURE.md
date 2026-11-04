@@ -74,5 +74,6 @@ there last; a hash within 2 bits is unchanged and the last answer stands. On top
 | The protected person in a weak moment | turn it off quietly | every off path is a partner-visible event; pauses need partner codes |
 | A partner | see more than intended | originals never stored; medium blur max; peeks rate limited and logged |
 | Someone on the internet | anything | nothing is public; tailnet only |
-| A friend's household | our data | separate servers; no cross-server traffic |
+| A friend's household | our data | separate servers; a witness token reads only the record, which holds digests, not pictures or addresses (ADR-054) |
+| The protected person who also runs the server, perhaps with an AI agent | loosen, rewrite or switch off quietly | setup runs once, every loosening alerts at once (ADR-050); once partners hold keys loosening needs a partner's signature and what partners review is sealed (ADR-053); the database must match a hash-chained record whose head is in every email, in partner-signed checkpoints and on a partner's own server, which also notices the server going quiet (ADR-052, ADR-054). Not covered: someone who controls the server and replaces its code before partners set up keys, or whose partners neither host nor read their email |
 | A thief with the server disk | images | blurred only, encrypted at rest |

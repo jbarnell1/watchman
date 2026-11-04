@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Approve a change{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>{{ req.created_by }} asks to {{ req.summary }}</h1>
+  <p class="finding">Asked {{ when(req.created_at) }}{% if person %} for {{ person.name }}{% endif %}. {% if req.status == 'waiting' %}Nothing changes unless a partner approves it with their key.{% else %}{{ req.status|capitalize }} by {{ req.decided_by }}, {{ when(req.decided_at) }}.{% endif %}</p></div></div>
+{% if request.query_params.get('error') %}<p class="notice bad">{{ request.query_params.get('error') }}</p>{% endif %}
+{% if request.query_params.get('done') %}<p class="notice ok">{{ 'Approved and applied.' if request.query_params.get('done') == 'approved' else 'Declined. Nothing changed.' }}</p>{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><h2>Exactly what changes</h2></div>
+  {% if req.kind == 'settings' %}
+  <dl class="facts">{% for k, val in params['values'].items() %}<dt>{{ k|replace('_', ' ') }}</dt><dd>{% if k == 'smtp' %}new mail server settings{% else %}becomes <span class="num">{{ json.dumps(val) }}</span>{% endif %}</dd>{% endfor %}</dl>
+  {% elif req.kind == 'partner_add' %}
+  <dl class="facts"><dt>New partner</dt><dd>{{ params.name }} ({{ params.email }})</dd><dt>Connection</dt><dd>{{ params.link_type }}{% if params.login %}, {{ params.login }}{% endif %}</dd><dt>Their codes and approvals</dt><dd>count after three days</dd></dl>
+  {% else %}
+  <dl class="facts"><dt>Partner removed</dt><dd>{{ params.partner_id }}</dd></dl>
+  {% endif %}
+</section>
+
+{% if req.status == 'waiting' and can_decide %}
+<form method="post" action="/approve/{{ req.id }}" class="detail-actions" data-sign-action="approve" data-partner="{{ can_decide[0] }}" data-sign-params='{{ signed|tojson }}'>
+  <button class="btn primary">Approve with my key</button>
+</form>
+<form method="post" action="/approve/{{ req.id }}/decline" class="detail-actions"><button class="btn">Decline</button></form>
+{% elif req.status == 'waiting' %}
+<p class="empty">Only a partner with a key can approve this.</p>
+{% endif %}
+{% endblock %}

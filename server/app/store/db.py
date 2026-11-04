@@ -35,6 +35,9 @@ COLUMNS = (
     ("heartbeats", "screen_on_s", "INTEGER"),    # ADR-051: the heartbeat's judge block
     ("heartbeats", "unwatched_s", "INTEGER"),
     ("heartbeats", "judged", "INTEGER"),
+    ("events", "sealed", "TEXT"),                # ADR-053
+    ("images", "sealed", "INTEGER NOT NULL DEFAULT 0"),
+    ("unlock_codes", "signed", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 
