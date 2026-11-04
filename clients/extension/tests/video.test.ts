@@ -24,11 +24,11 @@ describe("video sampler", () => {
     const s = new VideoSampler({ grab, judge, setInterval: (() => 1) as unknown as typeof setInterval, clearInterval: () => undefined });
     const v = video();
     s.track(v);
-    expect(v.dataset.wmVideo).toBe("tracked");
+    expect(s.isTracked(v)).toBe(true);
 
     await s.tick(); // first frame: judged safe
     expect(judge).toHaveBeenCalledTimes(1);
-    expect(v.dataset.wm).toBe("safe");
+    expect(s.decisionOf(v)).toBe("safe");
 
     await s.tick(); // one bit away: dropped before the model
     expect(judge).toHaveBeenCalledTimes(1);
@@ -36,7 +36,7 @@ describe("video sampler", () => {
 
     await s.tick(); // a different frame: covered
     expect(judge).toHaveBeenCalledTimes(2);
-    expect(v.dataset.wm).toBe("cover");
+    expect(s.decisionOf(v)).toBe("cover");
 
     await s.tick(); // covered videos are not sampled again until a tap clears them
     expect(grab).toHaveBeenCalledTimes(3);
@@ -57,7 +57,7 @@ describe("video sampler", () => {
     visible = true;
     await s.tick();
     expect(grab).toHaveBeenCalledTimes(1); // only the playing one
-    expect(playing.dataset.wmVideo).toBe("unsampleable");
+    expect(s.isUnsampleable(playing)).toBe(true);
     expect(s.size).toBe(1); // untracked for good
     s.track(playing);
     expect(s.size).toBe(1); // and not re-tracked

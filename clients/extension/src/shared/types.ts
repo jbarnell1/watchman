@@ -63,7 +63,7 @@ export interface Pairing {
 
 export interface WatchmanEvent {
   id: string;
-  type: "image_covered" | "image_flagged" | "protection_changed" | "daily_stats";
+  type: "image_covered" | "image_flagged" | "protection_changed" | "daily_stats" | "tamper";
   occurred_at: string;
   app: string | null;
   url: string | null;
