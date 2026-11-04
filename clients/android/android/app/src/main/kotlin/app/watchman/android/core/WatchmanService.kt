@@ -32,6 +32,7 @@ class WatchmanService : Service() {
         const val NOTIFICATION_ID = 1
         private const val TAG = "WatchmanService"
         const val ACTION_MISSED = "app.watchman.android.MISSED"
+        const val REJECTED_MESSAGE = "The server no longer accepts this device. Protection stays on. Pair again with a new code."
         @Volatile var running = false
         @Volatile var lastHeartbeatAt: Long = 0
         @Volatile var lastError: String? = null
@@ -49,14 +50,77 @@ class WatchmanService : Service() {
     private var lastReported: DeviceState? = null
     private val booted = Iso.now()
 
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> JudgeTally.shared.screenOn()
+                Intent.ACTION_SCREEN_OFF -> JudgeTally.shared.screenOff()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         state = AppState.get(this)
         createChannel()
         startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         running = true
+        reportGap()
+        registerReceiver(screenReceiver, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        })
+        if (getSystemService(android.os.PowerManager::class.java)?.isInteractive == true) JudgeTally.shared.screenOn()
+        scope.launch { aliveLoop() }
         scope.launch { loop() }
         state.onChanged = { scope.launch { heartbeat(force = true) } }
+    }
+
+    /**
+     * A stretch with this service not running is reported on the next start (fail closed and loud):
+     * otherwise a phone switched off for less than the server's silence threshold goes unheard.
+     */
+    private fun reportGap() {
+        try {
+            if (state.pairing == null) return
+            val now = System.currentTimeMillis()
+            val bootedAt = now - android.os.SystemClock.elapsedRealtime()
+            val pausedUntil = state.policy?.pausedUntil?.let { Iso.parse(it) }?.takeIf { it > 0 }
+            ProtectionGap.decide(state.aliveAt, state.cleanStop, now, bootedAt, pausedUntil)?.let {
+                Log.i(TAG, "protection gap: ${it.reason}, ${(it.toMillis - it.fromMillis) / 1000} s")
+                state.record(ProtectionGap.event(it), null)
+            }
+            state.cleanStop = false
+            state.aliveAt = now
+        } catch (e: Exception) {
+            Log.w(TAG, "gap", e)
+        }
+    }
+
+    private suspend fun aliveLoop() {
+        while (true) {
+            delay(ProtectionGap.ALIVE_EVERY_MS)
+            try { if (state.pairing != null) state.aliveAt = System.currentTimeMillis() } catch (e: Exception) { Log.w(TAG, "alive", e) }
+        }
+    }
+
+    /** Developer options and USB debugging, for the heartbeat's `device` field; null when unreadable. */
+    private fun deviceFlags(): Map<String, Boolean>? = try {
+        val cr = contentResolver
+        mapOf(
+            "developer_options" to (android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0),
+            "usb_debugging" to (android.provider.Settings.Global.getInt(cr, android.provider.Settings.Global.ADB_ENABLED, 0) != 0),
+        )
+    } catch (e: Exception) { null }
+
+    /** A 401 never unpairs: the token, the policy and protection stay, and heartbeats go on. */
+    private fun noteApiError(e: ApiException) {
+        if (e.status == 401) {
+            state.rejected = true
+            lastError = REJECTED_MESSAGE
+        } else {
+            lastError = "${e.code}: ${e.message}"
+        }
     }
 
     private suspend fun loop() {
@@ -67,6 +131,9 @@ class WatchmanService : Service() {
                 val current = currentState()
                 val due = System.currentTimeMillis() - lastHeartbeatAt > 5 * 60 * 1000
                 if (due || current != lastReported) heartbeat(force = true)
+            } catch (e: ApiException) {
+                Log.w(TAG, "loop", e)
+                noteApiError(e)
             } catch (e: Exception) {
                 Log.w(TAG, "loop", e)
                 lastError = e.message
@@ -95,27 +162,35 @@ class WatchmanService : Service() {
                 val battery = (getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager)
                     ?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 val work = Metrics.shared.takeHeartbeat()
+                val judge = JudgeTally.shared.take()
+                val secure = SecureApps.shared.take()
                 val r = try {
                     api.heartbeat(mapOf(
                         "sent_at" to Iso.now(), "app_version" to "0.1.0", "booted_at" to booted, "safe_mode" to packageManager.isSafeMode,
                         "battery_pct" to battery, "queued_events" to state.queue.size, "state" to current,
                         "metrics" to (if (work.isEmpty) null else work.toMap()),
+                        "device" to deviceFlags(),
+                        "judge" to judge.toMap(),
+                        "secure_apps" to secure,
                     ))
                 } catch (e: Exception) {
-                    Metrics.shared.giveBack(work) // not delivered: keep it for the next heartbeat
+                    // Not delivered: keep it all for the next heartbeat.
+                    Metrics.shared.giveBack(work)
+                    JudgeTally.shared.giveBack(judge)
+                    SecureApps.shared.giveBack(secure)
                     throw e
                 }
                 lastHeartbeatAt = System.currentTimeMillis()
                 lastReported = current
                 lastError = null
+                state.rejected = false
                 val policy = state.policy
                 if (policy == null || policy.version != r.policyVersion || policy.pausedUntil != r.pausedUntil) {
                     state.policy = api.policy()
                 }
                 ensureModels(api)
             } catch (e: ApiException) {
-                if (e.status == 401) { state.pairing = null; state.policy = null }
-                lastError = "${e.code}: ${e.message}"
+                noteApiError(e)
                 Log.w(TAG, "heartbeat", e)
             } catch (e: Exception) {
                 lastError = e.message
@@ -131,6 +206,9 @@ class WatchmanService : Service() {
             val v = api.policyVersion()
             val policy = state.policy
             if (policy == null || policy.version != v.policyVersion || policy.pausedUntil != v.pausedUntil) state.policy = api.policy()
+        } catch (e: ApiException) {
+            if (e.status == 401) noteApiError(e)
+            Log.w(TAG, "policy check", e)
         } catch (e: Exception) {
             Log.w(TAG, "policy check", e)
         }
@@ -214,6 +292,10 @@ class WatchmanService : Service() {
 
     override fun onDestroy() {
         running = false
+        // A stop inside a partner-code pause already reported itself; see ProtectionGap.decide.
+        try { if (state.policy?.isPaused() == true) state.cleanStop = true } catch (_: Exception) { }
+        runCatching { unregisterReceiver(screenReceiver) }
+        JudgeTally.shared.screenOff()
         scope.cancel()
         super.onDestroy()
     }

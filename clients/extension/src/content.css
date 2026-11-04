@@ -1,29 +1,11 @@
-/* Injected at document_start. An image is invisible until the background has judged it, so an
-   explicit image is never painted. When the extension is not paired, html.wm-off lifts this. */
-html:not(.wm-off) img:not([data-wm]),
-html:not(.wm-off) img[data-wm="pending"] {
+/* Injected at document_start. An image is invisible until the content script has reached it, so an
+   explicit image is never painted. From then on the script holds, covers and releases each image
+   with inline !important styles that it re-applies when the page changes them; nothing here is the
+   source of truth. When the browser was never paired, html.wm-off lifts this. */
+html:not(.wm-off) img:not([data-wm]) {
   visibility: hidden !important;
 }
-/* Report only (cover_on_device off): nothing is held back or blurred. */
-html.wm-report img:not([data-wm]),
-html.wm-report img[data-wm="pending"] {
-  visibility: visible !important;
-}
-img[data-wm="cover"] {
-  visibility: visible !important;
-  filter: blur(28px) !important;
-  clip-path: inset(0) !important;
-  cursor: help;
-}
-img[data-wm="cover"][data-wm-note="checking"] {
-  filter: blur(28px) brightness(0.8) !important;
-}
-/* Videos are shown while sampled and blurred once a frame is covered (ADR-023). */
+img[data-wm="cover"],
 video[data-wm="cover"] {
-  filter: blur(28px) !important;
-  clip-path: inset(0) !important;
   cursor: help;
-}
-video[data-wm="cover"][data-wm-note="checking"] {
-  filter: blur(28px) brightness(0.8) !important;
 }

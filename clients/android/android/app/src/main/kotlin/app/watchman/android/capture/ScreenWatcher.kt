@@ -18,6 +18,8 @@ import app.watchman.android.core.Coverage
 import app.watchman.android.core.Decision
 import app.watchman.android.core.Finding
 import app.watchman.android.core.Iso
+import app.watchman.android.core.JudgeTally
+import app.watchman.android.core.SecureApps
 import app.watchman.android.core.RegionTracker
 import app.watchman.android.core.WatchLevel
 import app.watchman.android.core.Metrics
@@ -115,7 +117,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private val screenReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> handler.post { screenOff = true; overlay.clear() }
+                Intent.ACTION_SCREEN_OFF -> handler.post { screenOff = true; overlay.clear(); SecureApps.shared.clear() }
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> handler.post { screenOff = false; scheduleTick(0) }
             }
         }
@@ -193,6 +195,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 if (copy == null) { then(latest); return }
                 metrics.time("copy_ms", (System.nanoTime() - copyStart) / 1_000_000.0)
                 metrics.count("frames")
+                SecureApps.shared.clear()
                 latest?.recycle()
                 latest = copy
                 latestAt = System.currentTimeMillis()
@@ -204,11 +207,20 @@ class ScreenWatcher(private val service: AccessibilityService) {
             override fun onFailure(errorCode: Int) {
                 when (errorCode) {
                     AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> { metrics.count("frames_too_soon"); then(latest) }
-                    AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> { metrics.count("secure_windows"); then(null) }
+                    AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> { secureWindow(); then(null) }
                     else -> { metrics.count("screenshot_errors"); lastError = "screenshot error $errorCode"; then(null) }
                 }
             }
         })
+    }
+
+    /**
+     * A screenshot-blocking (FLAG_SECURE) window is in front. Not covered or blocked: banking and
+     * similar apps need it. Its time goes to the heartbeat's `secure_apps` instead.
+     */
+    private fun secureWindow() {
+        metrics.count("secure_windows")
+        SecureApps.shared.seen(app.watchman.android.access.WatchAccessibilityService.foregroundPackage)
     }
 
     /** The active application window, or null (Android before 14, or nothing suitable in front). */
@@ -247,6 +259,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
                 hw.close()
                 if (copy == null) { takeDisplay { b -> then(b?.let { Shot(it, 0, 0, window = false) }) }; return }
                 metrics.count("window_frames")
+                SecureApps.shared.clear()
                 latestWindow?.bitmap?.recycle()
                 val shot = Shot(copy, bounds.left, bounds.top, window = true)
                 latestWindow = shot
@@ -257,7 +270,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
             override fun onFailure(errorCode: Int) {
                 when (errorCode) {
-                    AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> { metrics.count("secure_windows"); then(null) }
+                    AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW -> { secureWindow(); then(null) }
                     else -> {
                         metrics.count("window_screenshot_fallbacks")
                         takeDisplay { b -> then(b?.let { Shot(it, 0, 0, window = false) }) }
@@ -277,8 +290,13 @@ class ScreenWatcher(private val service: AccessibilityService) {
     /** The whole-screen pass, at the policy's interval stretched by the power budget, only when the screen changed. */
     private fun wholeScreenTick() {
         if (stopped) return
-        val policy = state.policy
-        if (policy == null || !ensureModels()) { scheduleTick(30_000); return }
+        // No policy fetched yet means the built-in defaults, never no protection.
+        val policy = state.effectivePolicy
+        // Screen time nothing is meant to judge, so the server does not take it for a stalled watcher.
+        JudgeTally.shared.unwatched(JudgeTally.PAUSED, policy.isPaused())
+        JudgeTally.shared.unwatched(JudgeTally.EXEMPT,
+            policy.exemptApps?.contains(app.watchman.android.access.WatchAccessibilityService.foregroundPackage) == true)
+        if (!ensureModels()) { scheduleTick(30_000); return }
         val p = power()
         budget = PowerBudget.describe(p)
         val front = app.watchman.android.access.WatchAccessibilityService.foregroundPackage
@@ -326,12 +344,12 @@ class ScreenWatcher(private val service: AccessibilityService) {
     /** Called by the accessibility service with image rectangles in screen pixels; one pass per [REGION_COALESCE_MS] with the latest set. */
     fun judgeRegions(pkg: String, url: String?, regions: List<RegionTracker.Region>) {
         handler.post {
-            val policy = state.policy
-            if (policy?.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
+            val policy = state.effectivePolicy
+            if (policy.levelOf(pkg) == WatchLevel.CHECKED) { metrics.count("checked_skips"); return@post }
             // Strict mode in risky apps: new pictures are covered now, from their position alone,
             // and the region pass below lifts the ones judged safe (ADR-040). Not while a list is
             // moving: the next scroll event would lift the cover again (ADR-045).
-            if (!scrolling() && policy != null && policy.strictMode && policy.coverOnDevice != false && pkg in policy.riskyApps) {
+            if (!scrolling() && policy.strictMode && policy.coverOnDevice != false && pkg in policy.riskyApps) {
                 val fresh = tracker.fresh(regions)
                 if (fresh.isNotEmpty()) {
                     metrics.count("strict_covers", fresh.size.toLong())
@@ -363,9 +381,9 @@ class ScreenWatcher(private val service: AccessibilityService) {
      */
     fun reportMiss(done: (Int) -> Unit) {
         handler.post {
-            val policy = state.policy
-            val pipe = pipeline
-            if (policy == null || !ensureModels() || pipe == null) { done(-1); return@post }
+            val policy = state.effectivePolicy
+            if (!ensureModels()) { done(-1); return@post }
+            val pipe = pipeline ?: run { done(-1); return@post }
             val front = app.watchman.android.access.WatchAccessibilityService.foregroundPackage
             takeDisplay { frame ->
                 if (frame == null) { done(-1); return@takeDisplay }
@@ -387,6 +405,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
     /** A new app came to the front: look at it now instead of at the next tick, whatever its level. */
     fun foregroundChanged() {
+        SecureApps.shared.clear()
         handler.post { scheduleTick(0) }
     }
 
@@ -415,7 +434,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
     private fun rectOf(g: RegionTracker.Region) = Rect(g.left, g.top, g.right, g.bottom)
 
     private fun regionPass(p: String, u: String?, tracked: List<RegionTracker.Region>, recheck: Boolean = false) {
-        val policy = state.policy ?: return
+        val policy = state.effectivePolicy
         if (stopped || screenOff || policy.isPaused() || !ensureModels()) return
         // Videos and live pictures are judged at the video cadence; pictures inside a video are
         // judged as part of it (ADR-038). Held ones keep their patches until their turn.
@@ -459,6 +478,8 @@ class ScreenWatcher(private val service: AccessibilityService) {
             if (r.intersect(whole)) r else null
         }
         if (regions.isEmpty()) return
+        // A model runs on this frame: the heartbeat's `judge` counts it.
+        JudgeTally.shared.judged()
         if (!p.plugged) metrics.count("judged_on_battery")
         val coverOnDevice = policy.coverOnDevice != false
         val started = System.nanoTime()
@@ -503,7 +524,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
         val frame = shot.bitmap
         val screen = service.resources.displayMetrics
         pipeline?.let { avgClassifyMs = it.avgClassifyMs }
-        val coverOnDevice = state.policy?.coverOnDevice != false
+        val coverOnDevice = state.effectivePolicy.coverOnDevice != false
         val covered = findings.filter { it.decision == Decision.COVER }
         if (covered.isNotEmpty()) coveredApps[appLabel(pkg)] = System.currentTimeMillis()
         // Only sure covers can take over the screen: an unsure one is a patch while the server is
@@ -513,7 +534,7 @@ class ScreenWatcher(private val service: AccessibilityService) {
         val area = Coverage.shareOfRects(sure.map { it.region }, frame.width, frame.height)
         // Only when the household turned the whole-screen block on, and not for an app the person
         // continued past in the last 10 minutes (ADR-047).
-        val blocked = coverOnDevice && state.policy?.blockWholeScreen == true && area > Coverage.BLOCK_SHARE &&
+        val blocked = coverOnDevice && state.effectivePolicy.blockWholeScreen == true && area > Coverage.BLOCK_SHARE &&
             !BlockActivity.passed(pkg)
         // An empty package makes the block screen say what happened (most of the screen was
         // explicit), not that the app is on the household's blocklist.
@@ -568,6 +589,10 @@ class ScreenWatcher(private val service: AccessibilityService) {
 
     fun stop() {
         stopped = true
+        // With no watcher nothing is held off on purpose: screen time from here on counts as watched.
+        JudgeTally.shared.unwatched(JudgeTally.PAUSED, false)
+        JudgeTally.shared.unwatched(JudgeTally.EXEMPT, false)
+        SecureApps.shared.clear()
         handler.removeCallbacks(flush)
         instance = null
         handler.removeCallbacks(tick)

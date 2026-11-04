@@ -38,6 +38,7 @@ public static class Cli
             {
                 var p = state.Pairing;
                 Console.WriteLine(p is null ? "not paired" : $"paired with {p.ServerName} ({p.Server})");
+                if (p is not null && state.Rejected) Console.WriteLine($"rejected: {ServiceState.RejectedMessage}");
                 Console.WriteLine($"policy version: {state.Policy?.Version.ToString() ?? "none"}; paused until: {state.Policy?.PausedUntil ?? "no"}");
                 Console.WriteLine($"detector: {state.DetectorPath ?? "not downloaded"}");
                 Console.WriteLine($"queued events: {state.Queue.Count}");

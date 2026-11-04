@@ -25,11 +25,34 @@ public sealed class ServiceState(IStore store, IClock clock)
         lock (_metricsLock) { var m = _metrics; _metrics = new MetricsSnapshot(); return m; }
     }
 
+    /// <summary>Pairing again with a new code replaces the token and clears <see cref="Rejected"/>.</summary>
     public Pairing? Pairing
     {
         get => store.ReadJson<Pairing>("pairing.json");
-        set { if (value is null) store.Delete("pairing.json"); else store.WriteJson("pairing.json", value); Changed?.Invoke(); }
+        set
+        {
+            if (value is null) store.Delete("pairing.json"); else store.WriteJson("pairing.json", value);
+            store.Delete("rejected.txt");
+            Changed?.Invoke();
+        }
     }
+
+    public const string RejectedMessage = "The server no longer accepts this device. Protection stays on. Pair again with a new code.";
+
+    /// <summary>The server answered 401. The token, the policy and protection stay exactly as they
+    /// were and heartbeats go on: a fake or hostile server must not be able to switch protection off.</summary>
+    public bool Rejected
+    {
+        get => store.ReadText("rejected.txt") is not null;
+        set
+        {
+            if (value == Rejected) return;
+            if (value) store.WriteText("rejected.txt", Iso.Format(Clock.Now)); else store.Delete("rejected.txt");
+        }
+    }
+
+    /// <summary>How the worker reaches the server; tests swap in an Api over a fake handler.</summary>
+    public Func<Pairing, Api> ApiFactory { get; set; } = p => new Api(p.Server, p.Token);
 
     public Policy? Policy
     {
@@ -62,13 +85,14 @@ public sealed class ServiceState(IStore store, IClock clock)
     public Api? Api()
     {
         var p = Pairing;
-        return p is null ? null : new Api(p.Server, p.Token);
+        return p is null ? null : ApiFactory(p);
     }
 
     public ConfigMessage Config()
     {
-        var p = Policy;
-        return new ConfigMessage(Pairing is not null, Pairing?.ServerName, p, DetectorPath, Detector, p?.PausedUntil,
+        // No policy fetched yet means the built-in defaults, never no protection.
+        var p = Policy ?? Core.Policy.Defaults;
+        return new ConfigMessage(Pairing is not null, Pairing?.ServerName, p, DetectorPath, Detector, p.PausedUntil,
             SmallDetectorPath, SmallDetector);
     }
 

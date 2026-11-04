@@ -6,6 +6,7 @@ import { base64ToBytes } from "./shared/bytes";
 import { DecisionCache, decide, Inflight, isKnownBad, isTiny, Lru, RateLimiter, settle, shouldAsk } from "./shared/decide";
 import { ext, nowIso, platformName, StorageKeyValue, uuid } from "./shared/ext";
 import { EventQueue } from "./shared/queue";
+import { addJudged, addScreenSample, delivered, freshLiveness, livenessBody, type LivenessState } from "./shared/liveness";
 import { count, emptySnapshot, isEmpty, merge, type Snapshot, time, workLine } from "./shared/metrics";
 import type {
   Decision,
@@ -42,6 +43,28 @@ const videoEvents = new RateLimiter(60_000); // one report per video source per 
 let work: Snapshot = emptySnapshot();
 let workSince = Date.now();
 let debug = false;
+// Judge liveness (the heartbeat's `judge`): images a model scored since the last fold.
+let judgedSinceFold = 0;
+let lastJudgedAt: string | null = null;
+
+/** When a pairing exists but its policy is missing (never fetched, or lost), judge with these
+ * instead of passing images. They match the server's defaults; the real policy replaces them on the
+ * next flush. Only a browser that was never paired lets images through. */
+export const DEFAULT_POLICY: Policy = {
+  version: 0,
+  thresholds: { cover: 0.85, flag: 0.85, ask: 0.6, sure: 0.97, detector_cover: 0.55 },
+  strict_mode: false,
+  cover_on_device: true,
+  ask_server: true,
+  risky_apps: [],
+  blocked_apps: [],
+  protected_browser: "",
+  sample_interval_s: 60,
+  whole_screen_interval_s: 5,
+  paused_until: null,
+  known_bad_hashes: [],
+  models_manifest_url: "/api/v1/models/manifest",
+};
 
 function tally(name: string, n = 1): void {
   count(work, name, n);
@@ -53,6 +76,7 @@ function timing(name: string, ms: number): void {
 
 /** Move the in-memory window into storage: one copy for the next heartbeat, one for today. */
 async function foldWork(): Promise<void> {
+  await foldLiveness();
   if (isEmpty(work)) return;
   const w = { ...work, window_s: Math.round((Date.now() - workSince) / 1000) };
   work = emptySnapshot();
@@ -62,6 +86,58 @@ async function foldWork(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const day = (await storage.get("work_day")) as { day: string; work: Snapshot } | undefined;
   await storage.set("work_day", { day: today, work: merge(day?.day === today ? day.work : emptySnapshot(), w) });
+}
+
+async function liveness(): Promise<LivenessState> {
+  return ((await storage.get("judge_live")) as LivenessState | undefined) ?? freshLiveness(Date.now());
+}
+
+// Folds and samples read-modify-write one record; serialise them like the counters.
+let liveChain: Promise<void> = Promise.resolve();
+
+function updateLiveness(change: (s: LivenessState) => LivenessState): Promise<void> {
+  liveChain = liveChain
+    .then(async () => {
+      await storage.set("judge_live", change(await liveness()));
+    })
+    .catch(() => undefined);
+  return liveChain;
+}
+
+async function foldLiveness(): Promise<void> {
+  const n = judgedSinceFold;
+  const at = lastJudgedAt;
+  judgedSinceFold = 0;
+  await updateLiveness((s) => addJudged(s, n, at));
+}
+
+function noteJudged(): void {
+  judgedSinceFold += 1;
+  lastJudgedAt = nowIso();
+}
+
+/** Whether a window of this browser has focus and the user is active. Approximate by design. */
+async function screenOn(): Promise<boolean> {
+  let idle = "active";
+  try {
+    const q = (ext as unknown as { idle?: { queryState?: (s: number) => Promise<string> } }).idle?.queryState;
+    if (q) idle = await q(60);
+  } catch {
+    // no idle API: count focus alone
+  }
+  let focused = true;
+  try {
+    const w = (ext as unknown as { windows?: { getLastFocused?: () => Promise<{ focused?: boolean }> } }).windows;
+    if (w?.getLastFocused) focused = Boolean((await w.getLastFocused())?.focused);
+  } catch {
+    // no windows API (Firefox for Android): the one window is the screen
+  }
+  return idle === "active" && focused;
+}
+
+async function sampleScreen(): Promise<void> {
+  const active = await screenOn();
+  await updateLiveness((s) => addScreenSample(s, Date.now(), active));
 }
 
 interface Counters {
@@ -240,8 +316,8 @@ export async function judge(req: JudgeRequest | FrameJudgeRequest, tabId?: numbe
 
 async function judgeInner(req: JudgeRequest | FrameJudgeRequest, tabId?: number): Promise<JudgeResponse> {
   const p = await pairing();
-  const pol = await policy();
-  if (!p || !pol) return { decision: "safe", hash: null, score: null, reason: "unpaired" };
+  if (!p) return { decision: "safe", hash: null, score: null, reason: "unpaired" };
+  const pol = (await policy()) ?? DEFAULT_POLICY;
   if (pol.paused_until && new Date(pol.paused_until) > new Date()) {
     return { decision: "safe", hash: null, score: null, reason: "paused" };
   }
@@ -278,6 +354,7 @@ async function judgeOnce(req: JudgeRequest | FrameJudgeRequest, tabId: number | 
   if (result.ms !== undefined) timing("engine_ms", result.ms);
   if (result.cached) tally("engine_cache_hits");
   const url = sourceOf(req);
+  noteJudged();
   await bump("scored");
   let decision = decide(result.score, pol.thresholds);
   let reason: JudgeResponse["reason"] = "scored";
@@ -304,9 +381,9 @@ async function judgeOnce(req: JudgeRequest | FrameJudgeRequest, tabId: number | 
 
 /** A second look at a covered image, on request from the page: the server's bigger model decides. */
 async function recheck(url: string, pageUrl: string, jpegBase64?: string): Promise<{ decision: Decision; reason: string }> {
-  const pol = await policy();
   const a = await api();
-  if (!pol || !a) return { decision: "cover", reason: "unpaired" };
+  if (!a) return { decision: "cover", reason: "unpaired" };
+  const pol = (await policy()) ?? DEFAULT_POLICY;
   try {
     await ensureEngine();
   } catch {
@@ -321,6 +398,7 @@ async function recheck(url: string, pageUrl: string, jpegBase64?: string): Promi
     const verdict = (await a.judge(base64ToBytes(r.jpegBase64).buffer as ArrayBuffer)).verdict;
     const decision: Decision = verdict === "explicit" ? "cover" : "safe";
     cache.remember(url, { decision, hash: r.hash, score: r.score });
+    noteJudged();
     await bump("scored");
     return { decision, reason: verdict === "explicit" ? "explicit" : "scored" };
   } catch {
@@ -331,8 +409,8 @@ async function recheck(url: string, pageUrl: string, jpegBase64?: string): Promi
 
 /** The popup's diagnostic: every image on the active tab with its score. Nothing is stored or sent. */
 async function scorePage(): Promise<{ ok: boolean; error?: string; images?: PageScore[]; thresholds?: Thresholds }> {
-  const pol = await policy();
-  if (!pol) return { ok: false, error: "not paired" };
+  if (!(await pairing())) return { ok: false, error: "not paired" };
+  const pol = (await policy()) ?? DEFAULT_POLICY;
   const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "no active tab" };
   let images: PageImage[];
@@ -362,6 +440,7 @@ async function scorePage(): Promise<{ ok: boolean; error?: string; images?: Page
 // Server traffic
 
 async function flush(): Promise<void> {
+  await sampleScreen();
   await foldWork();
   const a = await api();
   if (!a) return;
@@ -372,7 +451,8 @@ async function flush(): Promise<void> {
     if (!current || current.version !== v.policy_version || current.paused_until !== v.paused_until) {
       await storage.set("policy", await a.policy());
     }
-  } catch {
+  } catch (err) {
+    await noteRejection(err);
     // the heartbeat will try again
   }
   try {
@@ -387,11 +467,23 @@ async function flush(): Promise<void> {
   }
 }
 
-async function heartbeat(): Promise<void> {
+/** A 401 means the server no longer accepts this token, or something answering as the server says
+ * so. Either way protection stays on with the pairing and policy it has; the popup and settings say
+ * so, and pairing again with a new code replaces the token and clears this. */
+async function noteRejection(err: unknown): Promise<void> {
+  if (!(err instanceof ApiError) || err.status !== 401) return;
+  if (await storage.get("rejected")) return;
+  await storage.set("rejected", { at: nowIso(), status: 401 });
+}
+
+export async function heartbeat(): Promise<void> {
   const a = await api();
   if (!a) return;
+  await sampleScreen();
   await foldWork();
   const pending = ((await storage.get("work_pending")) as Snapshot | undefined) ?? emptySnapshot();
+  const sentAt = Date.now();
+  const judgeLive = livenessBody(await liveness(), sentAt);
   try {
     const r = await a.heartbeat({
       sent_at: nowIso(),
@@ -410,22 +502,23 @@ async function heartbeat(): Promise<void> {
         vpn: null,
       },
       metrics: isEmpty(pending) ? null : pending,
+      judge: judgeLive,
     });
     await storage.set("work_pending", emptySnapshot());
+    await updateLiveness((s) => delivered(s, judgeLive, sentAt));
+    await storage.remove("rejected");
     const current = await policy();
     if (!current || current.version !== r.policy_version || current.paused_until !== r.paused_until) {
       await storage.set("policy", await a.policy());
     }
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
-      await storage.remove("pairing");
-      await storage.remove("policy");
-    }
+    // Never unpair here: a fake server, or one that answers 401, must not turn protection off.
+    await noteRejection(err);
     console.warn("watchman: heartbeat failed", err);
   }
 }
 
-async function pair(server: string, code: string, name: string): Promise<Pairing> {
+export async function pair(server: string, code: string, name: string): Promise<Pairing> {
   const p = await Api.pair(fetch, server, code, {
     name: name || `${platformName()} extension`,
     platform: platformName(),
@@ -433,6 +526,7 @@ async function pair(server: string, code: string, name: string): Promise<Pairing
     app_version: VERSION,
   });
   await storage.set("pairing", p);
+  await storage.remove("rejected");
   const a = new Api(fetch, p.server, p.token);
   await storage.set("policy", await a.policy());
   engineReady = null;
@@ -447,12 +541,34 @@ async function todaysWork(): Promise<Snapshot> {
   return day?.day === today ? day.work : emptySnapshot();
 }
 
-async function status(): Promise<Record<string, unknown>> {
+/** A page kept lifting the blur the content script put on its images (reason "page_unblur"). */
+export async function tamper(reason: string, n: number, pageUrl: string, tabTitle?: string): Promise<void> {
+  if (!(await pairing())) return;
+  await queue.push({
+    id: uuid(),
+    type: "tamper",
+    occurred_at: nowIso(),
+    app: platformName(),
+    url: pageUrl || null,
+    title: tabTitle || null,
+    action: "none",
+    scores: null,
+    region: null,
+    hash: null,
+    has_image: false,
+    detail: { reason, count: n },
+  });
+}
+
+export async function status(): Promise<Record<string, unknown>> {
   const p = await pairing();
   const pol = await policy();
   const c = await counters();
+  const rejected = (await storage.get("rejected")) as { at: string } | undefined;
   return {
     paired: p !== null,
+    rejected: Boolean(rejected),
+    rejectedAt: rejected?.at ?? null,
     server: p?.server ?? null,
     serverName: p?.server_name ?? null,
     pausedUntil: pol?.paused_until ?? null,
@@ -477,7 +593,7 @@ ext.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
         return judge(msg as unknown as JudgeRequest, sender.tab?.id);
       case "active": {
         const p = await pairing();
-        const pol = await policy();
+        const pol = p ? ((await policy()) ?? DEFAULT_POLICY) : null;
         return { active: p !== null, coverOnDevice: pol?.cover_on_device !== false, videoSampleS: pol?.whole_screen_interval_s ?? 5 };
       }
       case "status":
@@ -515,6 +631,13 @@ ext.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
         return { ok: true };
       case "score_page":
         return scorePage();
+      case "tamper": {
+        const reason = String(msg.reason ?? "").slice(0, 40);
+        if (!/^[a-z_]+$/.test(reason)) return { ok: false, error: "bad reason" };
+        const n = Math.max(0, Math.floor(Number(msg.count) || 0));
+        await tamper(reason, n, String(msg.url ?? sender.tab?.url ?? "").slice(0, 2000), sender.tab?.title);
+        return { ok: true };
+      }
       case "video_stats":
         tally("video_frames_dropped", Number(msg.dropped ?? 0));
         return { ok: true };
