@@ -157,6 +157,11 @@ must be able to reach the other one over Tailscale: share the other `watchman` n
 partner's tailnet, and check from the watching server that `/healthz` answers. Problems and a
 server that stays unreachable for 30 minutes are emailed through the watching server's own mail.
 
+A partner who runs their own server should make their key there, not on the other household's
+portal: open Watching, the household, and Make my key here. Approvals, reviews and peeks then
+happen on that page, which their own server sends, so the passphrase never goes near the server
+they are watching (ADR-055).
+
 ## Devices
 
 On the Devices page create a pairing code (valid 15 minutes, one device). Type it into the Android

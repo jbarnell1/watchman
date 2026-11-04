@@ -38,6 +38,7 @@ COLUMNS = (
     ("events", "sealed", "TEXT"),                # ADR-053
     ("images", "sealed", "INTEGER NOT NULL DEFAULT 0"),
     ("unlock_codes", "signed", "INTEGER NOT NULL DEFAULT 0"),
+    ("watching", "my_key", "TEXT"),              # ADR-055: the partner key this server holds for them
 )
 
 

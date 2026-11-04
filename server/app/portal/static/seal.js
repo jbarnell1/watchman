@@ -151,7 +151,7 @@
   function sign(partnerId, action, params, keys, challenge) {
     var key = keys && keys[partnerId];
     if (!key) return Promise.reject(new Error("unlock your key first"));
-    challenge = challenge || function () { return postJson("/keys/challenge", {partner_id: partnerId}); };
+    challenge = challenge || function () { return postJson(config().challenge || "/keys/challenge", {partner_id: partnerId}); };
     return challenge().then(function (c) {
       var payload = canonical({v: 1, action: action, params: params, nonce: c.nonce, partner_id: partnerId});
       return subtle.sign({name: "ECDSA", hash: "SHA-256"}, key.sign, enc.encode(payload)).then(function (sig) {
@@ -236,15 +236,20 @@
           });
         });
       });
-      if (have) checkpoint(keys);
+      // Only on a page that says whose key it is: the partner's own pages, never someone else's.
+      if (config().partner && keys[config().partner]) checkpoint(keys);
     });
   }
 
+  // Pages on a partner's own server act on another household's server (ADR-055) and say where.
+  function config() { return globalThis.WatchmanSealConfig || {}; }
+
   // Sign the record's head now and then, and check the head signed last time is still there.
   function checkpoint(keys) {
+    var c = config(), store = c.store || "watchman-checkpoint", entry = c.entry === undefined ? "/record/entry/" : c.entry;
     var last = null;
-    try { last = JSON.parse(localStorage.getItem("watchman-checkpoint") || "null"); } catch (e) { last = null; }
-    var check = last ? fetch("/record/entry/" + last.seq, {credentials: "same-origin"}).then(function (r) {
+    try { last = JSON.parse(localStorage.getItem(store) || "null"); } catch (e) { last = null; }
+    var check = last && entry ? fetch(entry + last.seq, {credentials: "same-origin"}).then(function (r) {
       return r.ok ? r.json() : {hash: "missing"};
     }).then(function (e) {
       if (e.hash !== last.hash) {
@@ -260,19 +265,21 @@
     check.then(function () {
       if (last && Date.now() - last.at < CHECKPOINT_MS) return;
       var partner = Object.keys(keys)[0];
-      return fetch("/record/head", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (head) {
+      if (c.partner) partner = c.partner;
+      return fetch(c.head || "/record/head", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (head) {
         if (!head.seq) return;
         return sign(partner, "checkpoint", {seq: head.seq, hash: head.hash}, keys).then(function (a) {
-          return postJson("/record/checkpoint", a);
+          return postJson(c.checkpoint || "/record/checkpoint", a);
         }).then(function () {
-          localStorage.setItem("watchman-checkpoint", JSON.stringify({seq: head.seq, hash: head.hash, at: Date.now()}));
+          localStorage.setItem(store, JSON.stringify({seq: head.seq, hash: head.hash, at: Date.now()}));
         });
       });
     }).catch(function () {});
   }
 
   globalThis.WatchmanSeal = {setup: setup, unlock: unlock, lock: lock, unlocked: unlocked, sign: sign,
-                             open: open, openAny: openAny, canonical: canonical, b64: b64, unb64: unb64};
+                             open: open, openAny: openAny, canonical: canonical, b64: b64, unb64: unb64,
+                             postJson: postJson};
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", onPage); else onPage();
   }

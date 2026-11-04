@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/fonts/geist.css">
 <link rel="stylesheet" href="/static/app.css">
 <link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+{% if role == 'partner' and my_key and person %}<script>window.WatchmanSealConfig = {partner: {{ viewer.partner_rows[person.id].id|tojson }}};</script>{% endif %}
 <script src="/static/seal.js"></script>
 </head>
 <body>

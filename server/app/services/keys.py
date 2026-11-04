@@ -42,6 +42,8 @@ NONCE_LIFE = timedelta(minutes=10)
 # A replaced key cannot approve anything for this long, and everyone hears about it at once.
 NEW_KEY_WAIT = timedelta(days=3)
 MIN_PASSPHRASE = 12
+# A key made on the partner's own Watchman server (ADR-055): only the public halves are here.
+HELD_ELSEWHERE = {"held_by": "own_server"}
 
 
 def b64(data: bytes) -> str:
@@ -83,11 +85,12 @@ def set_key(ctx: Context, partner: sqlite3.Row, sign_pub: str, enc_pub: str, wra
         serialization.load_der_public_key(unb64(sign_pub))
     except Exception as exc:
         raise ApiError(f"not a P-256 public key: {exc}") from exc
-    for field in ("salt", "iterations", "iv", "data"):
-        if field not in wrapped:
-            raise ApiError(f"the locked key bundle has no {field}")
-    if int(wrapped["iterations"]) < 600_000:
-        raise ApiError("the passphrase key needs at least 600000 rounds")
+    if wrapped != HELD_ELSEWHERE:
+        for field in ("salt", "iterations", "iv", "data"):
+            if field not in wrapped:
+                raise ApiError(f"the locked key bundle has no {field}")
+        if int(wrapped["iterations"]) < 600_000:
+            raise ApiError("the passphrase key needs at least 600000 rounds")
     fp = fingerprint(sign_pub, enc_pub)
     now = ctx.clock.now()
     replacing = key_for(ctx, partner["id"]) is not None
@@ -207,3 +210,16 @@ def open_sealed(envelope: bytes, aad: str, partner_id: str, enc_private: ec.Elli
         enc_private.exchange(ec.ECDH(), peer))
     cek = AESGCM(kek).decrypt(unb64(k["iv"]), unb64(k["wk"]), aad.encode())
     return AESGCM(cek).decrypt(unb64(env["iv"]), unb64(env["ct"]), aad.encode())
+
+
+def announce(ctx: Context, partner: sqlite3.Row, fp: str, replacing: bool, where: str = "on the portal") -> None:
+    from app.services import alerts
+    lines = [f"{partner['name']} {'replaced their key' if replacing else 'set up a key'} {where} (fingerprint {fp})."]
+    if replacing:
+        lines.append(f"The new key approves nothing for three days. If {partner['name']} did not do this, "
+                     "someone else is acting as them.")
+    else:
+        lines.append("From now on loosening needs a partner's signed approval, and what partners review is "
+                     "sealed so only their keys open it.")
+    alerts.change_alert(ctx, f"{partner['name']} {'replaced' if replacing else 'set up'} their partner key",
+                        lines, partner["person_id"])

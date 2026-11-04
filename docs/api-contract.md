@@ -256,6 +256,7 @@ Server-rendered pages under `/`. Roles: `admin`, `protected`, `partner`. A login
 | `/approve/{id}` | partner with a key | A held change; `POST` with `approval_payload`, `approval_sig`, `approval_partner` applies it; `POST /approve/{id}/decline` |
 | `/record` | all | The record's head, this server's check, waiting changes, witnesses and checkpoints; `GET /record/head`, `GET /record/entry/{seq}`, `POST /record/checkpoint` (a signed approval of `{seq, hash}`), `POST /record/witness` creates a witness token |
 | `/watching` | admin | Households this server watches (ADR-054) |
+| `/watching/{id}` | admin | That household's page on the partner's own server: make and unlock the key kept here, approve, decline, review, peek; checkpoints are signed from here (ADR-055) |
 | `/auth/login?next=` | anyone (OIDC mode only) | Starts the sign-in: redirect to the provider with state, nonce and a PKCE challenge |
 | `/auth/callback` | the provider's redirect (OIDC mode only) | Checks state, redeems the code, validates the ID token, sets the session cookie, goes to `next` |
 | `/auth/logout` (GET or POST) | anyone (OIDC mode only) | Clears the session cookie on this browser |
@@ -268,7 +269,27 @@ partner creates on the Record page (stored hashed; revocable there). 401 otherwi
 
 ### GET /api/v1/witness/status
 `{"head": {"seq": 412, "hash": "..."}, "household": "...", "problems": [], "server_time": "..."}`.
-`problems` is this server's own check of its database against the record (ADR-052).
+`problems` is this server's own check of its database against the record (ADR-052). Also
+`partner` (`id`, `name`, `person_id`, `person_name`: whose token this is) and `key` (`fingerprint`,
+`active_from`, or null).
+
+### Acting for the partner (ADR-055)
+For the one partner the token belongs to, from their own server. Every action is a signed approval
+from that partner's key, checked as on the portal; 400 `approval_invalid` otherwise.
+- `POST /api/v1/witness/key` `{sign_pub, enc_pub}`: registers a key made on the partner's server.
+  Response `{fingerprint, active_from}`. Replacing a key waits three days and alerts, as on the portal.
+- `POST /api/v1/witness/challenge`: `{nonce}`, single use, ten minutes.
+- `GET /api/v1/witness/approvals`: waiting changes for that partner's person or the household:
+  `{id, kind, summary, params, signed, created_by, created_at, can_decide}`; `signed` is what to sign
+  as `approve`.
+- `POST /api/v1/witness/approve/{id}` body: the approval. `POST /api/v1/witness/decline/{id}`.
+- `GET /api/v1/witness/review`: `{items: [{id, app, type, severity, occurred_at, sealed, url, title,
+  second_opinion, review_state, image_status}], peek_seconds, next_peek_at}`.
+- `GET /api/v1/witness/image/{id}`: the heavy blur.
+- `POST /api/v1/witness/peek/{id}`: starts a peek under the cooldown (429 during it) and returns the
+  medium blur, sealed (`X-Watchman-Sealed: 1`), with `X-Watchman-Seconds` and `X-Watchman-Next-Peek`.
+- `POST /api/v1/witness/review/{id}` `{state, approval}`.
+- `POST /api/v1/witness/checkpoint` body: an approval of `{seq, hash}`.
 
 ### GET /api/v1/witness/ledger?after=0&limit=500
 `{"entries": [{"seq", "at", "kind", "person_id", "ref", "body", "prev", "hash"}], "head": {...}}`,

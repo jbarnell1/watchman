@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from urllib.parse import unquote
+import re
 
 from fastapi.testclient import TestClient
 
 from app.clients.identity import FakeIdentity, Identity
 from app.clients.mailer import FakeMailer
 from app.clients.second_opinion import FakeSecondOpinion
-from app.clients.witness_client import FakeWitnessClient
+from app.clients.witness_client import FakeWitnessClient, test_client_handler
 from app.config import Config
 from app.main import build_context, create_app
 from app.services import jobs, witness
@@ -19,7 +19,8 @@ from tests.conftest import ADMIN, PARTNER, as_login
 def _token(client, household) -> str:
     r = client.post("/record/witness", data={"partner_id": household["sam"]}, headers=as_login(PARTNER),
                     follow_redirects=False)
-    return unquote(r.headers["location"]).split("token=")[1]
+    assert r.status_code == 200 and "token=" not in str(r.url)
+    return re.search(r"wmw_[A-Za-z0-9_-]+", r.text).group(0)
 
 
 def _watcher(tmp_path, clock, watched_client):
@@ -29,13 +30,7 @@ def _watcher(tmp_path, clock, watched_client):
                         clock=clock, identity=FakeIdentity(Identity(login="sam@example.com", name="Sam")),
                         mailer=mail, second_opinion=FakeSecondOpinion(0.0), db_path=":memory:")
 
-    def handler(base, token, path, params):
-        r = watched_client.get(path, params=params, headers={"Authorization": f"Bearer {token}"})
-        if r.status_code != 200:
-            raise witness.WitnessError(r.text)
-        return r.json()
-
-    ctx.witness = FakeWitnessClient(handler)
+    ctx.witness = FakeWitnessClient(test_client_handler(watched_client))
     return ctx, mail
 
 
@@ -98,8 +93,7 @@ def test_a_watched_server_that_goes_quiet_is_reported(ctx, client, household, cl
 
 def test_watching_page_adds_and_lists(ctx, client, household, tmp_path, clock):
     token = _token(client, household)
-    ctx.witness = FakeWitnessClient(lambda b, t, p, q: TestClient(create_app(ctx=ctx, run_jobs=False)).get(
-        p, params=q, headers={"Authorization": f"Bearer {t}"}).json())
+    ctx.witness = FakeWitnessClient(test_client_handler(TestClient(create_app(ctx=ctx, run_jobs=False))))
     r = client.post("/watching", data={"name": "Self", "url": "https://self.example", "token": token,
                                        "email": "owner@example.com"}, headers=as_login(ADMIN), follow_redirects=False)
     assert r.status_code == 303

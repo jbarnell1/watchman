@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS watching (
   last_try_at TEXT,
   last_error  TEXT,
   down_alerted_at TEXT,
+  my_key      TEXT,                 -- JSON: the partner key kept here for that household (ADR-055)
   last_report TEXT,                 -- the last problem emailed, so it is not repeated every poll
   last_report_at TEXT,
   created_at  TEXT NOT NULL
