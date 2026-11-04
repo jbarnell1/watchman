@@ -12,6 +12,7 @@
   "permissions": [
     "storage",
     "alarms",
+    "idle",
     "unlimitedStorage",
     "activeTab"
   ],

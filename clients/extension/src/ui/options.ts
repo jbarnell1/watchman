@@ -7,17 +7,20 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 async function render(): Promise<void> {
   const s = (await ext.runtime.sendMessage({ type: "status" })) as {
     paired: boolean;
+    rejected?: boolean;
     server: string | null;
     serverName: string | null;
     pausedUntil: string | null;
   };
-  el("pair-panel").hidden = s.paired;
+  // A rejected browser keeps protecting with what it has and offers the pairing form again.
+  el("pair-panel").hidden = s.paired && !s.rejected;
   el("paired-panel").hidden = !s.paired;
   el("pause-panel").hidden = !s.paired;
   if (s.paired) {
     el("paired-text").textContent = `This browser reports to ${s.serverName ?? ""} at ${s.server}.`;
-    el("status").textContent =
-      s.pausedUntil && new Date(s.pausedUntil) > new Date()
+    el("status").textContent = s.rejected
+      ? "The server no longer accepts this browser. Protection stays on. Pair again with a new code."
+      : s.pausedUntil && new Date(s.pausedUntil) > new Date()
         ? `Paused until ${new Date(s.pausedUntil).toLocaleString()}.`
         : "Protection on.";
   } else {

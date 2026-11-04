@@ -35,6 +35,13 @@ public sealed record Policy(
     [property: JsonPropertyName("ask_server")] bool? AskServer = null)
 {
     public bool IsPaused(IClock clock) => PausedUntil is not null && Iso.Parse(PausedUntil) > clock.Now;
+
+    /// <summary>Used when no policy was ever fetched, so protection never waits on the server: the
+    /// contract's defaults, nothing blocked, not paused.</summary>
+    public static Policy Defaults { get; } = new(
+        Version: 0, Thresholds: new Thresholds(0.85, 0.85, 0.55, 0.60), StrictMode: true, Coverage: null, ExplicitLabels: null,
+        RiskyApps: new(), BlockedApps: new(), ProtectedBrowser: "", SampleIntervalS: 180, WholeScreenIntervalS: 5,
+        PausedUntil: null, KnownBadHashes: new());
 }
 
 public sealed record Pairing(string Server, string Token, [property: JsonPropertyName("device_id")] string DeviceId,

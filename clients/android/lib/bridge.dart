@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 class Status {
   const Status({
     required this.paired,
+    this.rejected = false,
     this.serverName,
     this.server,
     this.policyVersion,
@@ -28,6 +29,8 @@ class Status {
   });
 
   final bool paired;
+  /// The server answered 401. Protection stays on with the last policy until the phone pairs again.
+  final bool rejected;
   final String? serverName;
   final String? server;
   final int? policyVersion;
@@ -63,6 +66,7 @@ class Status {
 
   factory Status.fromMap(Map<Object?, Object?> m) => Status(
         paired: m['paired'] == true,
+        rejected: m['rejected'] == true,
         serverName: m['serverName'] as String?,
         server: m['server'] as String?,
         policyVersion: m['policyVersion'] as int?,
