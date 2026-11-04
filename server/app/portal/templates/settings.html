@@ -2,7 +2,7 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="titlerow"><div><h1>Settings</h1>
-  <p class="finding">{% if locked %}Protection is on. Tightening anything is free; loosening a setting marked locked needs a partner's settings code.{% elif not settings.locks_on %}Locks are off while you set up and test: every setting can change without a partner code, and partners see each change in the digest. Turn locks on under Protection when you are done.{% else %}Nothing is paired yet, so every setting can be changed freely. Once a device is paired, protection settings lock.{% endif %}</p></div></div>
+  <p class="finding">{% if locked %}Locks are on. Tightening anything is free; loosening a setting marked locked needs a partner's settings code.{% else %}Locks are off while you set up and test: every setting can change without a partner code. Partners still get an email at once for every change that loosens anything. Turn locks on under Protection when you are done.{% endif %}</p></div></div>
 
 <nav class="tabs" aria-label="Settings areas">
   {% for a in areas %}<a class="{% if a == area %}on{% endif %}" href="/settings?area={{ a }}">{{ a|capitalize }}</a>{% endfor %}
@@ -15,23 +15,23 @@
 
 {% if area == 'general' %}
 <form method="post" action="/settings/general" class="settings">
-  <div class="srow"><div class="slabel"><h2>Household</h2><p>The name devices and emails show.</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Household {{ lock('timezone') }}</h2><p>The name devices and emails show, and the time zone the digest keeps.</p></div><div class="spanel">
     <label for="household_name">Household name</label><input id="household_name" name="household_name" value="{{ settings.household_name }}">
     <label for="timezone">Time zone</label><select id="timezone" name="timezone">{% for tz in timezones %}<option {% if tz == settings.timezone %}selected{% endif %}>{{ tz }}</option>{% endfor %}</select>
   </div></div>
-  <div class="srow"><div class="slabel"><h2>Digest</h2><p>Sent to {{ person.name if person else 'the protected person' }} and every partner. {% if last_digest %}Last sent {{ when(last_digest.sent_at) }}.{% else %}Not sent yet.{% endif %}</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Digest {{ lock('digest_day') }}</h2><p>Sent to {{ person.name if person else 'the protected person' }} and every partner. {% if last_digest %}Last sent {{ when(last_digest.sent_at) }}.{% else %}Not sent yet.{% endif %}</p></div><div class="spanel">
     <div class="pair">
       <div><label for="digest_day">Day</label><select id="digest_day" name="digest_day">{% for d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}<option value="{{ d }}" {% if d == settings.digest_day %}selected{% endif %}>{{ d|capitalize }}</option>{% endfor %}</select></div>
       <div><label for="digest_time">Time</label><input id="digest_time" name="digest_time" type="time" value="{{ settings.digest_time }}"></div>
     </div>
   </div></div>
-  <div class="srow"><div class="slabel"><h2>Retention {{ lock('image_retention_days') }}</h2><p>Blurred images are deleted after this many days; event text later.</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Retention {{ lock('image_retention_days') }}</h2><p>Blurred images are deleted after this many days; the record of events later, after 30 days at the least.</p></div><div class="spanel">
     <div class="pair">
       <div><label for="image_retention_days">Images, days</label><input id="image_retention_days" name="image_retention_days" type="number" min="1" value="{{ settings.image_retention_days }}"></div>
-      <div><label for="event_retention_days">Events, days</label><input id="event_retention_days" name="event_retention_days" type="number" min="7" value="{{ settings.event_retention_days }}"></div>
+      <div><label for="event_retention_days">Events, days</label><input id="event_retention_days" name="event_retention_days" type="number" min="30" value="{{ settings.event_retention_days }}"></div>
     </div>
   </div></div>
-  <div class="srow"><div class="slabel"><h2>Extras</h2><p>Optional. ntfy gets a short push for the admin on every alert.</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Extras {{ lock('ntfy_url') }}</h2><p>Optional. ntfy gets a short push for the admin on every alert.</p></div><div class="spanel">
     <label for="ntfy_url">ntfy topic URL</label><input id="ntfy_url" name="ntfy_url" value="{{ settings.ntfy_url }}" placeholder="https://ntfy.example/homelab">
     <label for="adguard_url">AdGuard Home URL</label><input id="adguard_url" name="adguard_url" value="{{ settings.adguard_url }}" placeholder="http://adguard.lan:3053">
   </div></div>
@@ -112,12 +112,13 @@
     <label for="checked_apps">Checked now and then</label><textarea id="checked_apps" name="checked_apps" rows="3" placeholder="com.google.android.gm">{{ settings.checked_apps|join('\n') }}</textarea>
     <p class="t2">Real time judges each picture as it appears and costs the most battery. Checked apps get a whole-screen look every {{ settings.checked_interval_s }} s that still blurs and reports what it finds. With locks on, moving an app to a lighter level needs a partner code. Android only for now.</p>
   </div></div>
-  <div class="srow"><div class="slabel"><h2>Timing {{ lock('sample_interval_s') }}</h2><p>Seconds between accountability samples and whole-screen passes; minutes of silence before a device counts as tampered with.</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Timing {{ lock('sample_interval_s') }}</h2><p>Seconds between accountability samples and whole-screen passes; minutes of silence before a device counts as tampered with; hours between reminders while a device stays off or silent.</p></div><div class="spanel">
     <div class="pair three">
       <div><label for="sample_interval_s">Sample every, s</label><input id="sample_interval_s" name="sample_interval_s" type="number" min="10" value="{{ settings.sample_interval_s }}"></div>
       <div><label for="checked_interval_s">Checked apps every, s</label><input id="checked_interval_s" name="checked_interval_s" type="number" min="10" max="900" value="{{ settings.checked_interval_s }}"></div>
       <div><label for="whole_screen_interval_s">Whole screen every, s</label><input id="whole_screen_interval_s" name="whole_screen_interval_s" type="number" min="1" value="{{ settings.whole_screen_interval_s }}"></div>
       <div><label for="heartbeat_gap_minutes">Silent after, min</label><input id="heartbeat_gap_minutes" name="heartbeat_gap_minutes" type="number" min="10" value="{{ settings.heartbeat_gap_minutes }}"></div>
+      <div><label for="realert_hours">Remind every, h</label><input id="realert_hours" name="realert_hours" type="number" min="1" max="48" value="{{ settings.realert_hours }}"></div>
     </div>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Pauses and peeks {{ lock('max_pause_minutes') }}</h2><p>The most minutes one partner code can grant, and how a linked partner's peek works.</p></div><div class="spanel">
@@ -151,13 +152,14 @@
 
 {% elif area == 'email' %}
 <form method="post" action="/settings/email" class="settings">
-  <div class="srow"><div class="slabel"><h2>Outgoing mail</h2><p>Digests, alerts and pause codes for email-only partners go through this server.</p></div><div class="spanel">
+  <div class="srow"><div class="slabel"><h2>Outgoing mail {{ lock('smtp') }}</h2><p>Digests, alerts and pause codes for email-only partners go through this server. Partners hear about a change to it before it is saved.</p></div><div class="spanel">
     <div class="pair"><div><label for="smtp.host">SMTP host</label><input id="smtp.host" name="smtp.host" value="{{ settings.smtp.host }}"></div><div><label for="smtp.port">Port</label><input id="smtp.port" name="smtp.port" type="number" value="{{ settings.smtp.port }}"></div></div>
     <label for="smtp.username">Username</label><input id="smtp.username" name="smtp.username" value="{{ settings.smtp.username }}" autocomplete="off">
     <label for="smtp.password">Password</label><input id="smtp.password" name="smtp.password" type="password" value="{{ settings.smtp.password }}" autocomplete="off">
     <label for="smtp.from_address">From address</label><input id="smtp.from_address" name="smtp.from_address" value="{{ settings.smtp.from_address }}">
     <label class="check"><input type="checkbox" name="smtp.starttls" {% if settings.smtp.starttls %}checked{% endif %}> Use STARTTLS</label>
   </div></div>
+  {% if locked %}<div class="srow"><div class="slabel"><h2>Partner code</h2><p>Needed to change mail settings that already work.</p></div><div class="spanel"><label for="partner_code">Settings code</label><input id="partner_code" name="partner_code" inputmode="numeric" autocomplete="off"></div></div>{% endif %}
   <div class="sactions"><button class="btn primary">Save</button></div>
 </form>
 
@@ -171,6 +173,8 @@
     {% else %}<p class="empty">No partners yet. Add at least one.</p>{% endif %}
     <form method="post" action="/settings/partners/add" class="form inline-add">
       <input type="hidden" name="person" value="{{ p.id }}">
+      {% if partners[p.id] %}<p class="t2">Everyone hears about a new partner at once, and their codes count after three days.{% if locked %} Adding one needs a settings code from a partner {{ p.name }} already has.{% endif %}</p>
+      {% if locked %}<label for="pc-{{ p.id }}">Settings code</label><input id="pc-{{ p.id }}" name="partner_code" inputmode="numeric" autocomplete="off">{% endif %}{% endif %}
       <div class="pair"><div><label for="pn-{{ p.id }}">Partner name</label><input id="pn-{{ p.id }}" name="name" required></div><div><label for="pe-{{ p.id }}">Email</label><input id="pe-{{ p.id }}" name="email" type="email" required></div></div>
       <div class="pair"><div><label for="pl-{{ p.id }}">Connection</label><select id="pl-{{ p.id }}" name="link_type"><option value="email">Email only</option><option value="linked">Linked through Tailscale</option></select></div><div><label for="pg-{{ p.id }}">Tailscale login (linked only)</label><input id="pg-{{ p.id }}" name="login" placeholder="their Tailscale login"></div></div>
       <button class="btn">Add partner</button>

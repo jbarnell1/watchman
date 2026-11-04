@@ -4,8 +4,11 @@ import uuid
 from urllib.parse import unquote
 
 from app.clock import iso
+from app.services.locks import LOCK_GROUPS
 from tests.conftest import ADMIN, PARTNER, PROTECTED, as_login, jpeg_bytes
 from tests.test_api import heartbeat
+
+LOCK_IDS = tuple(LOCK_GROUPS)
 
 
 def test_anonymous_gets_a_sign_in_page(ctx, client, identity):
@@ -247,7 +250,7 @@ def test_tightening_is_free_and_loosening_needs_a_code(ctx, client, household, d
     with ctx.conn:
         ctx.settings.set("locks_on", True, "owner")
     # Protection is on (a device is paired). Adding a blocked app and lowering a threshold: free.
-    form = {**PROTECTION_FORM, "locks_on": "on", **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")}}
+    form = {**PROTECTION_FORM, "locks_on": "on", **{f"lock.{g}": "on" for g in LOCK_IDS}}
     form["blocked_apps"] += "\ncom.example.newbrowser"
     form["thresholds.cover"] = "0.80"
     r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
@@ -268,7 +271,7 @@ def test_tightening_is_free_and_loosening_needs_a_code(ctx, client, household, d
 def test_unlocked_groups_loosen_freely_but_unlocking_needs_a_code(ctx, client, household, device):
     with ctx.conn:
         ctx.settings.set("locks_on", True, "owner")
-    locked_all = {"locks_on": "on", **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")}}
+    locked_all = {"locks_on": "on", **{f"lock.{g}": "on" for g in LOCK_IDS}}
     form = {**PROTECTION_FORM, **locked_all}
     form.pop("lock.apps")                                   # unlock the apps group: loosening the locks
     r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
@@ -303,7 +306,7 @@ def test_locks_start_off_turn_on_free_and_off_needs_a_code(ctx, client, househol
     form = dict(PROTECTION_FORM, blocked_apps="")               # removing every blocked app: free while testing
     r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
     assert "saved=1" in r.headers["location"] and ctx.settings.load().blocked_apps == []
-    on = {**form, "locks_on": "on", **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")}}
+    on = {**form, "locks_on": "on", **{f"lock.{g}": "on" for g in LOCK_IDS}}
     r = client.post("/settings/protection", data=on, headers=as_login(ADMIN), follow_redirects=False)
     assert "saved=1" in r.headers["location"] and ctx.settings.load().locks_on is True
     off = {k: v for k, v in on.items() if k != "locks_on"}
@@ -315,7 +318,7 @@ def test_exempt_apps_reach_the_policy_and_adding_one_loosens(ctx, client, househ
     assert locks.loosens("exempt_apps", [], ["com.google.android.apps.photos"])
     assert not locks.loosens("exempt_apps", ["com.google.android.apps.photos"], [])
     r = client.post("/settings/protection", data=dict(PROTECTION_FORM, exempt_apps="com.google.android.apps.photos",
-                    **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")}),
+                    **{f"lock.{g}": "on" for g in LOCK_IDS}),
                     headers=as_login(ADMIN), follow_redirects=False)
     assert "saved=1" in r.headers["location"]                 # locks are off while testing
     _, headers = device
@@ -323,7 +326,7 @@ def test_exempt_apps_reach_the_policy_and_adding_one_loosens(ctx, client, househ
     with ctx.conn:
         ctx.settings.set("locks_on", True, "owner")
     form = dict(PROTECTION_FORM, exempt_apps="com.google.android.apps.photos\ncom.example.more", locks_on="on",
-                **{f"lock.{g}": "on" for g in ("protection", "apps", "timing", "pauses", "retention", "partners")})
+                **{f"lock.{g}": "on" for g in LOCK_IDS})
     r = client.post("/settings/protection", data=form, headers=as_login(ADMIN), follow_redirects=False)
     assert "apps not watched" in unquote(r.headers["location"])
 

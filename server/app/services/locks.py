@@ -26,19 +26,23 @@ LOCK_GROUPS: dict[str, tuple[str, tuple[str, ...]]] = {
              ("blocked_apps", "risky_apps", "exempt_apps", "protected_browser", "watch_default", "realtime_apps",
               "checked_apps")),
     "timing": ("Timing and silence alerts", ("sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes",
-                                              "checked_interval_s")),
+                                              "checked_interval_s", "realert_hours")),
     "pauses": ("Pauses and peeks", ("max_pause_minutes", "peek_seconds", "peek_cooldown_seconds", "self_peek")),
-    "retention": ("How long blurred images are kept", ("image_retention_days",)),
-    "partners": ("Removing a partner", ()),
+    "retention": ("How long blurred images and the record are kept", ("image_retention_days", "event_retention_days")),
+    # The settings that carry reports to partners (ADR-050): a changed mail server or digest time
+    # can make a quiet week out of a bad one.
+    "reporting": ("Email, push alerts, digest schedule and time zone",
+                  ("smtp", "ntfy_url", "digest_day", "digest_time", "timezone")),
+    "partners": ("Adding or removing a partner", ()),
 }
 
 COVERAGE_RANK = {"explicit": 0, "revealing": 1, "strict": 2}
 # Lower is stronger: more images covered, more often looked at, sooner noticed, shorter pauses.
 LOWER_IS_STRONGER = {"sample_interval_s", "whole_screen_interval_s", "heartbeat_gap_minutes", "max_pause_minutes",
-                     "checked_interval_s",
+                     "checked_interval_s", "realert_hours",
                      "peek_cooldown_seconds"}
 # Higher is stronger: partners see more for longer.
-HIGHER_IS_STRONGER = {"image_retention_days", "peek_seconds"}
+HIGHER_IS_STRONGER = {"image_retention_days", "event_retention_days", "peek_seconds"}
 # On is stronger.
 FLAGS = {"strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll", "block_whole_screen"}
 # Lists where adding is stronger and removing anything is weaker.
@@ -103,6 +107,11 @@ def loosens(key: str, old: Any, new: Any, current: Settings | None = None) -> bo
         return float(new) < float(old)
     if key == "unlocked_groups":
         return bool(set(new or []) - set(old or []))
+    if key == "smtp":
+        # Setting up mail for the first time is free; changing a working one is not.
+        return bool((old or {}).get("host"))
+    if key == "ntfy_url":
+        return bool(old)
     if key == "person_overrides" and current is not None:
         return _overrides_loosen(current, old or {}, new or {})
     # protected_browser and anything without a rule: a change is not clearly stronger.
@@ -144,4 +153,21 @@ LABELS = {
     "max_pause_minutes": "the longest pause", "peek_seconds": "peek length", "peek_cooldown_seconds": "peek cooldown",
     "self_peek": "peeking at your own items",
     "image_retention_days": "image retention", "unlocked_groups": "the locks", "locks_on": "turning locks off",
+    "event_retention_days": "how long the record is kept", "realert_hours": "how often partners are reminded",
+    "smtp": "the mail server", "ntfy_url": "push alerts", "digest_day": "the digest day",
+    "digest_time": "the digest time", "timezone": "the time zone",
 }
+
+
+def locks_apply(ctx) -> bool:
+    """Whether loosening a locked setting needs a partner code now. Once the household turns locks
+    on they apply whether or not a device is paired: unpairing every device, changing a setting
+    and pairing again no longer skips them (ADR-050)."""
+    return ctx.settings.load().locks_on
+
+
+def loosened(current: Settings, changes: dict[str, Any]) -> list[str]:
+    """Every changed key that loosens, locked or not: these alert partners at once (ADR-050)."""
+    guarded = {"unlocked_groups", "locks_on"}
+    return [k for k, new in changes.items()
+            if (group_of(k) or k in guarded) and loosens(k, getattr(current, k), new, current)]

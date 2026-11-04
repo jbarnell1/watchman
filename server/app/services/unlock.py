@@ -7,10 +7,11 @@ import uuid
 
 from app.clients.mailer import Mail
 from app.clock import iso
+from app.services import alerts, attempts
 from app.services.alerts import _send
 from app.services.context import Context
 from app.services.errors import ApiError
-from app.store.events_store import SEVERITY_INFO
+from app.store.events_store import SEVERITY_INFO, SEVERITY_PROTECTION
 
 
 def issue_code(ctx: Context, person_id: str, partner_id: str, minutes: int) -> str:
@@ -22,10 +23,14 @@ def issue_code(ctx: Context, person_id: str, partner_id: str, minutes: int) -> s
 
 
 def redeem(ctx: Context, device: sqlite3.Row, code: str) -> dict:
+    attempts.check(ctx, device["id"])
     with ctx.conn:
         row = ctx.codes.consume_code(device["person_id"], code)
-        if row is None:
-            raise ApiError("unlock code is invalid, used or expired", code="unlock_code_invalid")
+    if row is None:
+        if attempts.failed(ctx, device["id"]):
+            guessing(ctx, device)
+        raise ApiError("unlock code is invalid, used or expired", code="unlock_code_invalid")
+    with ctx.conn:
         ends = ctx.codes.start_pause(device["person_id"], row["id"], row["minutes"])
         partner = ctx.people.get_partner(row["partner_id"])
         ctx.events.insert({
@@ -47,6 +52,8 @@ def request_code(ctx: Context, device: sqlite3.Row, minutes: int, reason: str | 
     with ctx.conn:
         ctx.codes.add_request(device["person_id"], device["id"], minutes, reason)
         for partner in ctx.people.partners_for(device["person_id"]):
+            if not ctx.people.is_trusted(partner):
+                continue  # a partner still in their waiting period gets no codes (ADR-050)
             if partner["link_type"] == "email":
                 _, code = ctx.codes.create_code(device["person_id"], partner["id"], minutes)
                 text = (f"{name} is asking for a {minutes} minute pause of Watchman on {device['name']}.\n"
@@ -59,3 +66,18 @@ def request_code(ctx: Context, device: sqlite3.Row, minutes: int, reason: str | 
                         f"Reason given: {reason or 'none'}.\n\n"
                         f"Open the portal and issue a code from the Codes page if you agree.")
             _send(ctx, Mail(to=[partner["email"]], subject=f"Watchman: {name} asks for a pause", text=text))
+
+
+def guessing(ctx: Context, device: sqlite3.Row | None, person_id: str | None = None) -> None:
+    """Ten wrong partner codes in an hour: someone is guessing (ADR-050)."""
+    ev = {"id": str(uuid.uuid4()), "type": "tamper", "occurred_at": iso(ctx.clock.now()), "action": "none",
+          "detail": {"reason": "code_guessing", "wrong_codes": attempts.ALARM_AT}}
+    if device is not None:
+        with ctx.conn:
+            ctx.events.insert(ev, device["id"], device["person_id"], SEVERITY_PROTECTION, "none")
+        alerts.protection_alert(ctx, device, ev)
+    else:
+        alerts.change_alert(ctx, "wrong settings codes", [
+            f"{attempts.ALARM_AT} wrong partner settings codes were typed on the portal within an hour.",
+            "Someone may be guessing codes. Codes are now refused for 15 minutes after five wrong tries.",
+        ], person_id)

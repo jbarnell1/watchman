@@ -57,7 +57,8 @@ def protection_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
     name = person["name"] if person else "the protected person"
     detail = event.get("detail") or {}
     if event["type"] == "tamper":
-        what = {"safe_mode": "booted into safe mode", "silent": "has stopped checking in"}.get(
+        what = {"safe_mode": "booted into safe mode", "silent": "has stopped checking in",
+                "code_guessing": "had ten wrong partner codes typed within an hour"}.get(
             detail.get("reason"), f"reported tampering ({detail.get('reason')})")
         line = f"{device['name']} {what}."
     elif event["type"] == "block_passed":
@@ -103,3 +104,25 @@ def explicit_alert(ctx: Context, event: sqlite3.Row, heavy_webp: bytes | None) -
         _send(ctx, Mail(to=to, subject=subject, text=text, html=html, inline=inline))
     ctx.events.mark_alerted(event["id"])
     _ntfy(ctx, "Watchman: explicit image covered", f"{where}, {event['occurred_at']}")
+
+
+def household_recipients(ctx: Context) -> list[str]:
+    """Every protected person and every partner on this server: household settings reach all."""
+    out: list[str] = []
+    for person in ctx.people.list_people():
+        out.extend(recipients(ctx, person["id"]))
+    return list(dict.fromkeys(out))
+
+
+def change_alert(ctx: Context, subject: str, lines: list[str], person_id: str | None = None) -> bool:
+    """A change that weakens protection or accountability, sent at once instead of waiting for the
+    digest (ADR-050): loosened settings, a device paired or removed, a partner added or removed.
+    Sent before the change is applied where the change could stop the mail, so it goes out through
+    the mail settings that were in place."""
+    to = recipients(ctx, person_id) if person_id else household_recipients(ctx)
+    text = "\n".join(lines) + ("\n\nThis alert goes to the protected person and every partner. "
+                               "Every change is also in the next digest.")
+    _ntfy(ctx, subject, lines[0] if lines else subject)
+    if not to:
+        return False
+    return _send(ctx, Mail(to=to, subject=f"Watchman: {subject}", text=text))

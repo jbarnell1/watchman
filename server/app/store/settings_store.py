@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.clock import Clock, iso
 from app.settings import POLICY_KEYS, Settings, coerce
+
+log = logging.getLogger(__name__)
 
 
 class SettingsStore:
@@ -18,7 +21,19 @@ class SettingsStore:
     def load(self) -> Settings:
         rows = self.conn.execute("SELECT key, value FROM settings").fetchall()
         raw = {r["key"]: json.loads(r["value"]) for r in rows}
-        return Settings.model_validate(raw)
+        try:
+            return Settings.model_validate(raw)
+        except ValidationError:
+            # A stored value from before a rule existed (a retention under the new floor, an unknown
+            # zone) falls back to its default rather than stopping every page and job.
+            good = {}
+            for key, value in raw.items():
+                try:
+                    Settings.model_validate({key: value})
+                    good[key] = value
+                except ValidationError:
+                    log.warning("setting %s has a value no longer allowed; using the default", key)
+            return Settings.model_validate(good)
 
     def get(self, key: str) -> Any:
         return getattr(self.load(), key)

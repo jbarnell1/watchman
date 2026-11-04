@@ -42,10 +42,12 @@ class CodesStore:
 
     def consume_code(self, person_id: str, code: str, purpose: str = "pause") -> sqlite3.Row | None:
         now = iso(self.clock.now())
+        # A code counts only from a partner past their waiting period (ADR-050).
         row = self.conn.execute(
-            "SELECT * FROM unlock_codes WHERE code_hash = ? AND person_id = ? AND purpose = ? "
-            "AND used_at IS NULL AND expires_at > ?",
-            (hash_code(code), person_id, purpose, now),
+            "SELECT c.* FROM unlock_codes c JOIN partners p ON p.id = c.partner_id "
+            "WHERE c.code_hash = ? AND c.person_id = ? AND c.purpose = ? "
+            "AND c.used_at IS NULL AND c.expires_at > ? AND (p.trusted_at IS NULL OR p.trusted_at <= ?)",
+            (hash_code(code), person_id, purpose, now, now),
         ).fetchone()
         if row is None:
             return None

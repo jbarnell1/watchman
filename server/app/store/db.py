@@ -22,4 +22,20 @@ def connect(path: Path | str) -> sqlite3.Connection:
     if path != ":memory:":
         conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+# Columns added after a table first shipped. CREATE TABLE IF NOT EXISTS leaves an existing table
+# as it was, so each new column is added here when it is missing.
+COLUMNS = (
+    ("partners", "trusted_at", "TEXT"),          # ADR-050: a partner added later acts from here
+    ("devices", "reminded_at", "TEXT"),          # ADR-050: last alert about this device being off or silent
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, decl in COLUMNS:
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
