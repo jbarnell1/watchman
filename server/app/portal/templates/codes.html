@@ -16,7 +16,7 @@
 <div class="two">
 <section class="panel">
   <div class="panel-head"><h2>Pause protection</h2></div>
-  <form method="post" action="/codes" class="form">
+  <form method="post" action="/codes" class="form"{% if my_key %} data-sign-action="pause_code" data-partner="{{ partner.id }}" data-sign-params='{{ {"person_id": person.id}|tojson }}' data-sign-fields="minutes:int"{% endif %}>
     <input type="hidden" name="person" value="{{ person.id }}">
     <input type="hidden" name="purpose" value="pause">
     <label for="minutes">Minutes, up to {{ settings.max_pause_minutes }}</label>
@@ -24,7 +24,7 @@
     <button class="btn primary">Issue pause code</button>
   </form>
 </section>
-<section class="panel">
+{% if not sealed_household %}<section class="panel">
   <div class="panel-head"><h2>Allow a settings change</h2></div>
   <p class="t2">Once protection is on, the admin cannot weaken it alone: retention, thresholds, pause limits, blocked apps and partner changes each need a code from a partner.</p>
   <form method="post" action="/codes" class="form">
@@ -33,7 +33,10 @@
     <input type="hidden" name="minutes" value="0">
     <button class="btn">Issue settings code</button>
   </form>
-</section>
+</section>{% else %}<section class="panel">
+  <div class="panel-head"><h2>Settings changes</h2></div>
+  <p class="t2">Partners hold keys, so a change that loosens anything waits for a partner to approve it with their key. You get an email with a link when one is asked for. Waiting changes are listed on the Record page.</p>
+</section>{% endif %}
 </div>
 {% endif %}
 

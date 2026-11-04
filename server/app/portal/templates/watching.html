@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Watching{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>Households this server watches</h1>
+  <p class="finding">When you are a partner in another household, this server can read that household's record every few minutes and email you if it is rewritten, cannot be reached, or loosens anything. It works even if that server's own email was changed or switched off.</p></div></div>
+{% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+
+{% if rows %}
+<ul class="rows">{% for r in rows %}<li class="row"><div class="row-main">
+  <div class="t1">{{ r.name }} {% if r.last_error %}<span class="pill neg">cannot reach</span>{% elif r.last_ok_at %}<span class="pill pos">checked</span>{% endif %}</div>
+  <div class="t2">{{ r.url }} · entry {{ r.last_seq }} · last checked {{ ago(r.last_ok_at) }} · alerts to {{ r.email }}{% if r.last_error %} · {{ r.last_error }}{% endif %}</div>
+  {% set pins = json.loads(r['keys'] or '{}') %}{% if pins %}<div class="t2">Partner keys pinned: {% for pid, p in pins.items() %}{{ p.fingerprint }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+  </div><form class="row-side" method="post" action="/watching/{{ r.id }}/remove"><button class="btn small">Stop watching</button></form></li>{% endfor %}</ul>
+{% else %}<p class="empty">Not watching any household yet.</p>{% endif %}
+
+<section class="panel">
+  <div class="panel-head"><h2>Watch a household</h2></div>
+  <p class="t2">On the other household's portal, open Record and press Let my own server watch. It gives you a token.</p>
+  <form method="post" action="/watching" class="form">
+    <label for="w-name">Name</label><input id="w-name" name="name" placeholder="Their household" required>
+    <label for="w-url">Their server's address</label><input id="w-url" name="url" placeholder="https://watchman.their-tailnet.ts.net" required>
+    <label for="w-token">Witness token</label><input id="w-token" name="token" placeholder="wmw_..." autocomplete="off" required>
+    <label for="w-email">Email problems to</label><input id="w-email" name="email" type="email" required>
+    <button class="btn primary">Start watching</button>
+  </form>
+</section>
+{% endblock %}

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from app.api.v1 import router as api_router
+from app.api.witness import router as witness_api_router
 from app.clients.blobs import BlobStore
 from app.clients.detector import Detector, OnnxDetector
 from app.clients.identity import (
@@ -30,6 +31,7 @@ from app.config import Config
 from app.portal.auth import router as auth_router
 from app.portal.routes import router as portal_router
 from app.portal.routes import templates as portal_templates
+from app.portal.trust import router as trust_router
 from app.services import health, jobs
 from app.services.context import Context
 from app.services.errors import ApiError
@@ -144,8 +146,10 @@ def create_app(ctx: Context | None = None, config: Config | None = None, run_job
         return JSONResponse({"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
 
     app.include_router(api_router)
+    app.include_router(witness_api_router)
     app.include_router(auth_router)
     app.include_router(portal_router)
+    app.include_router(trust_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
 

@@ -7,6 +7,7 @@ import sqlite3
 from datetime import datetime
 
 from app.clock import Clock, iso
+from app.store.ledger_store import Recorded, digest, event_fields
 
 SEVERITY_INFO = "info"
 SEVERITY_REVIEW = "review"
@@ -14,7 +15,7 @@ SEVERITY_EXPLICIT = "explicit"
 SEVERITY_PROTECTION = "protection"
 
 
-class EventsStore:
+class EventsStore(Recorded):
     def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
         self.conn = conn
         self.clock = clock
@@ -26,8 +27,8 @@ class EventsStore:
                image_status: str) -> None:
         self.conn.execute(
             "INSERT INTO events(id, device_id, person_id, type, occurred_at, received_at, app, url, "
-            "title, action, scores, region, hash, has_image, detail, image_status, severity) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "title, action, scores, region, hash, has_image, detail, image_status, severity, sealed) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event["id"], device_id, person_id, event["type"], event["occurred_at"],
                 iso(self.clock.now()), event.get("app"), event.get("url"), event.get("title"),
@@ -35,9 +36,12 @@ class EventsStore:
                 json.dumps(event.get("scores")) if event.get("scores") is not None else None,
                 json.dumps(event.get("region")) if event.get("region") is not None else None,
                 event.get("hash"), 1 if event.get("has_image") else 0,
-                json.dumps(event.get("detail") or {}), image_status, severity,
+                json.dumps(event.get("detail") or {}), image_status, severity, event.get("sealed"),
             ),
         )
+        row = self.get(event["id"])
+        self.record("event", {"digest": digest(event_fields(row)), "type": row["type"], "severity": severity,
+                              "occurred_at": row["occurred_at"], "app": row["app"]}, person_id, row["id"])
 
     def get(self, event_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
@@ -47,6 +51,11 @@ class EventsStore:
             "UPDATE events SET second_opinion = ?, severity = ?, image_status = ? WHERE id = ?",
             (score, severity, image_status, event_id),
         )
+        self.record("judged", {"second_opinion": score, "severity": severity}, self._person(event_id), event_id)
+
+    def _person(self, event_id: str) -> str | None:
+        row = self.conn.execute("SELECT person_id FROM events WHERE id = ?", (event_id,)).fetchone()
+        return row["person_id"] if row else None
 
     def set_server_labels(self, event_id: str, labels: dict[str, float]) -> None:
         """The server detector's labels join the device's scores as `server_labels` (ADR-046)."""
@@ -59,6 +68,7 @@ class EventsStore:
             scores = {}
         scores["server_labels"] = labels
         self.conn.execute("UPDATE events SET scores = ? WHERE id = ?", (json.dumps(scores), event_id))
+        self.record("labels", {"digest": digest(labels)}, self._person(event_id), event_id)
 
     def set_image_status(self, event_id: str, status: str) -> None:
         self.conn.execute("UPDATE events SET image_status = ? WHERE id = ?", (status, event_id))
@@ -66,13 +76,17 @@ class EventsStore:
     def mark_alerted(self, event_id: str) -> None:
         self.conn.execute("UPDATE events SET alerted_at = ? WHERE id = ?", (iso(self.clock.now()), event_id))
 
-    def review(self, event_id: str, state: str, login: str) -> None:
+    def review(self, event_id: str, state: str, login: str, approval: dict | None = None) -> None:
         if state not in ("open", "talked", "false_alarm"):
             raise ValueError(state)
         self.conn.execute(
             "UPDATE events SET review_state = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
             (state, login, iso(self.clock.now()), event_id),
         )
+        body = {"state": state, "by": login}
+        if approval:
+            body["approval"] = approval
+        self.record("review", body, self._person(event_id), event_id)
 
     def timeline(self, person_id: str, limit: int = 100, before: str | None = None) -> list[sqlite3.Row]:
         if before:
@@ -122,15 +136,21 @@ class EventsStore:
 
     def purge_before(self, cutoff: datetime) -> int:
         cur = self.conn.execute("DELETE FROM events WHERE occurred_at < ?", (iso(cutoff),))
+        if cur.rowcount:
+            self.record("purge", {"before": iso(cutoff), "events": cur.rowcount})
         return cur.rowcount
 
     # Images
 
-    def add_image(self, event_id: str, width: int, height: int) -> None:
+    def add_image(self, event_id: str, width: int, height: int, files: dict | None = None,
+                  sealed: bool = False) -> None:
+        """[files]: level to the sha256 of the stored file, so a swapped file shows. [sealed]: the
+        medium blur only partners can open (ADR-053)."""
         self.conn.execute(
-            "INSERT OR REPLACE INTO images(event_id, created_at, width, height) VALUES (?, ?, ?, ?)",
-            (event_id, iso(self.clock.now()), width, height),
+            "INSERT OR REPLACE INTO images(event_id, created_at, width, height, sealed) VALUES (?, ?, ?, ?, ?)",
+            (event_id, iso(self.clock.now()), width, height, 1 if sealed else 0),
         )
+        self.record("image", {"files": files or {}, "sealed": sealed}, self._person(event_id), event_id)
 
     def image(self, event_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM images WHERE event_id = ?", (event_id,)).fetchone()
@@ -147,6 +167,7 @@ class EventsStore:
                 "UPDATE events SET image_status = 'expired' WHERE id = ? AND image_status = 'stored'",
                 (event_id,),
             )
+            self.record("image_removed", {}, self._person(event_id), event_id)
 
     # Known-bad hashes
 

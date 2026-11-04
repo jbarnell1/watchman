@@ -33,6 +33,9 @@ def recipients(ctx: Context, person_id: str) -> list[str]:
 
 
 def _send(ctx: Context, mail: Mail) -> bool:
+    # Every email carries the record's latest hash: a copy outside the server (ADR-052).
+    from app.services.ledger import head_line
+    mail.text = mail.text + "\n\n" + head_line(ctx)
     try:
         ctx.mailer.send(mail)
         return True

@@ -102,7 +102,7 @@
           {% elif e.type == 'daily_stats' %}Daily summary{% else %}{{ e.type }}{% endif %}
           {% if e.app %}<span class="dim">· {{ e.app }}</span>{% endif %}
         </div>
-        <div class="t2">{% if e.url %}{{ e.url|truncate(80) }}{% elif e.title %}{{ e.title|truncate(80) }}{% elif e.type in ('image_covered','image_flagged','screen_blocked') and e.region %}{% set r = json.loads(e.region) %}{{ r.w }} × {{ r.h }} px{% if e.second_opinion is not none %} · second opinion {{ '%.2f'|format(e.second_opinion) }}{% endif %}{% else %}&nbsp;{% endif %}</div>
+        <div class="t2">{% if e.sealed %}<span data-sealed="{{ e.sealed }}" data-aad="{{ e.id }}">sealed for partners</span>{% elif e.url %}{{ e.url|truncate(80) }}{% elif e.title %}{{ e.title|truncate(80) }}{% elif e.type in ('image_covered','image_flagged','screen_blocked') and e.region %}{% set r = json.loads(e.region) %}{{ r.w }} × {{ r.h }} px{% if e.second_opinion is not none %} · second opinion {{ '%.2f'|format(e.second_opinion) }}{% endif %}{% else %}&nbsp;{% endif %}</div>
       </div>
       <div class="row-side">
         {% if e.severity == 'explicit' %}<span class="pill neg">Explicit</span>{% elif e.severity == 'review' %}<span class="pill warn">Review</span>{% elif e.severity == 'protection' %}<span class="pill neg">Protection</span>{% endif %}

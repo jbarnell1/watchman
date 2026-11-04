@@ -8,6 +8,80 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-054 - Households watch each other's records
+**2026-11-03.** The protected person usually runs the server, so whatever the server says about
+itself can be rewritten by them. Hosting stays where it is (each household's own server is the
+fast one for its own devices); what moves outside is the check. A partner presses Let my own
+server watch on the Record page and gets a witness token; their own Watchman server (Watching,
+admin) reads `/api/v1/witness/status` and `/api/v1/witness/ledger` with it every five minutes
+over the tailnet. It keeps the last entry it saw and emails the partner when:
+- the record went backwards, was rewritten (an entry it already holds changed), or does not hash;
+- the watched server reports its own database no longer matches the record;
+- the watched server cannot be reached for 30 minutes, and again every 6 hours while it stays
+  down (a dead man's switch: a server switched off records nothing);
+- a setting loosened, a device was paired or removed, a partner or an admin or partner login was
+  added or removed, events were purged under 30 days old, a partner key was replaced, or an
+  approval or code carries a signature that is not from a pinned partner key.
+Partner keys are pinned the first time the watcher sees them (their fingerprints show on its
+Watching page and on the partner's Your key page, to compare once). The same problem is not
+emailed more than once in 6 hours. The token reads the record and this server's own check of it,
+nothing else: no pictures, addresses or settings values beyond what the record holds.
+
+Rejected: each household hosting the other's server (slower for the household's own devices, and
+the owner wants to keep hosting their own); a central service (none exists by design, ADR-006).
+Not covered: a household whose partners do not run Watchman. They still get the record line in
+every email and the checkpoints their browsers sign (ADR-052, ADR-053).
+
+### ADR-053 - Partner keys seal what partners review and sign every loosening
+**2026-11-03.** A partner's portal login proves little when the protected person runs the server:
+the identity headers come from a proxy on the same machine, and a settings code is something the
+server makes. The owner asked for a key held by the partner that is needed both to see what was
+reported and to approve any change. Each partner makes a key on Your key: two P-256 key pairs made
+in their browser with WebCrypto, one to sign (ECDSA) and one to open (ECDH). The private halves
+are locked in the browser with a key from the partner's passphrase (PBKDF2-SHA256, 600 000
+rounds, at least 12 characters) and only that locked bundle is stored on the server, so the
+server holds nothing that can open or sign. Unlocked keys stay in that browser for 12 hours.
+Once any partner holds a key the household is sealed:
+- Locks are on for good. Loosening a locked setting, adding a partner beside existing ones and
+  removing a partner are held as a request; partners with keys are emailed a link; the change is
+  applied only when one of them signs it in their browser. Settings codes are retired.
+- Every approval signs {"v": 1, "action", "params", "nonce", "partner_id"}: the nonce is single
+  use and lasts ten minutes, and params name the exact change (a request's id and a digest of
+  what it changes), so a signature works once, for one thing. Reviews and pause codes from a
+  partner with a key are signed the same way. A pause from a code no partner signed (an
+  email-only partner's) alerts everyone when it starts.
+- The address and title of every event, and the medium blur partners peek at, are sealed: a
+  fresh content key (AES-256-GCM, the item's id as associated data) wrapped for each partner's key
+  through ECDH and HKDF-SHA256. The server cannot open them; the partner's browser does. The
+  heavy blur stays readable by the server for thumbnails and emails. With `self_peek` on the
+  medium blur is not sealed, so the protected person can still peek while tuning; turning it on
+  is loosening and needs an approval.
+- A partner's browser signs the record's latest entry at most once an hour (a checkpoint) and
+  checks that the entry it signed last time is unchanged; a mismatch shows on the page and alerts.
+- Replacing a key (a lost passphrase) alerts everyone, and the new key approves nothing for three
+  days. A removed partner's key is deleted.
+`seal.js` and `services/keys.py` are the two halves; `tests/js/seal_interop.mjs` runs the real
+`seal.js` in Node against the server in the test suite. Limits, stated plainly: the portal's
+JavaScript comes from the server, so someone who rewrites the server's code could serve a page
+that captures the passphrase; a partner's own server (ADR-054) and the record are what catch that
+kind of change. Email-only partners have no key and are told about unsigned pauses instead.
+
+### ADR-052 - The record: a hash chain the database must match
+**2026-11-03.** Someone with the server's files could edit the database directly: drop an event,
+lower a severity, insert a partner or a login, change a setting, swap an image file. Every change
+partners rely on is now also appended to `ledger`: an entry of (seq, time, kind, person, ref,
+body) whose hash covers the previous hash. Recorded: events (a digest of what the device sent),
+the server's judgements, its detector labels, reviews, stored and removed images (with the
+sha256 of each file), settings changes (the mail settings as a hash, because they hold a
+password), people, partners, portal logins, devices paired and removed, codes issued and used,
+pauses, digests, retention purges, approvals, partner keys, witnesses and checkpoints. The first
+start after the upgrade opens the record with a snapshot of what is already there.
+Every hour the server replays the record and compares it with the tables; anything changed,
+added or deleted outside its own code (an event deleted before its retention ran out included)
+alerts everyone once, and shows on the Record page. A person who also rewrites the record to
+match is caught by copies held elsewhere: the latest entry at the foot of every email, partner
+signed checkpoints (ADR-053) and a partner's own server (ADR-054).
+
 ### ADR-051 - Devices fail closed, prove they judge, and name the screens they cannot see
 **2026-11-03.** The circumvention review found devices that fail open: a 401 from the server
 (real or fake) unpaired every client and stopped protection; Android could be off for under the

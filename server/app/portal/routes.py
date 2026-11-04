@@ -19,11 +19,13 @@ from app.clock import iso, parse_iso
 from app.portal.viewer import Viewer, pick_person, require_viewer
 from app.services import (
     alerts,
+    approvals,
     attempts,
     digest,
     health,
     heartbeat,
     intake,
+    keys,
     locks,
     metrics,
     pairlink,
@@ -78,7 +80,10 @@ def _page(request: Request, ctx: Context, v: Viewer, template: str, person: sqli
         return f"{s // 86400} d ago"
 
     review_count = len(ctx.events.needing_review(person["id"])) if person else 0
+    my_partner = v.partner_rows.get(person["id"]) if person else None
     context = {
+        "sealed_household": keys.sealed(ctx),
+        "my_key": keys.key_for(ctx, my_partner["id"]) if my_partner else None,
         "request": request, "viewer": v, "person": person, "people": v.people, "settings": settings,
         "when": when, "ago": ago, "json": json, "review_count": review_count,
         "role": v.role_for(person["id"]) if person else ("admin" if v.is_admin else "none"),
@@ -194,8 +199,16 @@ async def review_mark(event_id: str, request: Request, ctx: Context = Depends(ge
     state = str(form.get("state", ""))
     if state not in ("talked", "false_alarm", "open"):
         raise ApiError("unknown review state")
+    approval = None
+    if keys.sealed(ctx, event["person_id"]):
+        # A forged portal login cannot mark items once partners hold keys (ADR-053).
+        partner = v.partner_rows[event["person_id"]]
+        approval = keys.from_form(form)
+        if approval is None:
+            raise ApiError("unlock your key to mark items", code="approval_needed")
+        keys.check(ctx, approval, "review", {"event_id": event_id, "state": state}, {partner["id"]})
     with ctx.conn:
-        ctx.events.review(event_id, state, v.login)
+        ctx.events.review(event_id, state, v.login, approval)
         if state == "false_alarm":
             intake.forget_known_bad(ctx, event)
     return RedirectResponse(f"/review?person={event['person_id']}", status_code=303)
@@ -242,6 +255,11 @@ async def image_medium(event_id: str, request: Request, ctx: Context = Depends(g
     data = ctx.blobs.get(event_id, "medium")
     if data is None:
         raise NotFound("no such image")
+    image = ctx.events.image(event_id)
+    if image is not None and image["sealed"]:
+        # Only a partner's key opens it; the browser does that (ADR-053).
+        return Response(data, media_type="application/json",
+                        headers={"Cache-Control": "no-store", "X-Watchman-Sealed": "1"})
     return Response(data, media_type="image/webp", headers={"Cache-Control": "no-store"})
 
 
@@ -380,11 +398,20 @@ async def issue_code(request: Request, ctx: Context = Depends(get_ctx)) -> Respo
     minutes = int(form.get("minutes", 0) or 0)
     if not ctx.people.is_trusted(partner):
         raise Forbidden(f"a new partner's codes count from {partner['trusted_at']} (ADR-050)")
+    approval = None
+    if keys.sealed(ctx):
+        if purpose == "settings":
+            raise ApiError("partners hold keys now: loosening waits for a partner's approval, not a code")
+        if keys.key_for(ctx, partner["id"]) is not None:
+            approval = keys.from_form(form)
+            if approval is None:
+                raise ApiError("unlock your key to issue a code", code="approval_needed")
+            keys.check(ctx, approval, "pause_code", {"person_id": person_id, "minutes": minutes}, {partner["id"]})
     with ctx.conn:
         if purpose == "settings":
             _, code = ctx.codes.create_code(person_id, partner["id"], 0, purpose="settings")
         else:
-            code = unlock.issue_code(ctx, person_id, partner["id"], minutes)
+            code = unlock.issue_code(ctx, person_id, partner["id"], minutes, approval)
     return RedirectResponse(
         f"/codes?person={person_id}&code={code}&minutes={minutes}&purpose={purpose}", status_code=303
     )
@@ -500,6 +527,9 @@ def _check_settings_code(ctx: Context, form, changes: dict, group: str | None = 
         loosened.append(group)
     if not loosened:
         return
+    if keys.sealed(ctx):
+        # Partners hold keys: the change waits for one of them to sign it (ADR-053).
+        raise approvals.NeedsApproval(", ".join(locks.LABELS.get(k, k) for k in loosened))
     code = str(form.get("partner_code", "")).strip()
     if not code:
         what = ", ".join(locks.LABELS.get(k, "adding or removing a partner" if k == "partners" else k)
@@ -573,8 +603,13 @@ async def settings_save(area: str, request: Request, ctx: Context = Depends(get_
             else:
                 overrides.pop(for_person, None)
             values = {"person_overrides": overrides} if overrides != current.person_overrides else {}
-        with ctx.conn:
-            _check_settings_code(ctx, form, values)
+        try:
+            with ctx.conn:
+                _check_settings_code(ctx, form, values)
+        except approvals.NeedsApproval as wait:
+            approvals.request(ctx, "settings", for_person or None, {"values": values}, f"loosen {wait}", v.login,
+                              pairlink.portal_url(request))
+            return RedirectResponse(f"/settings?area={area}&saved=pending&for={for_person}", status_code=303)
         _alert_loosening(ctx, v, values, for_person or None)
         with ctx.conn:
             for key, value in values.items():
@@ -601,12 +636,16 @@ async def settings_reset_person(request: Request, ctx: Context = Depends(get_ctx
         with ctx.conn:
             if overrides != current.person_overrides:
                 _check_settings_code(ctx, form, {"person_overrides": overrides})
-        if overrides != current.person_overrides:
-            _alert_loosening(ctx, v, {"person_overrides": overrides}, for_person)
-            with ctx.conn:
-                ctx.settings.set("person_overrides", overrides, login=v.login)
+    except approvals.NeedsApproval as wait:
+        approvals.request(ctx, "settings", for_person, {"values": {"person_overrides": overrides}},
+                          f"loosen {wait}", v.login, pairlink.portal_url(request))
+        return RedirectResponse(f"/settings?area=protection&for={for_person}&saved=pending", status_code=303)
     except ApiError as exc:
         return RedirectResponse(f"/settings?area=protection&for={for_person}&error={exc.message}", status_code=303)
+    if overrides != current.person_overrides:
+        _alert_loosening(ctx, v, {"person_overrides": overrides}, for_person)
+        with ctx.conn:
+            ctx.settings.set("person_overrides", overrides, login=v.login)
     return RedirectResponse(f"/settings?area=protection&for={for_person}&saved=1", status_code=303)
 
 
@@ -644,8 +683,16 @@ async def add_partner(request: Request, ctx: Context = Depends(get_ctx)) -> Resp
     trusted_at = iso(ctx.clock.now() + PARTNER_WAITING) if existing else None
     try:
         if existing:
-            with ctx.conn:
-                _check_settings_code(ctx, form, {}, group="partners")
+            try:
+                with ctx.conn:
+                    _check_settings_code(ctx, form, {}, group="partners")
+            except approvals.NeedsApproval:
+                approvals.request(ctx, "partner_add", person_id, {
+                    "person_id": person_id, "name": name, "email": email,
+                    "link_type": str(form.get("link_type", "email")),
+                    "login": str(form.get("login", "")).strip() or None,
+                }, f"add {name} ({email}) as a partner for {person['name']}", v.login, pairlink.portal_url(request))
+                return RedirectResponse("/settings?area=people&saved=pending", status_code=303)
             alerts.change_alert(ctx, f"a partner was added for {person['name']}", [
                 f"{v.login} added {name} ({email}) as a partner for {person['name']}.",
                 f"Their codes count from {trusted_at}. If you did not expect this, talk to {person['name']}.",
@@ -676,7 +723,13 @@ async def remove_partner(partner_id: str, request: Request, ctx: Context = Depen
     try:
         with ctx.conn:
             # Removing a partner weakens accountability, so it is locked like a protection setting.
-            _check_settings_code(ctx, form, {}, group="partners")
+            try:
+                _check_settings_code(ctx, form, {}, group="partners")
+            except approvals.NeedsApproval:
+                approvals.request(ctx, "partner_remove", partner["person_id"], {"partner_id": partner_id},
+                                  f"remove {partner['name']} ({partner['email']}) as a partner", v.login,
+                                  pairlink.portal_url(request))
+                return RedirectResponse("/settings?area=people&saved=pending", status_code=303)
             ctx.people.remove_partner(partner_id)
             ctx.conn.execute(
                 "INSERT INTO settings_changes(at, login, key, old_value, new_value) VALUES (?, ?, ?, ?, ?)",

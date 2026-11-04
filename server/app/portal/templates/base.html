@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/fonts/geist.css">
 <link rel="stylesheet" href="/static/app.css">
 <link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+<script src="/static/seal.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -37,7 +38,10 @@
     <a class="navitem {% if nav == 'devices' %}on{% endif %}" href="/devices{{ q }}">Devices</a>
     {% if role == 'partner' %}<a class="navitem {% if nav == 'codes' %}on{% endif %}" href="/codes{{ q }}">Codes</a>{% endif %}
     {% if person and (viewer.is_admin or role == 'partner') %}<a class="navitem {% if nav == 'whatif' %}on{% endif %}" href="/whatif{{ q }}">What if</a>{% endif %}
-    {% if viewer.is_admin %}<a class="navitem {% if nav == 'settings' %}on{% endif %}" href="/settings">Settings</a>{% endif %}
+    {% if role == 'partner' %}<a class="navitem {% if nav == 'keys' %}on{% endif %}" href="/keys{{ q }}">Your key</a>{% endif %}
+    <a class="navitem {% if nav == 'record' %}on{% endif %}" href="/record{{ q }}">Record</a>
+    {% if viewer.is_admin %}<a class="navitem {% if nav == 'settings' %}on{% endif %}" href="/settings">Settings</a>
+    <a class="navitem {% if nav == 'watching' %}on{% endif %}" href="/watching">Watching</a>{% endif %}
     <div class="side-foot">
       <div class="who">{{ viewer.name }}</div>
       <div class="who-sub">{{ viewer.login }} · {{ role if role != 'none' else 'no role' }}</div>

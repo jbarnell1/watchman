@@ -141,6 +141,22 @@ Two ways, chosen per partner on the People settings page.
 - Email only: the partner gets the digest and alerts with heavy blur, and pause codes by email
   when the protected person asks for one. No portal.
 
+Once your partners are set up, each linked partner should open Your key and make a key with a
+passphrase only they know. From then on nothing that loosens protection changes without a
+partner approving it with their key, and the addresses and peekable pictures partners review are
+sealed so only partner keys open them (ADR-053). A partner who loses their passphrase makes a new
+key; everyone is told and the new key waits three days.
+
+## Watching each other's households
+
+If your partner runs Watchman too, each server can keep an eye on the other's record (ADR-054).
+On the household being watched, the partner opens Record and presses Let my own server watch; it
+shows a token once. On the partner's own server, the admin opens Watching and adds the other
+server's address, the token and the email that should hear about problems. The watching server
+must be able to reach the other one over Tailscale: share the other `watchman` node with the
+partner's tailnet, and check from the watching server that `/healthz` answers. Problems and a
+server that stays unreachable for 30 minutes are emailed through the watching server's own mail.
+
 ## Devices
 
 On the Devices page create a pairing code (valid 15 minutes, one device). Type it into the Android

@@ -54,7 +54,7 @@
         {% else %}<p class="empty">No image was kept for this item.</p>{% endif %}
       </div>
       <dl class="facts">
-        <dt>Where</dt><dd>{{ e.app or 'unknown app' }}{% if e.url %}<br><span class="t2">{{ e.url }}</span>{% endif %}{% if e.title %}<br><span class="t2">{{ e.title }}</span>{% endif %}</dd>
+        <dt>Where</dt><dd>{{ e.app or 'unknown app' }}{% if e.url %}<br><span class="t2">{{ e.url }}</span>{% endif %}{% if e.title %}<br><span class="t2">{{ e.title }}</span>{% endif %}{% if e.sealed %}<br><span class="t2" data-sealed="{{ e.sealed }}" data-aad="{{ e.id }}">sealed for partners</span>{% endif %}</dd>
         <dt>Device score</dt><dd class="num">{{ '%.2f'|format(sc.classifier) if sc.classifier is defined else '–' }}{% if sc.detector is defined and sc.detector is not none %} · detector {{ '%.2f'|format(sc.detector) }}{% endif %}</dd>
         <dt>Second opinion</dt><dd class="num">{{ '%.2f'|format(e.second_opinion) if e.second_opinion is not none else 'not yet' }}</dd>
         {% if e.region %}{% set r = json.loads(e.region) %}<dt>Size on screen</dt><dd class="num">{{ r.w }} × {{ r.h }} px of {{ r.screen_w }} × {{ r.screen_h }}</dd>{% endif %}
@@ -65,7 +65,7 @@
       </dl>
     </div>
     {% if partner %}
-    <form class="detail-actions" method="post" action="/review/{{ e.id }}">
+    <form class="detail-actions" method="post" action="/review/{{ e.id }}"{% if sealed_household %} data-sign-action="review" data-partner="{{ partner.id }}" data-sign-params='{{ {"event_id": e.id}|tojson }}' data-sign-fields="state"{% endif %}>
       {% if e.review_state == 'open' %}
       <button class="btn primary" name="state" value="talked">Talked about it</button>
       <button class="btn" name="state" value="false_alarm">False alarm</button>
@@ -92,14 +92,29 @@
     busy = true;
     fetch('/peek/' + btn.dataset.id, {method: 'POST'}).then(function (r) { return r.json(); }).then(function (d) {
       if (d.error) { note.textContent = d.error.message; busy = false; return; }
-      img.src = d.url;
+      return fetch(d.url).then(function (r) {
+        if (r.headers.get('X-Watchman-Sealed') !== '1') return r.blob();
+        // Sealed for partners (ADR-053): only an unlocked key on this browser opens it.
+        return r.text().then(function (env) {
+          return window.WatchmanSeal.unlocked().then(function (k) {
+            return window.WatchmanSeal.openAny(env, btn.dataset.id + ':medium', k);
+          });
+        }).then(function (bytes) { return new Blob([bytes], {type: 'image/webp'}); });
+      }).then(function (blob) { return [d, URL.createObjectURL(blob)]; });
+    }).then(function (pair) {
+      if (!pair) return;
+      var d = pair[0];
+      img.src = pair[1];
       btn.textContent = 'Peeking';
       note.textContent = 'Next peek ' + new Date(d.next_peek_at).toLocaleString() + '. This peek is logged.';
       btn.disabled = true;
       timer = setTimeout(function () { timer = null; reblur(); busy = false; }, d.seconds * 1000);
       // The button comes back when the cooldown ends.
       setTimeout(function () { btn.disabled = false; }, Math.max(0, new Date(d.next_peek_at) - new Date()));
-    }).catch(function () { busy = false; });
+    }).catch(function (e) {
+      busy = false;
+      if (e && e.message === 'locked') note.innerHTML = 'This picture is sealed for partners. <a href="/keys">Unlock your key</a> to peek.';
+    });
   }
   // A tap starts a peek and the timer ends it; a second tap ends it early (ADR-048).
   function toggle(ev) { if (timer) { ev.preventDefault(); clearTimeout(timer); timer = null; reblur(); busy = false; } else start(ev); }

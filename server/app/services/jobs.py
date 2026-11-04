@@ -12,7 +12,7 @@ import uuid
 from datetime import timedelta
 
 from app.clock import iso, parse_iso
-from app.services import alerts, digest, liveness
+from app.services import alerts, digest, ledger, liveness, witness
 from app.services.context import Context
 from app.store.events_store import SEVERITY_PROTECTION
 
@@ -78,6 +78,32 @@ def reminders(ctx: Context) -> int:
     return sent
 
 
+VERIFY_EVERY = timedelta(hours=1)
+_last_verify: dict[int, tuple] = {}
+
+
+def verify_record(ctx: Context) -> int:
+    """Hourly: does the database still match the record (ADR-052)? New problems alert everyone."""
+    now = ctx.clock.now()
+    last = _last_verify.get(id(ctx))
+    if last and now - last[0] < VERIFY_EVERY:
+        return 0
+    problems = ledger.verify(ctx)
+    seen = last[1] if last else ()
+    _last_verify[id(ctx)] = (now, tuple(problems))
+    fresh = [p for p in problems if p not in seen]
+    if fresh:
+        alerts.change_alert(ctx, "the database no longer matches the record", [
+            "This server's hourly check found changes made outside Watchman itself:", *[f"  {p}" for p in fresh],
+            "Someone with access to the server's files changed them directly.",
+        ])
+    return len(fresh)
+
+
+def watch_others(ctx: Context) -> int:
+    return witness.poll_all(ctx, ctx.witness)
+
+
 def digests_due(ctx: Context) -> int:
     now = ctx.clock.now()
     sent = 0
@@ -104,8 +130,10 @@ def retention(ctx: Context) -> tuple[int, int]:
 
 
 def tick(ctx: Context) -> dict:
-    out = {"silent": 0, "reminders": 0, "not_judging": 0, "digests": 0, "images_removed": 0, "events_purged": 0}
+    out = {"silent": 0, "reminders": 0, "not_judging": 0, "verify": 0, "watching": 0, "digests": 0,
+           "images_removed": 0, "events_purged": 0}
     for name, fn in (("heartbeat", heartbeat_watch), ("reminders", reminders), ("not_judging", liveness.not_judging),
+                     ("verify", verify_record), ("watching", watch_others),
                      ("digests", digests_due), ("retention", retention)):
         try:
             result = fn(ctx)
@@ -114,7 +142,7 @@ def tick(ctx: Context) -> dict:
             continue
         if name == "heartbeat":
             out["silent"] = result
-        elif name in ("reminders", "not_judging"):
+        elif name in ("reminders", "not_judging", "verify", "watching"):
             out[name] = result
         elif name == "digests":
             out["digests"] = result

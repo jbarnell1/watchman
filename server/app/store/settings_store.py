@@ -9,11 +9,12 @@ from pydantic import BaseModel, ValidationError
 
 from app.clock import Clock, iso
 from app.settings import POLICY_KEYS, Settings, coerce
+from app.store.ledger_store import Recorded, digest
 
 log = logging.getLogger(__name__)
 
 
-class SettingsStore:
+class SettingsStore(Recorded):
     def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
         self.conn = conn
         self.clock = clock
@@ -38,7 +39,7 @@ class SettingsStore:
     def get(self, key: str) -> Any:
         return getattr(self.load(), key)
 
-    def set(self, key: str, value: Any, login: str = "system") -> Any:
+    def set(self, key: str, value: Any, login: str = "system", approval: dict | None = None) -> Any:
         """Store one setting. Records the change for the digest and bumps the policy version
         when devices need to know. Returns the typed value."""
         typed = coerce(key, value)
@@ -60,6 +61,12 @@ class SettingsStore:
                     "VALUES (?, ?, ?, ?, ?)",
                     (iso(self.clock.now()), login, key, old_json, new_json),
                 )
+            if key != "policy_version":
+                body = {"key": key, "old": on_record(key, json.loads(old_json)),
+                        "new": on_record(key, json.loads(new_json)), "by": login}
+                if approval:
+                    body["approval"] = approval
+                self.record("setting", body)
             if key in POLICY_KEYS:
                 self.conn.execute(
                     "INSERT INTO settings(key, value) VALUES ('policy_version', ?) "
@@ -84,3 +91,10 @@ class SettingsStore:
 
     def mark_changes_reported(self, ids: list[int]) -> None:
         self.conn.executemany("UPDATE settings_changes SET reported = 1 WHERE id = ?", [(i,) for i in ids])
+
+
+def on_record(key: str, value: Any) -> Any:
+    """The mail settings hold a password: the record keeps a hash of them, enough to show a change."""
+    if key == "smtp":
+        return {"sha256": digest(value)}
+    return value

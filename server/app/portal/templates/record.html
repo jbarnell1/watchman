@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Record{% endblock %}
+{% block content %}
+<div class="titlerow"><div><h1>The record</h1>
+  <p class="finding">{% if problems %}This server's own check found {{ problems|length }} change{{ 's' if problems|length != 1 }} made outside Watchman.{% else %}Everything in the database matches the record.{% endif %}</p></div></div>
+
+<section class="panel">
+  <div class="panel-head"><h2>Latest entry</h2><span class="t2">entry {{ head_seq }}</span></div>
+  <div class="num" style="overflow-wrap:anywhere">{{ head_hash }}</div>
+  <p class="t2">Every change partners rely on is chained into this record. Each email from this server ends with the latest entry, and partners' browsers sign it now and then, so a rewritten history does not match what is already out there.</p>
+</section>
+
+{% if problems %}
+<section class="panel">
+  <div class="panel-head"><h2>Changed outside Watchman</h2></div>
+  <ul class="rows">{% for p in problems %}<li class="row"><div class="row-main"><div class="t1">{{ p }}</div></div></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if waiting %}
+<section class="panel">
+  <div class="panel-head"><h2>Waiting for a partner</h2></div>
+  <ul class="rows">{% for a in waiting %}<li class="row"><a class="row-link" href="/approve/{{ a.id }}"><div class="row-main"><div class="t1">{{ a.summary }}</div><div class="t2">asked by {{ a.created_by }}, {{ when(a.created_at) }}</div></div></a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<div class="two">
+<section class="panel">
+  <div class="panel-head"><h2>Servers watching this one</h2></div>
+  {% if witnesses %}<ul class="rows">{% for w in witnesses %}<li class="row"><div class="row-main"><div class="t1">{{ w.partner_name or 'a partner' }}'s server</div><div class="t2">last read {{ ago(w.last_seen_at) }}</div></div>
+    {% if partner and partner.id == w.partner_id %}<form class="row-side" method="post" action="/record/witness/{{ w.id }}/revoke"><button class="btn small">Stop</button></form>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="empty">No other server watches this one yet.</p>{% endif %}
+  {% if new_token %}<p class="notice ok">On your own Watchman server, open Watching and add this household with this server's address and the token below. It is shown once.</p><div class="num" style="overflow-wrap:anywhere">{{ new_token }}</div>{% endif %}
+  {% if partner %}
+  <form method="post" action="/record/witness" {% if sealed_household %}data-sign-action="witness_token" data-partner="{{ partner.id }}" data-sign-params='{{ {"partner_id": partner.id}|tojson }}'{% endif %}>
+    <input type="hidden" name="partner_id" value="{{ partner.id }}">
+    <p class="t2">If you run Watchman at home, your server can read this record every few minutes and tell you if it is rewritten, goes quiet or loosens anything.</p>
+    <button class="btn">Let my own server watch</button>
+  </form>
+  {% endif %}
+</section>
+<section class="panel">
+  <div class="panel-head"><h2>Signed by partners</h2></div>
+  {% if checkpoints %}<ul class="rows">{% for c in checkpoints|reverse %}<li class="row"><div class="row-main"><div class="t1">entry {{ c.body.seq }}</div><div class="t2">{{ names.get(c.body.approval.partner_id, 'a partner') }}, {{ when(c.at) }}</div></div></li>{% endfor %}</ul>
+  {% else %}<p class="empty">No partner's browser has signed the record yet. It happens when a partner with an unlocked key opens the portal.</p>{% endif %}
+</section>
+</div>
+{% endblock %}

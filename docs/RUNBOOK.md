@@ -40,7 +40,11 @@ One in-process loop runs every minute (`app/services/jobs.py`):
 - digest: sent when the configured local day and time has passed since the last digest, or since
   the person was added for the first one;
 - retention: blurred images older than `image_retention_days`, events and heartbeats older than
-  `event_retention_days`.
+  `event_retention_days`;
+- reminders: devices still off or silent are announced again every `realert_hours` (ADR-050);
+- not judging: a device on and watched for 15 minutes in an hour with nothing judged (ADR-051);
+- record check, hourly: the database against the record; new problems alert everyone (ADR-052);
+- watching: every 5 minutes, the records of households this server watches (ADR-054).
 
 ## When something is wrong
 
@@ -176,7 +180,9 @@ partner with their own passcode.
 
 ## Locks
 
-Settings, Protection, Locks (ADR-028). Locks start off. While they are off, any setting can change
+Settings, Protection, Locks (ADR-028). Every loosening emails everyone at once, locks on or off
+(ADR-050). Once a partner sets up a key, locks are on for good and loosening waits for a partner's
+signed approval instead of a code (ADR-053). Locks start off. While they are off, any setting can change
 and each change is listed in the next digest. Turn them on when setup and testing are done. With
 locks on, tightening anything is still free; loosening anything in a checked group (raising a
 threshold, removing a blocked app, a longer pause, removing a partner, unchecking a group, turning

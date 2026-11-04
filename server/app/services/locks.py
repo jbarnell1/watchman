@@ -163,7 +163,9 @@ def locks_apply(ctx) -> bool:
     """Whether loosening a locked setting needs a partner code now. Once the household turns locks
     on they apply whether or not a device is paired: unpairing every device, changing a setting
     and pairing again no longer skips them (ADR-050)."""
-    return ctx.settings.load().locks_on
+    from app.services import keys
+    # Once a partner holds a key the locks stay on (ADR-053).
+    return ctx.settings.load().locks_on or keys.sealed(ctx)
 
 
 def loosened(current: Settings, changes: dict[str, Any]) -> list[str]:
