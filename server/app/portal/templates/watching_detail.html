@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ row.name }}{% endblock %}
+{% block content %}
+{% set p = status.partner if status else None %}
+<div class="titlerow"><div><h1>{{ row.name }}</h1>
+  <p class="finding">{% if p %}You are {{ p.person_name }}'s partner there, as {{ p.name }}. Your key for that household is made and kept on this server, so the page you type your passphrase into never comes from theirs.{% else %}This server cannot read that household right now.{% endif %}</p></div></div>
+{% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+{% if done %}<p class="notice ok">{{ {'approved': 'Approved and applied there.', 'declined': 'Declined. Nothing changed there.', 'reviewed': 'Marked there.'}.get(done, 'Done.') }}</p>{% endif %}
+<p class="notice bad" id="key-error" hidden></p>
+<p class="notice ok" id="key-ok" hidden></p>
+
+{% if p %}
+<section class="panel">
+  <div class="panel-head"><h2>Your key for {{ row.name }}</h2><span class="t2" id="state">{% if mine %}checking{% else %}not set up{% endif %}</span></div>
+  {% if mine %}
+  <div class="num">{{ mine.fingerprint }}</div>
+  {% if status.key and status.key.fingerprint != mine.fingerprint %}<p class="notice bad">That server holds a different key for you ({{ status.key.fingerprint }}). Someone there set up a key as you.</p>{% endif %}
+  <form id="unlock" class="form">
+    <label for="pass">Passphrase</label><input id="pass" type="password" autocomplete="current-password" required>
+    <button class="btn primary">Unlock for 12 hours</button>
+  </form>
+  {% else %}
+  <p class="t2">{% if status.key %}That server already has a key for you, set up {{ 'on its own portal' }}. Making one here replaces it: everyone there is told, and the new key approves nothing for three days.{% else %}Make your key here. Only the public half goes to {{ row.name }}.{% endif %}</p>
+  <form id="setup" class="form">
+    <label for="p1">Passphrase, at least {{ min_passphrase }} characters</label><input id="p1" type="password" autocomplete="new-password" minlength="{{ min_passphrase }}" required>
+    <label for="p2">The same again</label><input id="p2" type="password" autocomplete="new-password" minlength="{{ min_passphrase }}" required>
+    <button class="btn primary">Make my key here</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Waiting for your approval</h2></div>
+  {% if waiting %}<ul class="rows">{% for a in waiting %}<li class="row"><div class="row-main"><div class="t1">{{ a.created_by }} asks to {{ a.summary }}</div>
+    <div class="t2">{{ when(a.created_at) }}{% if a.kind == 'settings' %} · {% for k, val in a.params['values'].items() %}{{ k|replace('_', ' ') }} becomes <span class="num">{{ 'new mail settings' if k == 'smtp' else json.dumps(val) }}</span>{{ '; ' if not loop.last }}{% endfor %}{% elif a.kind == 'partner_add' %} · {{ a.params.name }} ({{ a.params.email }}){% endif %}</div></div>
+    {% if a.can_decide %}<form class="row-side" method="post" action="/watching/{{ row.id }}/approve/{{ a.id }}" data-sign-action="approve" data-partner="{{ p.id }}" data-sign-params='{{ a.signed|tojson }}'><button class="btn small primary">Approve</button></form>
+    <form class="row-side" method="post" action="/watching/{{ row.id }}/decline/{{ a.id }}"><button class="btn small">Decline</button></form>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="empty">Nothing is waiting.</p>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>To review</h2><span class="t2">{% if review and review.next_peek_at %}next peek {{ when(review.next_peek_at) }}{% endif %}</span></div>
+  {% if review and review['items'] %}<ul class="rows">{% for e in review['items'] %}<li class="row">
+    {% if e.image_status == 'stored' %}<img class="thumb" data-peek="{{ e.id }}" src="/watching/{{ row.id }}/image/{{ e.id }}" width="64" height="64" alt="blurred image" style="cursor:pointer">{% else %}<span class="thumb none"></span>{% endif %}
+    <div class="row-main"><div class="t1">{{ e.app or 'device' }} · {{ 'Explicit' if e.severity == 'explicit' else 'Review' }}</div>
+      <div class="t2">{{ when(e.occurred_at) }}{% if e.sealed %} · <span data-sealed="{{ e.sealed }}" data-aad="{{ e.id }}">sealed</span>{% elif e.url %} · {{ e.url|truncate(60) }}{% endif %}</div></div>
+    <form class="row-side" method="post" action="/watching/{{ row.id }}/review/{{ e.id }}" data-sign-action="review" data-partner="{{ p.id }}" data-sign-params='{{ {"event_id": e.id}|tojson }}' data-sign-fields="state">
+      <button class="btn small primary" name="state" value="talked">Talked</button><button class="btn small" name="state" value="false_alarm">False alarm</button></form>
+  </li>{% endfor %}</ul>
+  <p class="t2">Tap a picture to peek for {{ review.peek_seconds }} seconds. Peeks follow that household's cooldown and are shown to {{ p.person_name }}.</p>
+  {% else %}<p class="empty">Nothing to review.</p>{% endif %}
+</section>
+<script>
+window.WatchmanSealConfig = {challenge: '/watching/{{ row.id }}/challenge', head: '/watching/{{ row.id }}/head',
+  checkpoint: '/watching/{{ row.id }}/checkpoint', entry: null, store: 'watchman-checkpoint-{{ row.id }}', partner: {{ p.id|tojson }}};
+(function () {
+  var S = window.WatchmanSeal, partner = {{ p.id|tojson }}, base = '/watching/{{ row.id }}';
+  var err = document.getElementById('key-error'), ok = document.getElementById('key-ok'), state = document.getElementById('state');
+  function fail(e) { err.hidden = false; ok.hidden = true; err.textContent = e.message || String(e); }
+  function done(t) { ok.hidden = false; err.hidden = true; ok.textContent = t; }
+  {% if mine %}S.unlocked().then(function (k) { state.textContent = k[partner] ? 'unlocked here' : 'locked'; });{% endif %}
+  var setup = document.getElementById('setup');
+  if (setup) setup.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var a = document.getElementById('p1').value, b = document.getElementById('p2').value;
+    if (a !== b) return fail(new Error('The two passphrases differ'));
+    setup.querySelector('button').disabled = true;
+    done('Making your key. This takes a few seconds.');
+    S.setup(partner, a, function (url, body) { return S.postJson(base + '/key', body); })
+      .then(function (fp) { done('Your key is ready. Fingerprint ' + fp + '.'); setTimeout(function () { location.reload(); }, 1500); })
+      .catch(function (e) { setup.querySelector('button').disabled = false; fail(e); });
+  });
+  var unlock = document.getElementById('unlock');
+  if (unlock) unlock.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    fetch(base + '/key', {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (mine) {
+      return S.unlock(document.getElementById('pass').value, mine);
+    }).then(function () { location.reload(); }).catch(function () { fail(new Error('That passphrase does not open your key')); });
+  });
+  document.querySelectorAll('[data-peek]').forEach(function (img) {
+    var heavy = img.src, busy = false;
+    img.addEventListener('click', function () {
+      if (busy) return;
+      busy = true;
+      var id = img.dataset.peek, secs = 3;
+      fetch(base + '/peek/' + id, {method: 'POST', credentials: 'same-origin'}).then(function (r) {
+        if (!r.ok) return r.json().then(function (j) { throw new Error((j.error && j.error.message) || r.status); });
+        secs = parseInt(r.headers.get('X-Watchman-Seconds') || '3', 10);
+        if (r.headers.get('X-Watchman-Sealed') !== '1') return r.blob();
+        return r.text().then(function (env) {
+          return S.unlocked().then(function (k) { return S.openAny(env, id + ':medium', k); });
+        }).then(function (bytes) { return new Blob([bytes], {type: 'image/webp'}); });
+      }).then(function (blob) {
+        img.src = URL.createObjectURL(blob);
+        setTimeout(function () { img.src = heavy; busy = false; }, secs * 1000);
+      }).catch(function (e) { busy = false; fail(e.message === 'locked' ? new Error('Unlock your key to peek') : e); });
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

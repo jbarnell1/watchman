@@ -8,6 +8,24 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-055 - A partner who runs Watchman keeps their key on their own server
+**2026-11-04.** ADR-053 left one gap: the page a partner types their passphrase into comes from the
+server they are guarding, so someone who rewrites that server's code could serve a page that
+captures it. When the partner runs Watchman too, they no longer need that page. On their own
+server, Watching, the household shows a page of its own: the partner makes their key there (the
+locked bundle stays on their server; only the public halves go to the watched one, marked as held
+elsewhere), unlocks it there, and from there approves or declines waiting changes, marks review
+items, peeks (sealed for their key, under the watched household's cooldown, logged as before) and
+signs checkpoints. Their server relays each signed action over the witness token
+(`/api/v1/witness/key`, `challenge`, `approvals`, `approve`, `decline`, `review`, `image`, `peek`,
+`checkpoint`); the watched server checks every signature as on its portal, so the token alone
+loosens nothing. Because the partner's server made the key, any other key that later appears on the
+watched server for that partner is reported at once, even on a first read: someone there is acting
+as them. A witness token is now shown once on the page instead of in the address.
+Where a partner does not run Watchman, ADR-053 stands as it is: their key lives in their browser,
+and the limit is reported, not closed (the owner: reporting is acceptable where full blocking
+cannot be done).
+
 ### ADR-054 - Households watch each other's records
 **2026-11-03.** The protected person usually runs the server, so whatever the server says about
 itself can be rewritten by them. Hosting stays where it is (each household's own server is the

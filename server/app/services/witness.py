@@ -113,6 +113,7 @@ def poll(ctx: Context, client: WitnessClient, row: sqlite3.Row) -> list[str]:
     now = ctx.clock.now()
     lines: list[str] = []
     pins = json.loads(row["keys"] or "{}")
+    mine = json.loads(row["my_key"]) if row["my_key"] else None
     last_seq, last_hash = row["last_seq"], row["last_hash"]
     first = last_seq == 0
     try:
@@ -143,6 +144,9 @@ def poll(ctx: Context, client: WitnessClient, row: sqlite3.Row) -> list[str]:
                 note = notable(e, pins)
                 if note and not first:
                     lines.append(note)
+                foreign = not_mine(e, mine)
+                if foreign:
+                    lines.append(foreign)
             prev, seq = page[-1]["hash"], page[-1]["seq"]
         last_seq, last_hash = seq, (prev if seq else None)
         for p in st.get("problems") or []:
@@ -182,6 +186,18 @@ def poll(ctx: Context, client: WitnessClient, row: sqlite3.Row) -> list[str]:
                 ctx.conn.execute("UPDATE watching SET last_report = ?, last_report_at = ? WHERE id = ?",
                                  (report, iso(now), row["id"]))
     return lines
+
+
+def not_mine(e: dict, mine: dict | None) -> str | None:
+    """This server made its partner's key (ADR-055), so any other key set for that partner after it
+    was made is someone else acting as them: reported on the first read too."""
+    if not mine or e["kind"] != "partner_key" or e["seq"] <= mine.get("registered_seq", 0):
+        return None
+    b = e["body"]
+    if b.get("partner_id") == mine["partner_id"] and b.get("fingerprint") != mine["fingerprint"]:
+        return (f"{e['at']}: a key for you ({b.get('fingerprint')}) was set up on that server, but this server "
+                f"holds your key ({mine['fingerprint']}). Someone there is acting as you.")
+    return None
 
 
 def notable(e: dict, pins: dict) -> str | None:

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Request
@@ -51,17 +52,7 @@ async def keys_set(request: Request, ctx: Context = Depends(get_ctx)) -> Respons
     replacing = keys.key_for(ctx, partner["id"]) is not None
     fp = keys.set_key(ctx, partner, str(body.get("sign_pub", "")), str(body.get("enc_pub", "")),
                       body.get("wrapped") or {})
-    person = ctx.people.get_person(partner["person_id"])
-    lines = [f"{partner['name']} {'replaced their key' if replacing else 'set up a key'} on the portal "
-             f"(fingerprint {fp})."]
-    if replacing:
-        lines.append(f"The new key approves nothing for three days. If {partner['name']} did not do this, "
-                     "someone else is acting as them.")
-    else:
-        lines.append("From now on loosening needs a partner's signed approval, and what partners review is "
-                     "sealed so only their keys open it.")
-    alerts.change_alert(ctx, f"{partner['name']} {'replaced' if replacing else 'set up'} their partner key",
-                        lines, person["id"] if person else None)
+    keys.announce(ctx, partner, fp, replacing)
     return JSONResponse({"fingerprint": fp})
 
 
@@ -71,7 +62,7 @@ async def keys_mine(request: Request, ctx: Context = Depends(get_ctx)) -> Respon
     out = []
     for partner in v.partner_rows.values():
         key = keys.key_for(ctx, partner["id"])
-        if key:
+        if key and json.loads(key["wrapped"]) != keys.HELD_ELSEWHERE:
             out.append({"partner_id": partner["id"], "person_id": partner["person_id"],
                         "wrapped": json.loads(key["wrapped"]), "fingerprint": key["fingerprint"],
                         "sign_pub": key["sign_pub"], "enc_pub": key["enc_pub"]})
@@ -127,9 +118,10 @@ async def approve_decline(aid: str, request: Request, ctx: Context = Depends(get
 # The record
 
 @router.get("/record", response_class=HTMLResponse)
-async def record_page(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+async def record_page(request: Request, ctx: Context = Depends(get_ctx), new_token: str | None = None,
+                      person_id: str | None = None) -> Response:
     v = require_viewer(ctx, request)
-    person = pick_person(v, request)
+    person = ctx.people.get_person(person_id) if person_id and v.can_see(person_id) else pick_person(v, request)
     seq, h = ctx.ledger.head()
     checkpoints = [e for e in ctx.ledger.of_kind("checkpoint")][-10:]
     names = {p["id"]: p["name"] for pp in (ctx.people.partners_for(x["id"]) for x in ctx.people.list_people())
@@ -137,7 +129,7 @@ async def record_page(request: Request, ctx: Context = Depends(get_ctx)) -> Resp
     return _page(request, ctx, v, "record.html", person, head_seq=seq, head_hash=h, problems=ledger.verify(ctx),
                  witnesses=witness.witnesses(ctx), checkpoints=checkpoints, names=names,
                  waiting=approvals.waiting(ctx), partner=v.partner_rows.get(person["id"]) if person else None,
-                 new_token=request.query_params.get("token"))
+                 new_token=new_token)
 
 
 @router.get("/record/head")
@@ -200,7 +192,8 @@ async def record_witness(request: Request, ctx: Context = Depends(get_ctx)) -> R
             raise ApiError("unlock your key first", code="approval_needed")
         keys.check(ctx, approval, "witness_token", {"partner_id": partner["id"]}, {partner["id"]})
     token = witness.create_token(ctx, partner["id"])
-    return RedirectResponse(f"/record?person={partner['person_id']}&token={token}", status_code=303)
+    # Shown once on this response, never put in an address where history and logs would keep it.
+    return await record_page(request, ctx, new_token=token, person_id=partner["person_id"])
 
 
 @router.post("/record/witness/{wid}/revoke")
@@ -239,7 +232,7 @@ async def watching_add(request: Request, ctx: Context = Depends(get_ctx)) -> Res
                                 "are needed", status_code=303)
     wid = witness.add_watch(ctx, name, url, token, email)
     row = ctx.conn.execute("SELECT * FROM watching WHERE id = ?", (wid,)).fetchone()
-    witness.poll(ctx, ctx.witness, row)
+    await asyncio.to_thread(witness.poll, ctx, ctx.witness, row)
     return RedirectResponse("/watching", status_code=303)
 
 
@@ -251,3 +244,162 @@ async def watching_remove(wid: str, request: Request, ctx: Context = Depends(get
     with ctx.conn:
         ctx.conn.execute("DELETE FROM watching WHERE id = ?", (wid,))
     return RedirectResponse("/watching", status_code=303)
+
+
+# The partner's own server acts for them on the household they watch (ADR-055). The key is made,
+# kept and unlocked here, on pages this server sends; the watched server sees only public keys and
+# signatures.
+
+def _watch_row(ctx: Context, v, wid: str):
+    if not v.is_admin:
+        raise Forbidden("only the admin of this server uses its watch pages")
+    row = ctx.conn.execute("SELECT * FROM watching WHERE id = ?", (wid,)).fetchone()
+    if row is None:
+        raise NotFound("not watching that household")
+    return row
+
+
+def _call(ctx: Context, row, method: str, path: str, body: dict | None = None):
+    try:
+        return ctx.witness.json(method, row["url"], row["token"], path, None, body)
+    except witness.WitnessError as exc:
+        raise ApiError(f"{row['name']}: {exc}") from exc
+
+
+async def _acall(*args):
+    # The other household's server can take seconds; keep this server's event loop free meanwhile.
+    return await asyncio.to_thread(_call, *args)
+
+
+async def _arelay(*args):
+    return await asyncio.to_thread(_relay, *args)
+
+
+@router.get("/watching/{wid}", response_class=HTMLResponse)
+async def watching_detail(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    row = _watch_row(ctx, v, wid)
+    error, status, waiting, review = request.query_params.get("error"), None, [], None
+    try:
+        status = await _acall(ctx, row, "GET", "/api/v1/witness/status")
+        waiting = (await _acall(ctx, row, "GET", "/api/v1/witness/approvals"))["approvals"]
+        review = await _acall(ctx, row, "GET", "/api/v1/witness/review")
+    except ApiError as exc:
+        error = error or exc.message
+    mine = json.loads(row["my_key"]) if row["my_key"] else None
+    return _page(request, ctx, v, "watching_detail.html", pick_person(v, request), row=row, status=status,
+                 waiting=waiting, review=review, mine=mine, error=error, done=request.query_params.get("done"),
+                 min_passphrase=keys.MIN_PASSPHRASE)
+
+
+@router.post("/watching/{wid}/key")
+async def watching_key(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    row = _watch_row(ctx, v, wid)
+    body = await request.json()
+    wrapped = body.get("wrapped") or {}
+    if int(wrapped.get("iterations", 0)) < 600_000:
+        raise ApiError("the passphrase key needs at least 600000 rounds")
+    got = await _acall(ctx, row, "POST", "/api/v1/witness/key", {"sign_pub": body.get("sign_pub"),
+                                                          "enc_pub": body.get("enc_pub")})
+    head = (await _acall(ctx, row, "GET", "/api/v1/witness/status"))["head"]["seq"]
+    mine = {"partner_id": str(body.get("partner_id")), "sign_pub": body.get("sign_pub"), "enc_pub": body.get("enc_pub"),
+            "wrapped": wrapped, "fingerprint": got["fingerprint"], "registered_seq": head}
+    with ctx.conn:
+        ctx.conn.execute("UPDATE watching SET my_key = ? WHERE id = ?", (json.dumps(mine), wid))
+    return JSONResponse({"fingerprint": got["fingerprint"]})
+
+
+@router.get("/watching/{wid}/key")
+async def watching_key_get(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    row = _watch_row(ctx, v, wid)
+    mine = json.loads(row["my_key"]) if row["my_key"] else None
+    keys_out = [{k: mine[k] for k in ("partner_id", "wrapped", "fingerprint")}] if mine else []
+    return JSONResponse({"keys": keys_out}, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/watching/{wid}/challenge")
+async def watching_challenge(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    return JSONResponse(await _acall(ctx, _watch_row(ctx, v, wid), "POST", "/api/v1/witness/challenge", {}))
+
+
+@router.get("/watching/{wid}/head")
+async def watching_head(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    return JSONResponse((await _acall(ctx, _watch_row(ctx, v, wid), "GET", "/api/v1/witness/status"))["head"])
+
+
+@router.post("/watching/{wid}/checkpoint")
+async def watching_checkpoint(wid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    return JSONResponse(await _acall(ctx, _watch_row(ctx, v, wid), "POST", "/api/v1/witness/checkpoint",
+                              await request.json()))
+
+
+def _back(wid: str, done: str | None = None, error: str | None = None) -> RedirectResponse:
+    q = f"?done={done}" if done else f"?error={error}"
+    return RedirectResponse(f"/watching/{wid}{q}", status_code=303)
+
+
+@router.post("/watching/{wid}/approve/{aid}")
+async def watching_approve(wid: str, aid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    row = _watch_row(ctx, v, wid)
+    approval = keys.from_form(await request.form())
+    if approval is None:
+        return _back(wid, error="unlock your key first")
+    try:
+        await _acall(ctx, row, "POST", f"/api/v1/witness/approve/{aid}", approval)
+    except ApiError as exc:
+        return _back(wid, error=exc.message)
+    return _back(wid, "approved")
+
+
+@router.post("/watching/{wid}/decline/{aid}")
+async def watching_decline(wid: str, aid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    try:
+        await _acall(ctx, _watch_row(ctx, v, wid), "POST", f"/api/v1/witness/decline/{aid}", {})
+    except ApiError as exc:
+        return _back(wid, error=exc.message)
+    return _back(wid, "declined")
+
+
+@router.post("/watching/{wid}/review/{eid}")
+async def watching_review(wid: str, eid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    row = _watch_row(ctx, v, wid)
+    form = await request.form()
+    approval = keys.from_form(form)
+    if approval is None:
+        return _back(wid, error="unlock your key first")
+    try:
+        await _acall(ctx, row, "POST", f"/api/v1/witness/review/{eid}", {"state": str(form.get("state", "")),
+                                                                     "approval": approval})
+    except ApiError as exc:
+        return _back(wid, error=exc.message)
+    return _back(wid, "reviewed")
+
+
+def _relay(ctx: Context, row, method: str, path: str) -> Response:
+    try:
+        r = ctx.witness.call(method, row["url"], row["token"], path)
+    except witness.WitnessError as exc:
+        raise ApiError(f"{row['name']}: {exc}") from exc
+    keep = {k: v for k, v in r.headers.items() if k.lower().startswith("x-watchman-")}
+    return Response(r.content, status_code=r.status, media_type=r.headers.get("content-type", "application/json"),
+                    headers=keep | {"Cache-Control": "no-store"})
+
+
+@router.get("/watching/{wid}/image/{eid}")
+async def watching_image(wid: str, eid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    return await _arelay(ctx, _watch_row(ctx, v, wid), "GET", f"/api/v1/witness/image/{eid}")
+
+
+@router.post("/watching/{wid}/peek/{eid}")
+async def watching_peek(wid: str, eid: str, request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    v = require_viewer(ctx, request)
+    return await _arelay(ctx, _watch_row(ctx, v, wid), "POST", f"/api/v1/witness/peek/{eid}")

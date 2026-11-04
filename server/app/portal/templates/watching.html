@@ -7,7 +7,7 @@
 
 {% if rows %}
 <ul class="rows">{% for r in rows %}<li class="row"><div class="row-main">
-  <div class="t1">{{ r.name }} {% if r.last_error %}<span class="pill neg">cannot reach</span>{% elif r.last_ok_at %}<span class="pill pos">checked</span>{% endif %}</div>
+  <div class="t1"><a href="/watching/{{ r.id }}">{{ r.name }}</a> {% if r.last_error %}<span class="pill neg">cannot reach</span>{% elif r.last_ok_at %}<span class="pill pos">checked</span>{% endif %}</div>
   <div class="t2">{{ r.url }} · entry {{ r.last_seq }} · last checked {{ ago(r.last_ok_at) }} · alerts to {{ r.email }}{% if r.last_error %} · {{ r.last_error }}{% endif %}</div>
   {% set pins = json.loads(r['keys'] or '{}') %}{% if pins %}<div class="t2">Partner keys pinned: {% for pid, p in pins.items() %}{{ p.fingerprint }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
   </div><form class="row-side" method="post" action="/watching/{{ r.id }}/remove"><button class="btn small">Stop watching</button></form></li>{% endfor %}</ul>
