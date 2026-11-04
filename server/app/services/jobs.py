@@ -12,7 +12,7 @@ import uuid
 from datetime import timedelta
 
 from app.clock import iso, parse_iso
-from app.services import alerts, digest
+from app.services import alerts, digest, liveness
 from app.services.context import Context
 from app.store.events_store import SEVERITY_PROTECTION
 
@@ -99,13 +99,14 @@ def retention(ctx: Context) -> tuple[int, int]:
     purged = ctx.events.purge_before(cutoff)
     ctx.devices.purge_heartbeats_before(cutoff)
     ctx.devices.purge_metrics_before(cutoff.strftime("%Y-%m-%d"))
+    liveness.purge_before(ctx, cutoff.strftime("%Y-%m-%d"))
     return len(images), purged
 
 
 def tick(ctx: Context) -> dict:
-    out = {"silent": 0, "reminders": 0, "digests": 0, "images_removed": 0, "events_purged": 0}
-    for name, fn in (("heartbeat", heartbeat_watch), ("reminders", reminders), ("digests", digests_due),
-                     ("retention", retention)):
+    out = {"silent": 0, "reminders": 0, "not_judging": 0, "digests": 0, "images_removed": 0, "events_purged": 0}
+    for name, fn in (("heartbeat", heartbeat_watch), ("reminders", reminders), ("not_judging", liveness.not_judging),
+                     ("digests", digests_due), ("retention", retention)):
         try:
             result = fn(ctx)
         except Exception as exc:
@@ -113,8 +114,8 @@ def tick(ctx: Context) -> dict:
             continue
         if name == "heartbeat":
             out["silent"] = result
-        elif name == "reminders":
-            out["reminders"] = result
+        elif name in ("reminders", "not_judging"):
+            out[name] = result
         elif name == "digests":
             out["digests"] = result
         else:

@@ -19,6 +19,12 @@ All bodies are JSON (UTF-8) unless noted. Times are RFC 3339 UTC. IDs are UUIDv4
   Unknown logins get 403. In tests and local dev an `IdentityProvider` fake supplies the login.
   The device API below is the same in both modes.
 
+## When the server says 401
+A client never unpairs itself on a 401 (ADR-051). It keeps its token, its last policy and
+protection, tells the person the server no longer accepts this device, and keeps trying on its
+normal schedule. Pairing again with a new code replaces the token. A client with a pairing and no
+policy judges with its built-in defaults.
+
 ## Errors
 
 `{"error": {"code": "string", "message": "string"}}` with a 4xx/5xx status. Codes:
@@ -65,6 +71,21 @@ Optional `metrics` (ADR-025): the work done since the last heartbeat, counts and
   "timings": {"inference_ms": {"n": 12, "sum": 204.5, "max": 31.2,
                                  "buckets": [0, 0, 0, 0, 9, 3, 0, 0, 0, 0, 0, 0]}}}
 ```
+Optional, ADR-051:
+```json
+"judge": {"window_s": 300, "screen_on_s": 280, "unwatched_s": 20, "judged": 41, "last_judged_at": "..."},
+"device": {"developer_options": false, "usb_debugging": false},
+"secure_apps": {"com.chase.sig.android": 412}
+```
+`judge` covers the time since the last delivered heartbeat: seconds the screen was on, of those
+the seconds nothing was meant to be judged (a partner pause, an app in `exempt_apps`, a secure
+screen), and how many checks ran a model on a frame. Fifteen watched minutes in an hour with
+`judged` 0 raises `tamper` with `detail.reason` `not_judging`. `device` is Android's developer
+options and USB debugging; debugging turning on raises `protection_changed` (`usb_debugging`).
+`secure_apps` is seconds per package that a screen the app protects from capture was in front,
+at most 64 packages. Like `metrics`, a client that fails to deliver a heartbeat carries these
+counts to the next one.
+
 `buckets` has 12 counts: samples at or below 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 and 1024 ms, then
 everything slower. The server merges these per device per household day and drops anything not in
 this shape; names are at most 48 characters and 64 of each kind. They are not kept in `last_state`.
@@ -182,7 +203,8 @@ Event `type` values and their `action`:
 | `app_blocked` | a blocked app was opened | `blocked` |
 | `protection_changed` | optional from clients; the server derives its own from heartbeats (ADR-015) and only those alert; `detail` has `{"field","from","to"}` | `none` |
 | `block_passed` | the person chose Continue anyway on a whole-screen block; the pictures stay blurred; alerts partners | `none` |
-| `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump | `none` |
+| `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump; the server raises `silent`, `code_guessing` and `not_judging`; the extension sends `page_unblur` when a page keeps removing its covers | `none` |
+| `protection_gap` | sent by a device when it starts again: `detail` `{"from","to","reason": "reboot" or "killed"}`. Severity protection (alerts) at 3 minutes or more, 10 after a reboot (ADR-051) | `none` |
 | `pause_started` / `pause_ended` | an unlock code took effect / expired | `none` |
 | `miss_reported` | the person taps Missed something: the scores of the whole screen and of each picture on it in `detail.regions` (size, classifier, detector, decisive bits, cached verdict), the app's watch level and the thresholds; never an image | `none` |
 | `daily_stats` | once a day: screens examined, images scored, minutes protected | `none` |

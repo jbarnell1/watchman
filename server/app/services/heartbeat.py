@@ -13,7 +13,7 @@ import uuid
 from zoneinfo import ZoneInfo
 
 from app.clock import iso
-from app.services import alerts, metrics
+from app.services import alerts, liveness, metrics
 from app.services.context import Context
 from app.services.policy import paused_until
 from app.store.events_store import SEVERITY_INFO, SEVERITY_PROTECTION
@@ -41,15 +41,16 @@ def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
     previous = json.loads(device["last_state"]) if device["last_state"] else None
     now = ctx.clock.now()
     work = metrics.clean(body.pop("metrics", None))
+    day = household_day(ctx, now)
     with ctx.conn:
         ctx.devices.record_heartbeat(device["id"], body)
         if work and (work["counters"] or work["timings"]):
-            day = household_day(ctx, now)
             have = ctx.devices.metrics_for(device["id"], day) or metrics.empty()
             ctx.devices.put_metrics(device["id"], day, metrics.merge(have, work))
         new_state = body.get("state") or {}
         old_state = (previous or {}).get("state") or {}
-        derived: list[dict] = []
+        derived: list[dict] = [dict(ev, severity=SEVERITY_PROTECTION)
+                               for ev in liveness.record(ctx, device, body, previous, day)]
         for field, value in new_state.items():
             old = old_state.get(field)
             if previous is not None and old != value and (_is_off(value) or _is_off(old)):
@@ -83,6 +84,7 @@ def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
                 ctx.devices.set_reminded(device["id"], iso(now))
         else:
             ctx.devices.set_reminded(device["id"], None)
+    liveness.secure_alerts(ctx, device, day)
     settings = ctx.settings.load()
     return {
         "policy_version": settings.policy_version,
