@@ -26,13 +26,35 @@ class AppState private constructor(context: Context) {
     val pending = PendingImages(File(context.filesDir, "pending"))
     var onChanged: (() -> Unit)? = null
 
+    /** Pairing again with a new code replaces the token and clears [rejected]. */
     var pairing: Pairing?
         get() = prefs.get("pairing")?.let { gson.fromJson(it, Pairing::class.java) }
-        set(v) { prefs.put("pairing", v?.let { gson.toJson(it) }); onChanged?.invoke() }
+        set(v) { prefs.put("pairing", v?.let { gson.toJson(it) }); prefs.put("rejected", null); onChanged?.invoke() }
 
     var policy: Policy?
         get() = prefs.get("policy")?.let { gson.fromJson(it, Policy::class.java) }
         set(v) { prefs.put("policy", v?.let { gson.toJson(it) }); onChanged?.invoke() }
+
+    /** The policy protection runs on: the last one fetched, or the built-in defaults, never none. */
+    val effectivePolicy: Policy get() = policy ?: Policy.DEFAULTS
+
+    /**
+     * The server answered 401. Token, policy and protection stay exactly as they were and the
+     * heartbeats go on: a fake or hostile server must not be able to switch protection off.
+     */
+    var rejected: Boolean
+        get() = prefs.get("rejected") == "1"
+        set(v) { if (v != rejected) prefs.put("rejected", if (v) "1" else null) }
+
+    /** Epoch ms the watcher service last said it was alive; see [ProtectionGap]. */
+    var aliveAt: Long?
+        get() = prefs.get("alive_at")?.toLongOrNull()
+        set(v) { prefs.put("alive_at", v?.toString()) }
+
+    /** Set only by a stop that already reported itself (a partner-code pause). */
+    var cleanStop: Boolean
+        get() = prefs.get("clean_stop") == "1"
+        set(v) { prefs.put("clean_stop", if (v) "1" else null) }
 
     var classifier: ModelEntry?
         get() = prefs.get("classifier")?.let { gson.fromJson(it, ModelEntry::class.java) }

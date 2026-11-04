@@ -97,6 +97,8 @@ class _PairPageState extends State<PairPage> {
       _busy = false;
       _error = err;
     });
+    // Opened from the status page to pair again: go back once the new code took.
+    if (err == null && Navigator.of(context).canPop()) Navigator.of(context).pop();
   }
 
   @override

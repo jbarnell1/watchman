@@ -46,6 +46,25 @@ data class Policy(
 
     fun isPaused(nowMillis: Long = System.currentTimeMillis()): Boolean =
         pausedUntil != null && Iso.parse(pausedUntil) > nowMillis
+
+    companion object {
+        /**
+         * Used when no policy was ever fetched, so protection never waits on the server: the
+         * contract's defaults, every app watched in real time, nothing blocked, nothing exempt.
+         */
+        val DEFAULTS = Policy(
+            version = 0,
+            thresholds = Thresholds(cover = 0.85, flag = 0.85, detectorCover = 0.55, ask = 0.60, sure = 0.97),
+            strictMode = true,
+            riskyApps = emptyList(),
+            blockedApps = emptyList(),
+            protectedBrowser = "",
+            sampleIntervalS = 180,
+            wholeScreenIntervalS = 5,
+            pausedUntil = null,
+            knownBadHashes = emptyList(),
+        )
+    }
 }
 
 enum class WatchLevel { REALTIME, CHECKED, OFF }
@@ -114,6 +133,8 @@ object Iso {
     }
 
     fun now(): String = synchronized(format) { format.format(java.util.Date()) }
+
+    fun format(millis: Long): String = synchronized(format) { format.format(java.util.Date(millis)) }
 
     fun parse(s: String): Long = synchronized(format) {
         try { format.parse(s.replace(Regex("\\.\\d+"), ""))!!.time } catch (e: Exception) { 0L }
