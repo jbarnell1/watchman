@@ -4,6 +4,7 @@ import type { PageScore, Thresholds } from "../shared/types";
 
 interface Status {
   paired: boolean;
+  rejected?: boolean;
   server: string | null;
   serverName: string | null;
   pausedUntil: string | null;
@@ -11,6 +12,8 @@ interface Status {
   counters: { scored: number; covered: number; flagged: number };
   work?: string;
 }
+
+const REJECTED = "The server no longer accepts this browser. Protection stays on. Pair again with a new code.";
 
 function el(id: string): HTMLElement {
   return document.getElementById(id)!;
@@ -26,7 +29,11 @@ async function render(): Promise<void> {
     sub.textContent = "Open Settings and enter a pairing code from the household server.";
     return;
   }
-  if (s.pausedUntil && new Date(s.pausedUntil) > new Date()) {
+  if (s.rejected) {
+    state.textContent = "The server no longer accepts this browser";
+    state.className = "state bad";
+    sub.textContent = REJECTED;
+  } else if (s.pausedUntil && new Date(s.pausedUntil) > new Date()) {
     state.textContent = "Paused by a partner code";
     state.className = "state warn";
     sub.textContent = `Until ${new Date(s.pausedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`;

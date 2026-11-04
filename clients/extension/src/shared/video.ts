@@ -23,6 +23,10 @@ export interface SamplerDeps {
   judge: (video: HTMLVideoElement, frame: FrameGrab) => Promise<"safe" | "cover">;
   /** Whether the element is on screen; off-screen videos are not sampled. */
   onScreen?: (video: HTMLVideoElement) => boolean;
+  /** Where the decision lives. The content script keeps it in its own world, never in the DOM,
+   * which the page can write. Without these the sampler keeps it itself. */
+  isCovered?: (video: HTMLVideoElement) => boolean;
+  mark?: (video: HTMLVideoElement, decision: "safe" | "cover") => void;
   setInterval?: typeof setInterval;
   clearInterval?: typeof clearInterval;
 }
@@ -34,6 +38,8 @@ export function isPlaying(v: HTMLVideoElement): boolean {
 export class VideoSampler {
   private readonly tracked = new Set<HTMLVideoElement>();
   private readonly lastHash = new WeakMap<HTMLVideoElement, string>();
+  private readonly unsampleable = new WeakSet<HTMLVideoElement>();
+  private readonly decisions = new WeakMap<HTMLVideoElement, "safe" | "cover">();
   private timer: ReturnType<typeof setInterval> | null = null;
   private ticking = false;
   /** Frames judged, frames dropped as unchanged: for the status line. */
@@ -61,10 +67,30 @@ export class VideoSampler {
   }
 
   track(video: HTMLVideoElement): void {
-    if (video.dataset.wmVideo === "unsampleable") return;
+    if (this.unsampleable.has(video)) return;
     this.tracked.add(video);
-    video.dataset.wmVideo = "tracked";
     this.start();
+  }
+
+  isTracked(video: HTMLVideoElement): boolean {
+    return this.tracked.has(video);
+  }
+
+  isUnsampleable(video: HTMLVideoElement): boolean {
+    return this.unsampleable.has(video);
+  }
+
+  decisionOf(video: HTMLVideoElement): "safe" | "cover" | undefined {
+    return this.decisions.get(video);
+  }
+
+  private covered(video: HTMLVideoElement): boolean {
+    return this.deps.isCovered ? this.deps.isCovered(video) : this.decisions.get(video) === "cover";
+  }
+
+  private setDecision(video: HTMLVideoElement, decision: "safe" | "cover"): void {
+    this.decisions.set(video, decision);
+    this.deps.mark?.(video, decision);
   }
 
   untrack(video: HTMLVideoElement): void {
@@ -98,12 +124,12 @@ export class VideoSampler {
           this.untrack(v);
           continue;
         }
-        if (!isPlaying(v) || v.dataset.wm === "cover") continue;
+        if (!isPlaying(v) || this.covered(v)) continue;
         if (this.deps.onScreen && !this.deps.onScreen(v)) continue;
         const frame = await this.deps.grab(v);
         if (frame === "later") continue;
         if (frame === null) {
-          v.dataset.wmVideo = "unsampleable";
+          this.unsampleable.add(v);
           this.untrack(v);
           continue;
         }
@@ -115,8 +141,8 @@ export class VideoSampler {
         this.lastHash.set(v, frame.hash);
         this.judged++;
         const decision = await this.deps.judge(v, frame);
-        if (decision === "cover") v.dataset.wm = "cover";
-        else if (v.dataset.wm !== "cover") v.dataset.wm = "safe";
+        if (decision === "cover") this.setDecision(v, "cover");
+        else if (!this.covered(v)) this.setDecision(v, "safe");
       }
     } finally {
       this.ticking = false;
