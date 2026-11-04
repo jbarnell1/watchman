@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS devices (
   last_heartbeat_at TEXT,
   last_state        TEXT,          -- JSON of the heartbeat body
   silent_reported_at TEXT,         -- when a "device silent" tamper event was raised for the current gap
-  reminded_at       TEXT           -- last alert while this device is off or silent (ADR-050)
+  reminded_at       TEXT,          -- last alert while this device is off or silent (ADR-050)
+  not_judging_at    TEXT           -- when "screen on, watched, nothing judged" was raised (ADR-051)
 );
 
 -- One row per heartbeat, so the portal can draw coverage and the digest can count protected hours.
@@ -74,7 +75,31 @@ CREATE TABLE IF NOT EXISTS heartbeats (
   device_id   TEXT NOT NULL REFERENCES devices(id),
   at          TEXT NOT NULL,
   protection  INTEGER NOT NULL,     -- 1 when state.protection was true
+  -- The heartbeat's judge block (ADR-051): seconds the screen was on, of those the seconds nothing
+  -- was meant to be judged, and how many checks ran a model. NULL when the device does not say.
+  screen_on_s INTEGER,
+  unwatched_s INTEGER,
+  judged      INTEGER,
   PRIMARY KEY (device_id, at)
+);
+
+-- Seconds per app that a screen Watchman cannot see was in front, per device per household day
+-- (ADR-051). Purged with event retention.
+CREATE TABLE IF NOT EXISTS secure_apps (
+  device_id   TEXT NOT NULL REFERENCES devices(id),
+  person_id   TEXT NOT NULL REFERENCES people(id),
+  day         TEXT NOT NULL,
+  app         TEXT NOT NULL,
+  seconds     INTEGER NOT NULL,
+  PRIMARY KEY (device_id, day, app)
+);
+
+-- Apps already announced for hiding their screen, so each one alerts once (ADR-051).
+CREATE TABLE IF NOT EXISTS secure_apps_seen (
+  person_id   TEXT NOT NULL REFERENCES people(id),
+  app         TEXT NOT NULL,
+  first_at    TEXT NOT NULL,
+  PRIMARY KEY (person_id, app)
 );
 
 -- Work metrics from heartbeats (ADR-025), merged per device per household day. Counts and

@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 FIELD_WORDS = {
     "protection": "protection", "accessibility": "the accessibility service", "capture": "screen capture",
     "overlay": "the overlay", "device_admin": "device admin", "extension": "the browser extension",
-    "vpn": "the VPN",
+    "vpn": "the VPN", "usb_debugging": "USB debugging", "device": "the device",
 }
 
 
@@ -58,15 +58,26 @@ def protection_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
     detail = event.get("detail") or {}
     if event["type"] == "tamper":
         what = {"safe_mode": "booted into safe mode", "silent": "has stopped checking in",
-                "code_guessing": "had ten wrong partner codes typed within an hour"}.get(
+                "code_guessing": "had ten wrong partner codes typed within an hour",
+                "not_judging": (f"was on and watched for {detail.get('watched_minutes')} minutes in the last hour "
+                                "but judged nothing"),
+                "page_unblur": f"had a web page remove Watchman's blurs ({event.get('url') or 'a page'})"}.get(
             detail.get("reason"), f"reported tampering ({detail.get('reason')})")
         line = f"{device['name']} {what}."
+    elif event["type"] == "protection_gap":
+        line = (f"{device['name']} was unprotected from {detail.get('from')} to {detail.get('to')}"
+                f"{' (it restarted)' if detail.get('reason') == 'reboot' else ''}. "
+                "It said so when it came back.")
     elif event["type"] == "block_passed":
         line = (f"{device['name']}: {name} chose Continue anyway on a screen that was mostly covered"
                 f" in {event.get('app') or 'an app'}. The pictures stayed blurred.")
     else:
         word = FIELD_WORDS.get(detail.get("field"), detail.get("field"))
-        line = f"{device['name']}: {word} turned off ({detail.get('from')} to {detail.get('to')})."
+        if detail.get("field") == "usb_debugging":
+            line = (f"{device['name']}: USB debugging turned on. A computer can now install apps and change "
+                    "settings on it without the screen.")
+        else:
+            line = f"{device['name']}: {word} turned off ({detail.get('from')} to {detail.get('to')})."
     subject = f"Watchman: protection changed on {name}'s {device['name']}"
     if event["type"] == "block_passed":
         subject = f"Watchman: {name} continued past a block on {device['name']}"

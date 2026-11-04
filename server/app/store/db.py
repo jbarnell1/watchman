@@ -31,6 +31,10 @@ def connect(path: Path | str) -> sqlite3.Connection:
 COLUMNS = (
     ("partners", "trusted_at", "TEXT"),          # ADR-050: a partner added later acts from here
     ("devices", "reminded_at", "TEXT"),          # ADR-050: last alert about this device being off or silent
+    ("devices", "not_judging_at", "TEXT"),       # ADR-051: when "on but judging nothing" was raised
+    ("heartbeats", "screen_on_s", "INTEGER"),    # ADR-051: the heartbeat's judge block
+    ("heartbeats", "unwatched_s", "INTEGER"),
+    ("heartbeats", "judged", "INTEGER"),
 )
 
 

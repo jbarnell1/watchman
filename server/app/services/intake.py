@@ -10,6 +10,8 @@ Severity at intake:
   miss_reported (the person says something should have been covered; numbers only)   info
   protection_changed (from a client)   info; the server derives its own from heartbeats
   tamper                          protection, alerts
+  protection_gap (sent after the fact by a device that was off, ADR-051)   protection when it
+                                  lasted GAP_ALERT (a reboot: REBOOT_ALERT) or more, else info
   block_passed (Continue anyway on a whole-screen block, ADR-047)   protection, alerts
 
 An image is requested when the event has one and no stored image already carries its hash.
@@ -39,8 +41,10 @@ MAX_BATCH = 200
 IMAGE_TYPES = {"image_covered", "screen_blocked", "image_flagged"}
 KNOWN_TYPES = IMAGE_TYPES | {
     "url_blocked", "search_flagged", "app_blocked", "protection_changed", "tamper",
-    "pause_started", "pause_ended", "daily_stats", "miss_reported", "block_passed",
+    "pause_started", "pause_ended", "daily_stats", "miss_reported", "block_passed", "protection_gap",
 }
+GAP_ALERT = timedelta(minutes=3)
+REBOOT_ALERT = timedelta(minutes=10)
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_SIDE = 512
 # A look-alike of a picture this device reported within this window is stored for the record but
@@ -58,7 +62,22 @@ def _initial_severity(event: dict, covered_reports: str) -> str:
         return SEVERITY_REVIEW if covered_reports == "all" else SEVERITY_INFO
     if t in ("tamper", "block_passed"):
         return SEVERITY_PROTECTION
+    if t == "protection_gap":
+        return SEVERITY_PROTECTION if _gap(event) >= (REBOOT_ALERT if _detail(event).get("reason") == "reboot"
+                                                      else GAP_ALERT) else SEVERITY_INFO
     return SEVERITY_INFO
+
+
+def _detail(event: dict) -> dict:
+    return event.get("detail") if isinstance(event.get("detail"), dict) else {}
+
+
+def _gap(event: dict) -> timedelta:
+    from app.clock import parse_iso
+    try:
+        return parse_iso(_detail(event)["to"]) - parse_iso(_detail(event)["from"])
+    except (KeyError, TypeError, ValueError):
+        return timedelta(0)
 
 
 def accept(ctx: Context, device: sqlite3.Row, events: list[dict]) -> dict:

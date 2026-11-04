@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from app.clients.mailer import Attachment, Mail
 from app.clock import iso, parse_iso
+from app.services import liveness
 from app.services.alerts import recipients
 from app.services.context import Context
 
@@ -62,7 +63,10 @@ def summarise(ctx: Context, person_id: str, start: datetime, end: datetime) -> d
     peeks = ctx.codes.peeks_between(person_id, start, end)
     changes = ctx.settings.unreported_changes()
     days = max(1, round((end - start).total_seconds() / 86400))
-    return {
+    tz = ZoneInfo(ctx.settings.load().timezone)
+    hidden = liveness.secure_minutes(ctx, person_id, start.astimezone(tz).strftime("%Y-%m-%d"),
+                                     end.astimezone(tz).strftime("%Y-%m-%d"))
+    return {"hidden": hidden,
         "counts": counts, "items": items, "pauses": pauses, "peeks": peeks, "changes": changes,
         "days": days, "hours": protected_hours(ctx, person_id, start, end),
     }
@@ -146,6 +150,16 @@ def render(ctx: Context, person_name: str, summary: dict, start: datetime, end: 
         html.append("<h3 style='font-weight:500'>Peeks</h3>")
         for p in summary["peeks"]:
             s = f"{_when(p['at'], tz)} by {p['partner_name']}"
+            lines.append("  " + s)
+            html.append(f"<p>{escape(s)}</p>")
+        lines.append("")
+    if summary.get("hidden"):
+        lines.append("Screens Watchman could not see (the app hides its screen; banking apps do):")
+        html.append("<h3 style='font-weight:500'>Screens Watchman could not see</h3>"
+                    "<p style='color:#5f6b70'>These apps hide their screen from every other app. Banking and "
+                    "video apps do this. Ask about any you do not recognise.</p>")
+        for app, minutes in summary["hidden"]:
+            s = f"{app}: {minutes} min"
             lines.append("  " + s)
             html.append(f"<p>{escape(s)}</p>")
         lines.append("")

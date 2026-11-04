@@ -8,6 +8,33 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-051 - Devices fail closed, prove they judge, and name the screens they cannot see
+**2026-11-03.** The circumvention review found devices that fail open: a 401 from the server
+(real or fake) unpaired every client and stopped protection; Android could be off for under the
+30 minute silence threshold without anyone hearing; a heartbeat that said "on" counted as
+protection even from a script; and screens marked secure (FLAG_SECURE) were invisible, counted in
+one number nobody saw.
+- No client unpairs itself on a 401. It keeps its token, its last policy and protection, shows
+  that the server no longer accepts it, and keeps trying. Pairing again replaces the token. A
+  client that has a pairing but no policy judges with its built-in defaults.
+- Android records when it was last alive. When it starts again after more than two minutes it
+  sends `protection_gap` with the time off and whether the device restarted. Three minutes or more
+  (ten after a restart) is a protection event and alerts.
+- Heartbeats carry `judge`: seconds the screen was on, seconds nothing was meant to be judged
+  (paused, an app not watched, a secure screen) and how many checks ran a model. Fifteen watched
+  minutes in an hour with nothing judged raises `tamper` (`not_judging`), once per episode.
+- Android heartbeats carry `device`: developer options and USB debugging. Debugging turning on
+  is a protection change: a computer can then install and change things without the screen.
+- Secure screens are not covered or blocked. Banking, retirement and video apps need them, and
+  Covenant Eyes has the same gap. Instead Android reports the seconds per app a secure screen was
+  in front (`secure_apps`), the digest lists every app with a minute or more under "Screens
+  Watchman could not see", and an app's first five minutes in a day alerts once, ever. A browser
+  someone builds to hide its screen shows up by name with its hours.
+
+Rejected: covering secure screens, or a setting to (the owner: banking apps need them and no app
+both shows images and blocks screenshots, short of one built for the purpose, which the digest
+names).
+
 ### ADR-050 - Loosening is loud and gated
 **2026-11-03.** A circumvention review (eight reviewers, each taking the side of a protected
 person who also runs the server, with an AI agent to help) found that most ways around Watchman
