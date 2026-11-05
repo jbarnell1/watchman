@@ -77,9 +77,13 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
             try {
                 run(session)  // the first run of a session is slow
                 val t0 = System.nanoTime()
+                val cpu0 = android.os.Process.getElapsedCpuTime()
                 repeat(WARM_RUNS) { run(session) }
                 val ms = (System.nanoTime() - t0) / 1_000_000.0 / WARM_RUNS
                 metrics?.time("warm_${name}_${label.substringBefore(' ')}_ms", ms)
+                // CPU time across all threads, which is what the battery pays for.
+                metrics?.time("warm_${name}_${label.substringBefore(' ')}_cpu_ms",
+                    (android.os.Process.getElapsedCpuTime() - cpu0).toDouble() / WARM_RUNS)
                 if (ms < bestMs) { best?.close(); best = session; bestMs = ms; bestName = label } else session.close()
             } catch (_: Throwable) {
                 session.close()
@@ -100,7 +104,13 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
             x.addConfigEntry("session.intra_op.allow_spinning", "0")
             out.add("xnnpack x$THREADS" to x)
         } catch (_: Throwable) { }
-        out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply { setIntraOpNumThreads(THREADS) })
+        // Spinning keeps worker threads busy-waiting between runs: barely faster, and on the Pixel it
+        // was most of the app's battery use.
+        out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply {
+            setIntraOpNumThreads(THREADS)
+            addConfigEntry("session.intra_op.allow_spinning", "0")
+            addConfigEntry("session.inter_op.allow_spinning", "0")
+        })
         return out
     }
 
