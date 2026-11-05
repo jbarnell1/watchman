@@ -28,7 +28,7 @@ class FakeScorer(var classifierScore: Double = 0.0, var boxes: List<Box> = empty
 }
 
 /**
- * ONNX Runtime with the faster of two backends per model, measured at load (ADR-034): XNNPACK with
+ * ONNX Runtime with the cheaper of two backends per model, measured at load (ADR-034, ADR-056): XNNPACK with
  * [THREADS] threads, or plain CPU with [THREADS] threads. XNNPACK is quick for float models but
  * cannot run the int8 classifier's quantized operators, which then fall back to one CPU thread.
  * NNAPI was dropped: on the Pixel it ran few of these models' operators.
@@ -67,27 +67,37 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
         plain.recycle()
     }
 
-    /** Open [path] on each backend, time [WARM_RUNS] runs after a first one, keep the faster session. */
+    /**
+     * Open [path] on each backend and time [WARM_RUNS] runs after a first one. Keep the one that costs
+     * the least CPU time across all its threads (what the battery pays for), unless it is more than
+     * [SLOWER_OK] times slower than the quickest: the plain CPU backend ran two to three cores per run
+     * for about the same wall time as XNNPACK on one.
+     */
     private fun fastest(name: String, path: String, chosen: MutableList<String>, run: (OrtSession) -> Unit): OrtSession {
-        var best: OrtSession? = null
-        var bestMs = Double.MAX_VALUE
-        var bestName = ""
+        class Tried(val session: OrtSession, val label: String, val ms: Double, val cpuMs: Double)
+        val tried = ArrayList<Tried>()
         for ((label, options) in backends()) {
             val session = try { env.createSession(path, options) } catch (_: Throwable) { continue }
             try {
                 run(session)  // the first run of a session is slow
                 val t0 = System.nanoTime()
+                val cpu0 = android.os.Process.getElapsedCpuTime()
                 repeat(WARM_RUNS) { run(session) }
                 val ms = (System.nanoTime() - t0) / 1_000_000.0 / WARM_RUNS
+                val cpuMs = (android.os.Process.getElapsedCpuTime() - cpu0).toDouble() / WARM_RUNS
                 metrics?.time("warm_${name}_${label.substringBefore(' ')}_ms", ms)
-                if (ms < bestMs) { best?.close(); best = session; bestMs = ms; bestName = label } else session.close()
+                metrics?.time("warm_${name}_${label.substringBefore(' ')}_cpu_ms", cpuMs)
+                tried.add(Tried(session, label, ms, cpuMs))
             } catch (_: Throwable) {
                 session.close()
             }
         }
-        chosen.add("$name $bestName ${"%.0f".format(bestMs)} ms")
-        warmMs[name] = bestMs
-        return best ?: throw IllegalStateException("$name: no backend could run the model")
+        val quickest = tried.minOfOrNull { it.ms } ?: throw IllegalStateException("$name: no backend could run the model")
+        val best = tried.filter { it.ms <= quickest * SLOWER_OK }.minBy { it.cpuMs }
+        tried.filter { it !== best }.forEach { it.session.close() }
+        chosen.add("$name ${best.label} ${"%.0f".format(best.ms)} ms, cpu ${"%.0f".format(best.cpuMs)} ms")
+        warmMs[name] = best.ms
+        return best.session
     }
 
     private fun backends(): List<Pair<String, OrtSession.SessionOptions>> {
@@ -100,7 +110,13 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
             x.addConfigEntry("session.intra_op.allow_spinning", "0")
             out.add("xnnpack x$THREADS" to x)
         } catch (_: Throwable) { }
-        out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply { setIntraOpNumThreads(THREADS) })
+        // Spinning keeps worker threads busy-waiting between runs: barely faster, and on the Pixel it
+        // was most of the app's battery use.
+        out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply {
+            setIntraOpNumThreads(THREADS)
+            addConfigEntry("session.intra_op.allow_spinning", "0")
+            addConfigEntry("session.inter_op.allow_spinning", "0")
+        })
         return out
     }
 
@@ -161,6 +177,8 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
     companion object {
         const val THREADS = 4
         const val WARM_RUNS = 3
+        /** How much slower than the quickest backend a cheaper one may be and still be chosen. */
+        const val SLOWER_OK = 1.5
         /** The sorter is used only when it is at least this many times cheaper than the classifier. */
         const val GATE_WORTH = 4
     }

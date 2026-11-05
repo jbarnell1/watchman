@@ -8,6 +8,18 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-056 - The phone picks each model's backend by CPU cost, and does not poll with the screen off
+**2026-11-05.** A day on the owner's Pixel cost 250 mAh, 2 h of CPU for 4 h of screen time, and
+Tailscale another 138 mAh. ADR-034 picked each model's backend by wall time at load, and the plain
+CPU backend won with ONNX Runtime's thread spinning on: four threads busy-waited after each of about
+18,000 runs a day. Spinning is now off on both backends, and the choice is the backend with the least
+CPU time across its threads, unless it is more than 1.5 times slower than the quickest. Measured at
+load after the change: the classifier 495 ms of CPU per run on plain CPU against 214 ms on XNNPACK,
+the detector 569 ms against 73 ms, for similar or better wall time. Warm-up records both
+(`warm_<model>_<backend>_ms` and `_cpu_ms`). The service also stops asking for the policy every 30 s
+while the screen is off; the five-minute heartbeat already fetches a changed policy, and nothing is
+watched then. What is checked and how often does not change.
+
 ### ADR-055 - A partner who runs Watchman keeps their key on their own server
 **2026-11-04.** ADR-053 left one gap: the page a partner types their passphrase into comes from the
 server they are guarding, so someone who rewrites that server's code could serve a page that

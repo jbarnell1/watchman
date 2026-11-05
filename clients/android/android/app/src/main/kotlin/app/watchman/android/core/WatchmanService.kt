@@ -151,7 +151,9 @@ class WatchmanService : Service() {
         while (true) {
             try {
                 flush()
-                checkPolicy()
+                // With the screen off nothing is watched, and the five-minute heartbeat already
+                // brings a changed policy; polling every 30 s kept Wi-Fi and Tailscale awake all night.
+                if (getSystemService(android.os.PowerManager::class.java)?.isInteractive != false) checkPolicy()
                 val current = currentState()
                 val due = System.currentTimeMillis() - lastHeartbeatAt > 5 * 60 * 1000
                 if (due || current != lastReported) heartbeat(force = true)
