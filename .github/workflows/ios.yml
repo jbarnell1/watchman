@@ -13,14 +13,14 @@ jobs:
       run:
         working-directory: clients/ios/WatchmanCore
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift test
 
   app:
     runs-on: macos-15
     needs: core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
