@@ -16,7 +16,10 @@ under the 1.5 times limit, and in a day of use it averaged 273 ms a run against 
 first cover on a flagged screen took 1.2 s on average instead of 0.55 s. A longer window before the
 cover is a loss of protection, which outweighs the saving. The phone now also tries plain CPU with two
 threads, and a cheaper backend may be at most 1.25 times slower than the quickest at load. Warm-up
-records the new backend as `warm_<model>_cpu2_ms` and `_cpu2_cpu_ms`. To be checked after a day: the
+records the new backend as `warm_<model>_cpu2_ms` and `_cpu2_cpu_ms`. The load-time runs now take
+turns across backends, five rounds, and each backend is judged by its median: after the first install
+of this change, two loads six seconds apart (the old service still loading during the second) picked
+different classifier backends. To be checked after a day: the
 time to the first cover back near its earlier level, and the battery cost per screen hour.
 
 ### ADR-056 - The phone picks each model's backend by CPU cost, and does not poll with the screen off
