@@ -8,19 +8,16 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
-### ADR-057 - The classifier may run on two CPU threads, and a cheaper backend may be only 1.25 times slower
-**2026-11-05.** ADR-056 cut Watchman's battery use from 64 mAh to 26 mAh per hour of screen time on
-the owner's Pixel, and Tailscale's from 138 mAh to 7 mAh a day. But it moved the int8 classifier to
-XNNPACK, which cannot run its quantized operators and falls back to one thread: at load it measured
-under the 1.5 times limit, and in a day of use it averaged 273 ms a run against 127 ms before, so the
-first cover on a flagged screen took 1.2 s on average instead of 0.55 s. A longer window before the
-cover is a loss of protection, which outweighs the saving. The phone now also tries plain CPU with two
-threads, and a cheaper backend may be at most 1.25 times slower than the quickest at load. Warm-up
-records the new backend as `warm_<model>_cpu2_ms` and `_cpu2_cpu_ms`. The load-time runs now take
-turns across backends, five rounds, and each backend is judged by its median: after the first install
-of this change, two loads six seconds apart (the old service still loading during the second) picked
-different classifier backends. To be checked after a day: the
-time to the first cover back near its earlier level, and the battery cost per screen hour.
+### ADR-057 - The phone times its backends in turns, and keeps XNNPACK for the classifier
+**2026-11-05.** After installing a build, Android restarted the accessibility service while the old
+one was still loading models, and two loads six seconds apart picked different classifier backends:
+whichever backend was timed during the old service's work looked slow. The load-time runs now take
+turns, one run per backend per round for five rounds, and each backend is judged by its median, so a
+burst of other work slows them alike. A day on ADR-056 doubled the time to the first cover (1.2 s on
+average against 0.55 s), because the int8 classifier moved to XNNPACK. Plain CPU with two threads and
+no spinning was tried and was slower still (515 ms a run against 207 ms); the old speed came from
+spinning, which was the battery cost. The owner judged 1.2 s acceptable, so the backend rule and the
+1.5 times limit of ADR-056 stand.
 
 ### ADR-056 - The phone picks each model's backend by CPU cost, and does not poll with the screen off
 **2026-11-05.** A day on the owner's Pixel cost 250 mAh, 2 h of CPU for 4 h of screen time, and
