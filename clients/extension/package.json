@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
-    "@types/node": "^22.13.1",
+    "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
     "esbuild": "^0.24.2",
     "jsdom": "^26.0.0",
