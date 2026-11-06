@@ -8,6 +8,17 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-057 - The phone times its backends in turns, and keeps XNNPACK for the classifier
+**2026-11-05.** After installing a build, Android restarted the accessibility service while the old
+one was still loading models, and two loads six seconds apart picked different classifier backends:
+whichever backend was timed during the old service's work looked slow. The load-time runs now take
+turns, one run per backend per round for five rounds, and each backend is judged by its median, so a
+burst of other work slows them alike. A day on ADR-056 doubled the time to the first cover (1.2 s on
+average against 0.55 s), because the int8 classifier moved to XNNPACK. Plain CPU with two threads and
+no spinning was tried and was slower still (515 ms a run against 207 ms); the old speed came from
+spinning, which was the battery cost. The owner judged 1.2 s acceptable, so the backend rule and the
+1.5 times limit of ADR-056 stand.
+
 ### ADR-056 - The phone picks each model's backend by CPU cost, and does not poll with the screen off
 **2026-11-05.** A day on the owner's Pixel cost 250 mAh, 2 h of CPU for 4 h of screen time, and
 Tailscale another 138 mAh. ADR-034 picked each model's backend by wall time at load, and the plain
