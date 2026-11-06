@@ -20,7 +20,7 @@
     "playwright": "^1.50.1",
     "pngjs": "^7.0.0",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "onnxruntime-web": "^1.20.1"
