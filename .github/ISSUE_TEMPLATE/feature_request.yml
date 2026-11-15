@@ -1,0 +1,50 @@
+name: Feature request
+description: An idea that would make Watchman more useful.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Watchman is for adults who choose accountability for themselves. Requests for a hidden
+        mode, for partners to see original images, for a pause without a partner, or for telemetry
+        or cloud models will be closed. The roadmap is in docs/ROADMAP.md.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options:
+        - Server or portal
+        - Browser extension
+        - Android app
+        - Windows client
+        - iOS app
+        - Models
+        - Docs or setup scripts
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+      description: The behaviour you have in mind. If it should differ between households, say what the setting and its default would be.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test this on my own devices.
+        - label: I can work on a pull request.
