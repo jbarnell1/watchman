@@ -47,3 +47,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         if column not in have:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    # Older servers logged mail settings changes in full, password included, and the digest
+    # printed them. Scrub those rows; new ones are stored without the password.
+    conn.execute(
+        "UPDATE settings_changes SET old_value = '{\"redacted\": true}', new_value = '{\"redacted\": true}' "
+        "WHERE key = 'smtp' AND (old_value LIKE '%\"password\"%' OR new_value LIKE '%\"password\"%')"
+    )

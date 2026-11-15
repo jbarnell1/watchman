@@ -167,7 +167,11 @@ def render(ctx: Context, person_name: str, summary: dict, start: datetime, end: 
         lines.append("Settings changed:")
         html.append("<h3 style='font-weight:500'>Settings changed</h3>")
         for ch in summary["changes"]:
-            s = f"{_when(ch['at'], tz)} {ch['login']} set {ch['key']} to {ch['new_value']}"
+            if ch["key"] == "smtp":
+                # Mail settings hold a password. Say that they changed, never what they are.
+                s = f"{_when(ch['at'], tz)} {ch['login']} changed the mail settings"
+            else:
+                s = f"{_when(ch['at'], tz)} {ch['login']} set {ch['key']} to {ch['new_value']}"
             lines.append("  " + s)
             html.append(f"<p>{escape(s)}</p>")
         lines.append("")
