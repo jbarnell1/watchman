@@ -17,7 +17,8 @@ This page tracks build status; `docs/DECISIONS.md` has the reasons behind it.
 | First household integration: server, Windows, Android, extension | | in progress |
 | Hard to get around (ADR-050 to 054): loosening gated and loud, devices fail closed and prove they judge, a hash-chained record, partner keys with signed approvals and sealed evidence, households watching each other | `main` | built; server tests, the real `seal.js` against the server in Node, key setup and an approval in a browser; Android, Windows and extension unit tests; not yet on the Pixel, on a second household, or with a real partner key |
 
-All slices are built in one checkout on `slice/<name>` branches cut from `main`; the `C:\watchman-wt-*` worktrees and their `pr/*` branches are leftovers from the foundation session and can be deleted.
+This table is the build log as of that date. The README's status table says where each platform
+stands for someone deciding whether to use it.
 
 ## Workload and power
 

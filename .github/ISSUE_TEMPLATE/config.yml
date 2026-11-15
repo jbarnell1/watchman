@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/jbarnell1/watchman/security
+    about: Please report security problems privately, not in a public issue.
+  - name: Self-hosting guide
+    url: https://github.com/jbarnell1/watchman/blob/main/docs/self-host.md
+    about: Installing, partners, devices, backups and updating.

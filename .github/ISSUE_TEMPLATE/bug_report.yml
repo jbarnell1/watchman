@@ -1,0 +1,71 @@
+name: Bug report
+description: Something does not work the way the docs say it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Two rules before you write:
+        - Never attach or link an explicit image. Scores, sizes and the app or site are enough.
+        - Remove private details: portal addresses, tailnet names, emails, tokens, pairing codes.
+        Security problems do not belong here. Use the Security tab, Report a vulnerability.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options:
+        - Server or portal
+        - Browser extension
+        - Android app
+        - Windows client
+        - iOS app
+        - Models
+        - Docs or setup scripts
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The commit you built from (git rev-parse --short HEAD), or the version /healthz or the app shows.
+      placeholder: 0.1.0 at bbb8404
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Where it runs
+      description: Server OS and Docker version, and for a client the device, OS version and browser.
+      placeholder: Debian 13, Docker 28. Android 16 phone. Firefox 144.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Pair a device
+        2. Open ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and numbers
+      description: Output of docker compose logs server, the extension popup's Score this page, or the device's status page. Names and addresses removed.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: There is no explicit image and no private household detail in this report.
+          required: true
