@@ -66,9 +66,11 @@ are unaffected because the node name is the same.
 
 ## Releasing
 
-Tag `vX.Y.Z` on main. CI builds the server image, the extension zips, the Windows installer and the
-Android APK into a GitHub release. Households update by pulling the new compose image; phones with
-Obtainium pick up the APK from the release page.
+Not automated yet, and there are no releases. Today each workflow keeps its build as an artifact
+(`extension-zips`, `watchman-windows`, `watchman-android-debug`) and households update with
+`git pull` and `docker compose up -d --build`. The plan: tag `vX.Y.Z` on main and have CI build the
+server image, the extension zips, the Windows installer and the Android APK into a GitHub release,
+so households pull the new compose image and phones with Obtainium pick up the APK.
 
 ## Windows
 
