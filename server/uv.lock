@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 
 [[package]]
@@ -1207,7 +1207,7 @@ requires-dist = [
     { name = "onnxruntime", specifier = ">=1.18" },
     { name = "pillow", specifier = ">=10" },
     { name = "pydantic-settings", specifier = ">=2" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "segno", specifier = ">=1.6" },
     { name = "tzdata", specifier = ">=2024.1" },
