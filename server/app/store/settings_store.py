@@ -56,10 +56,13 @@ class SettingsStore(Recorded):
                 (key, new_json),
             )
             if key != "policy_version":
+                # The change log feeds the digest email, so it holds what the record holds:
+                # never the mail password (see on_record).
                 self.conn.execute(
                     "INSERT INTO settings_changes(at, login, key, old_value, new_value) "
                     "VALUES (?, ?, ?, ?, ?)",
-                    (iso(self.clock.now()), login, key, old_json, new_json),
+                    (iso(self.clock.now()), login, key, json.dumps(on_record(key, json.loads(old_json))),
+                     json.dumps(on_record(key, json.loads(new_json)))),
                 )
             if key != "policy_version":
                 body = {"key": key, "old": on_record(key, json.loads(old_json)),

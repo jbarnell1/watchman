@@ -91,6 +91,32 @@ def test_digest_counts_hours_items_pauses_and_changes(ctx, client, device, house
         clock.now(), __import__("zoneinfo").ZoneInfo("UTC"))[0]
 
 
+def test_digest_never_prints_the_mail_password(ctx, household, clock, mailer):
+    secret = "hunter2-not-in-mail"
+    with ctx.conn:
+        ctx.settings.set("smtp", {"host": "mail.example.com", "port": 587, "username": "watchman",
+                                  "password": secret, "from_address": "watchman@example.com"}, "owner@example.com")
+    rows = ctx.settings.unreported_changes()
+    assert rows and all(secret not in (r["old_value"] + r["new_value"]) for r in rows)
+    mailer.sent.clear()
+    assert digest.send_digest(ctx, household["person_id"])
+    mail = mailer.sent[-1]
+    assert secret not in mail.text and secret not in (mail.html or "")
+    assert "changed the mail settings" in mail.text
+
+
+def test_old_mail_setting_rows_are_scrubbed_on_start(tmp_path):
+    from app.store import db
+    path = tmp_path / "w.sqlite3"
+    conn = db.connect(path)
+    conn.execute("INSERT INTO settings_changes(at, login, key, old_value, new_value) VALUES (?, ?, ?, ?, ?)",
+                 ("2026-11-01T00:00:00Z", "owner@example.com", "smtp", '{"password": ""}', '{"password": "old-secret"}'))
+    conn.close()
+    conn = db.connect(path)
+    row = conn.execute("SELECT old_value, new_value FROM settings_changes").fetchone()
+    assert "old-secret" not in row["new_value"] and "password" not in row["old_value"]
+
+
 def test_all_clear_headline(ctx, household, clock):
     summary = digest.summarise(ctx, household["person_id"], clock.now(), clock.now())
     assert digest.headline(summary).startswith("All clear")
