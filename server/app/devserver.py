@@ -66,11 +66,11 @@ def seed(ctx: Context) -> None:
         ctx.settings.set("digest_time", "07:00")
         ctx.settings.set("setup_complete", True)
         ctx.settings.set("adguard_url", "http://127.0.0.1:3053")
-        pixel, _ = ctx.devices.add_device(person, "Pixel 10 Pro XL", "android", "app", "0.1.0")
+        pixel, _ = ctx.devices.add_device(person, "Alex's phone", "android", "app", "0.1.0")
         pc, _ = ctx.devices.add_device(person, "family-pc", "windows", "service", "0.1.0")
-        ext, _ = ctx.devices.add_device(person, "Firefox on Pixel", "firefox-android", "extension", "0.1.0")
+        ext, _ = ctx.devices.add_device(person, "Firefox on Alex's phone", "firefox-android", "extension", "0.1.0")
 
-        # Seven days of heartbeats. The Pixel has a 3 hour silence two days ago and an hour with
+        # Seven days of heartbeats. The phone has a 3 hour silence two days ago and an hour with
         # accessibility off yesterday; the PC only checks in while it is awake.
         start = now - timedelta(days=7)
         t = start

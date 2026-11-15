@@ -16,12 +16,12 @@ turns, one run per backend per round for five rounds, and each backend is judged
 burst of other work slows them alike. A day on ADR-056 doubled the time to the first cover (1.2 s on
 average against 0.55 s), because the int8 classifier moved to XNNPACK. Plain CPU with two threads and
 no spinning was tried and was slower still (515 ms a run against 207 ms); the old speed came from
-spinning, which was the battery cost. The owner judged 1.2 s acceptable, so the backend rule and the
+spinning, which was the battery cost. 1.2 s was judged acceptable, so the backend rule and the
 1.5 times limit of ADR-056 stand.
 
 ### ADR-056 - The phone picks each model's backend by CPU cost, and does not poll with the screen off
-**2026-11-05.** A day on the owner's Pixel cost 250 mAh, 2 h of CPU for 4 h of screen time, and
-Tailscale another 138 mAh. ADR-034 picked each model's backend by wall time at load, and the plain
+**2026-11-05.** A day of field testing on the test phone (a recent Pixel) cost 250 mAh, 2 h of
+CPU for 4 h of screen time, and Tailscale another 138 mAh. ADR-034 picked each model's backend by wall time at load, and the plain
 CPU backend won with ONNX Runtime's thread spinning on: four threads busy-waited after each of about
 18,000 runs a day. Spinning is now off on both backends, and the choice is the backend with the least
 CPU time across its threads, unless it is more than 1.5 times slower than the quickest. Measured at
@@ -69,7 +69,7 @@ emailed more than once in 6 hours. The token reads the record and this server's 
 nothing else: no pictures, addresses or settings values beyond what the record holds.
 
 Rejected: each household hosting the other's server (slower for the household's own devices, and
-the owner wants to keep hosting their own); a central service (none exists by design, ADR-006).
+households want to keep hosting their own); a central service (none exists by design, ADR-006).
 Not covered: a household whose partners do not run Watchman. They still get the record line in
 every email and the checkpoints their browsers sign (ADR-052, ADR-053).
 
@@ -179,7 +179,7 @@ all. Now:
   `realert_hours` (default 6, in the timing lock group) until it is whole.
 - A state field a device used to report and now leaves out or sends as null counts as off.
 
-Rejected: making `locks_on` default to on. The owner is still tuning, and the immediate alerts
+Rejected: making `locks_on` default to on. The first household is still tuning, and the immediate alerts
 make loosening visible without stopping that work. Partner keys (ADR-053) turn locks on for good.
 
 ### ADR-049 - iOS: Safari blurs and reports; no screen recording
@@ -196,20 +196,20 @@ ONNX Runtime package and the app's model download. Supersedes the broadcast part
 Not built: a content filter or VPN (ADR-020 still applies).
 
 ### ADR-048 - Peeks by tap, a cooldown in seconds, and an optional peek at your own items
-**2026-11-03.** While tuning, the owner could not tell true from false positives: the owner is
-the protected person and the admin, and only partners could peek. A tap on the picture or the
+**2026-11-03.** While tuning, the first household could not tell true from false positives: its
+protected person is also the admin, and only partners could peek. A tap on the picture or the
 button now starts the peek (still the medium blur, still `peek_seconds`, three at most); a
 second tap ends it early. The cooldown is `peek_cooldown_seconds` (default a day, as ADR-031;
 stored hours are converted) so a household that is tuning can set 15. New setting `self_peek`,
 off by default: the protected person may peek at their own items under the same rules. Own
-peeks go to a `self_peeks` table used only for the cooldown and are not reported: the owner tests
-with another accountability service in place and asked for no reports of their own peeks.
+peeks go to a `self_peeks` table used only for the cooldown and are not reported: a household testing
+Watchman beside another accountability service asked that own peeks not be reported.
 Turning it on is loosening, in the pauses and peeks lock group, so with locks on it needs a
 partner code (ADR-007). Marking items stays with partners.
 
 ### ADR-047 - The whole-screen block is a setting, off by default, with Continue anyway
-**2026-11-03.** The block screen for a mostly covered screen (ADR-036) stopped the owner watching
-a health video: sure covers on a few frames were enough to take the whole screen. New setting
+**2026-11-03.** The block screen for a mostly covered screen (ADR-036) gave a false positive on
+a health video in field testing: sure covers on a few frames were enough to take the whole screen. New setting
 `block_whole_screen`, default off: the pictures are blurred one by one as everywhere else and
 nothing takes over the screen. When a household turns it on, the block screen offers Continue
 anyway. That goes back to the app with every blur still in place, suppresses the block for that
@@ -266,7 +266,7 @@ how it fits with a future Device Owner mode that could turn debugging off, is fo
 Metrics: `finger_touches`, `finger_gestures`, `finger_unconfirmed`, `finger_correction_px`.
 A custom Android build was considered and set aside: an unlocked bootloader breaks Play
 Integrity, and the household would carry Android's monthly security updates.
-**Removed the same day.** On the Pixel the owner found it no smoother than prediction (ADR-042),
+**Removed the same day.** On the test phone it was no smoother than prediction (ADR-042),
 and it needed Wireless debugging left on. The reader, the Shizuku dependency and the setup card
 are gone; blurs lift while a list scrolls instead (ADR-045).
 
@@ -313,7 +313,7 @@ every score on the device to replay everything, which sends far more about what 
 the product needs (CLAUDE.md, privacy); and simulating on the phone, which has no history.
 
 ### ADR-040 - Scroll-following is a setting; strict mode covers new pictures until judged
-**2026-11-02.** The owner found blurs that move with a scroll (ADR-032) not effective enough to
+**2026-11-02.** In field testing, blurs that move with a scroll (ADR-032) were not effective enough to
 keep on unconditionally: the app's reported distance often lags the picture. `follow_scroll`, a
 protection lock key, is now off by default (the owner's call; an older server that sends no value
 also means off); blurs then stay put until the next check moves them. The settings page has offered strict mode ("cover new images until each one scores safe" in
@@ -328,15 +328,15 @@ Reddit). Windows and the extension still ignore strict mode (ROADMAP).
 ### ADR-039 - The phone's check chain starts itself and cannot stall on a missing callback
 **2026-11-02.** After an accessibility rebind (here caused by a UI dump, which suppresses every
 accessibility service for a moment) the phone reported protection on but judged nothing for six
-minutes on a playing reel. The watcher scheduled its first whole-screen check in its constructor
+minutes on a playing short video. The watcher scheduled its first whole-screen check in its constructor
 before the timer object existed, so the call posted an empty message; the chain only ever started
-when a screen-on broadcast or an app switch scheduled it. A playing reel sends almost no
+when a screen-on broadcast or an app switch scheduled it. A playing short video sends almost no
 accessibility events, so nothing else ran. The first check is now posted after construction, and
 each check books its successor before asking for a screenshot, so a callback the system never
 delivers cannot end the chain. The rebind itself was partner-visible (protection off, then on).
 
 ### ADR-038 - Pictures are tracks over time; video surfaces are judged at the video cadence
-**2026-11-02.** On a looping reel the phone judged the 132 px buttons drawn over the video on
+**2026-11-02.** On a looping short video the phone judged the 132 px buttons drawn over the video on
 nearly every pass: their pixels change with each frame, so every pass was a new fingerprint and a
 classifier run, while the video itself was rarely judged at all (it was not a reported picture).
 Of 122,489 picture checks that day, 93% repeated one already judged. Now each reported picture is
@@ -351,8 +351,8 @@ Rejected: judging every frame of a video (the cost we are removing), skipping pi
 video without judging the video (a miss).
 
 ### ADR-037 - Watch levels per app: real time, checked now and then, not watched
-**2026-11-02.** Unplugged for 29 minutes on a looping reel, Watchman used 53 mAh and Covenant Eyes
-1.9 mAh. Covenant Eyes looks at the screen now and then; Watchman judges every picture as it
+**2026-11-02.** Unplugged for 29 minutes on a looping short video, Watchman used 53 mAh and a
+commercial accountability app 1.9 mAh. The commercial app looks at the screen now and then; Watchman judges every picture as it
 appears. Blurring is not the cost (a pixelated patch is a few milliseconds); judging is, and
 report-only judges just as much. So the household now chooses per app: real time (today's
 behaviour), checked (no per-picture passes; one whole-screen look every `checked_interval_s`,
@@ -365,8 +365,8 @@ not. Opening an app triggers an immediate look at any level. Per-person values w
 protection key. Android applies it; Windows next.
 
 ### ADR-036 - Only sure covers take over the screen, and the block screen says why
-**2026-11-02.** The owner saw "Instagram is blocked on this phone" and "Gboard is blocked on this
-phone" at random, though neither is on the blocklist. Both came from the phone's whole-screen rule
+**2026-11-02.** The test phone showed "<social app> is blocked on this phone" and "Gboard is
+blocked on this phone" at random, though neither is on the blocklist. Both came from the phone's whole-screen rule
 (covered pictures over 40% of the screen show the block screen), which passed the app's name and so
 used the blocklist wording. All three such blocks that day were unsure whole-screen detector hits
 (0.56 to 0.75) that the server scored 0.01 to 0.11; one named the keyboard because its window had
@@ -377,7 +377,7 @@ the screen was explicit, and the keyboard's window never becomes the app in fron
 ### ADR-035 - The known-bad list changes only on strong, independent evidence
 **2026-11-02.** Every picture the server's second opinion confirmed (0.70 or more) joined the
 known-bad list, and every device then covered and reported anything within six bits of it
-without running a model. On an Instagram reel the like, comment and save buttons sit on a plain
+without running a model. In a short-video app the like, comment and save buttons sit on a plain
 background over the video; the second opinion rated those crops around 0.74, so they joined the
 list, and because a flat crop's hash is decided mostly by noise, each listed hash matched the next
 frame's buttons, whose reports were confirmed and listed in turn. In one day: 228 hashes added,
@@ -399,12 +399,12 @@ Rejected: raising the second-opinion line (would lose real reviews), deleting th
 (the owner's call; the phone's exact-match rule already neutralises its flat entries).
 
 ### ADR-034 - A small sorter model on the phone; the classifier on XNNPACK with four threads
-**2026-11-02.** On the owner's Pixel the crop classifier took about 250 ms a picture through NNAPI
-on two threads, so a screen of a dozen new pictures took seconds and covers appeared in screen
+**2026-11-02.** On the test phone (a recent Pixel) the crop classifier took about 250 ms a picture
+through NNAPI on two threads, so a screen of a dozen new pictures took seconds and covers appeared in screen
 order. Two changes. First, NNAPI is dropped (it ran few of these models' operators) and each model
 is opened at load on both ONNX Runtime's XNNPACK backend and the plain CPU backend, four threads
 each, timed on a plain picture, and kept on the faster one; the times go to the metrics. On the
-Pixel, XNNPACK made the int8 classifier slower (290 ms a picture), because XNNPACK cannot run its
+test phone, XNNPACK made the int8 classifier slower (290 ms a picture), because XNNPACK cannot run its
 quantized operators and they fall back to one CPU thread, so no one fixed backend suits every
 model. Second, a small
 MobileNetV4 NSFW classifier (`crop_gate`, about 10 MB, Apache-2.0, pinned upstream revision) scores
@@ -414,19 +414,19 @@ screenshots (1,546 windows, numbers only): the sorter costs about 6 ms a window 
 against 76 ms for the classifier, but agrees with it poorly (correlation 0.06), would have cleared
 11 to 13 of the 28 windows the server confirmed, and fires on 313 windows the server did not. So it
 only orders the work: every picture is still classified and nothing is cleared on its say-so.
-Measured on the Pixel after install: the classifier and detector both chose plain CPU (68 and 31 ms
+Measured on the test phone after install: the classifier and detector both chose plain CPU (68 and 31 ms
 on a plain picture; XNNPACK 183 and 69), and live classifier runs fell from about 250 ms to 120 ms.
 The sorter took 36 ms there (64 ms live), only half the classifier's time rather than the desktop's
 thirteenth, so sorting a screen of N new pictures delayed the first classifier run by N sorter runs
 and added half again to the work. The phone therefore keeps the sorter only when it measures at
 least four times cheaper than the classifier at load (`gate_off` counts the phones where it is not);
-on the owner's Pixel it is off. The code and manifest entry stay for phones where it pays.
+on the test phone it is off. The code and manifest entry stay for phones where it pays.
 Rejected: the sorter as a gate that skips the classifier (misses too many), a single faster model
 in place of the classifier (no candidate matched it), NNAPI or the Tensor TPU (not reachable from
 ONNX Runtime for these models).
 
 ### ADR-033 - Ask the server about every cover that is not sure; blank the app switcher's thumbnails
-**2026-11-02.** On the first day of real use the phone and the server disagreed on 18 of 63 crops
+**2026-11-02.** In the first field test the phone and the server disagreed on 18 of 63 crops
 the phone covered, so a phone cover at 0.85 to 0.97 is often a false alarm, and it stayed blurred
 for as long as the picture was on screen. A new `sure` line (default 0.97) extends the ask band
 (ADR-022): from `ask` up to `sure` the device covers first and asks; a safe answer lifts the blur
@@ -457,15 +457,15 @@ a region pass found the picture again, and region passes only ran on accessibili
 still screen does not send. The timed whole-screen tick now also re-checks the pictures the app last
 reported (a hash and a cache hit each), patches hold for 30 s between refreshes, and a region pass
 made from the app window (which shows what is under the patches) lifts at once any patch whose
-picture was not found again. With real catches coming in, the owner asked for a heavy default blur
-for partners and a light blur only for a peek of at most three seconds; ADR-029's scaling stays.
+picture was not found again. Once the field test produced real covers, the default blur for
+partners became heavy, with a light blur only for a peek of at most three seconds; ADR-029's scaling stays.
 Settings reached devices only with the five-minute heartbeat; devices now poll a write-free
 `/api/v1/policy/version` on their 30 s loop.
 
 ### ADR-030 - Pictures the accessibility tree does not call images; apps a household does not watch
 **2026-11-02.** On a YouTube channel list the avatars are reported as `Button` nodes with a
 description and no text, so the region rule (image views, image buttons, described `View` leaves)
-never handed them to the model; measured on the owner's phone, three of the six skipped avatars
+never handed them to the model; measured on the test phone, three of the six skipped avatars
 scored 0.89 to 0.93 or tripped the detector and would have been covered at once. The rule now also
 takes any leaf with a description and no text whose sides are within a factor of two of each other
 (`RegionRule`); text rows and toolbars stay out because they are wide and short. A real region
@@ -732,7 +732,7 @@ screen explicit becomes a full block. Findings go to the SYSTEM service over a n
 lines with a 512 px JPEG crop; the service queues events (DPAPI-sealed files under ProgramData),
 heartbeats, downloads and verifies the model, and restarts the helper in the console session when
 it dies. The sweep is spread over the interval: one inference per tick (every 384 ms at the
-default 5 s), never a burst, because the Covenant Eyes stutter came from bursts. When a full-screen
+default 5 s), never a burst, because the stutter seen with a commercial screenshot app came from bursts. When a full-screen
 window that is not a browser is in front (a game), the sweep collapses to one whole-frame pass per
 interval with NudeNet 320n on the CPU at below-normal thread priority, so the GPU is never shared
 with the game. Measured on a desktop PC: 15 to 18 ms per 640 px inference on the RTX 4070 through

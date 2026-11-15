@@ -27,13 +27,13 @@ class Thresholds(BaseModel):
     ask: float = 0.60
     # At or above cover but below sure, a device still covers first and asks the server, lifting the
     # blur on a safe answer; only at sure or above (or a known-bad hash) does it report without asking.
-    # On the first day of real use the phone and the server disagreed on 18 of 63 covers (ADR-033).
+    # In the first field test the phone and the server disagreed on 18 of 63 covers (ADR-033).
     sure: float = 0.97
     detector_cover: float = 0.55
     second_opinion: float = 0.70
     # A confirmed picture joins the known-bad list (covered by hash on every device, no model run)
-    # only at this second opinion or above. At 0.70 Instagram's buttons on a tan reel joined it and
-    # pulled their look-alikes in after them (ADR-035).
+    # only at this second opinion or above. At 0.70 a short-video app's buttons on a tan video joined
+    # it and pulled their look-alikes in after them (ADR-035).
     known_bad: float = 0.90
     # With covered_reports "exposed" (ADR-046), a picture the device covered reaches partners when
     # the server's detector finds bare nudity at server_exposed or above, or, for what the detector
@@ -79,15 +79,15 @@ class Settings(BaseModel):
     cover_on_device: bool = True
     ask_server: bool = True
     # Blurs move with a scroll the app reports, before the next check confirms them (ADR-032).
-    # Off by default: the owner found it not effective; blurs then wait for the next check (ADR-040).
+    # Off by default: field testing found it not effective; blurs then wait for the next check (ADR-040).
     follow_scroll: bool = False
     # What partners see of pictures the device covered (ADR-046): all puts every one in review;
     # exposed keeps them on the record and reports only bare nudity the server's detector finds,
     # or a second opinion at thresholds.covered_report. Pictures not covered are reported as before.
     covered_reports: str = "exposed"   # exposed | all
     # A screen mostly covered by sure covers gives way to the full block screen (ADR-036). Off by
-    # default: it stopped a health video on 2026-11-03. When on, the block screen offers Continue
-    # anyway, which keeps the blurs and alerts partners (ADR-047).
+    # default: it gave a false positive on a health video on 2026-11-03. When on, the block screen
+    # offers Continue anyway, which keeps the blurs and alerts partners (ADR-047).
     block_whole_screen: bool = False
     risky_apps: list[str] = Field(default_factory=lambda: [
         "com.google.android.youtube", "org.mozilla.firefox", "com.reddit.frontpage",

@@ -36,7 +36,7 @@ policy judges with its built-in defaults.
 ### POST /api/v1/pair
 No auth. Body:
 ```json
-{"code": "K7Q-4MZ-P2D", "device": {"name": "Pixel 10 Pro XL", "platform": "android",
+{"code": "K7Q-4MZ-P2D", "device": {"name": "Alex's phone", "platform": "android",
  "kind": "app", "app_version": "0.1.0"}}
 ```
 `platform`: `android | windows | ios | chrome | edge | firefox | firefox-android | safari`.

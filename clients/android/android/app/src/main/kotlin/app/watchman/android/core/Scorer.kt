@@ -31,7 +31,7 @@ class FakeScorer(var classifierScore: Double = 0.0, var boxes: List<Box> = empty
  * ONNX Runtime with the cheaper of two backends per model, measured at load (ADR-034, ADR-056): XNNPACK with
  * [THREADS] threads, or plain CPU with [THREADS] threads. XNNPACK is quick for float models but
  * cannot run the int8 classifier's quantized operators, which then fall back to one CPU thread.
- * NNAPI was dropped: on the Pixel it ran few of these models' operators.
+ * NNAPI was dropped: on the test phone it ran few of these models' operators.
  * Models come verified from the household server.
  */
 class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: ModelEntry?, detectorPath: String?,
@@ -55,7 +55,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
         detectorSession = if (detector != null && detectorPath != null) fastest("detect", detectorPath, chosen) { detectRun(it, detector, plain) } else null
         gateSession = if (gate != null && gatePath != null) fastest("gate", gatePath, chosen) { softmaxRun(it, gate, plain) } else null
         // Sorting costs one sorter run for every new picture before the first classifier run, so it
-        // only pays when the sorter is several times cheaper. On the owner's Pixel it was about half
+        // only pays when the sorter is several times cheaper. On the test phone it was about half
         // the classifier's time, and sorting made the first cover later on average (ADR-034).
         if (gateSession != null && warmMs["gate"]!! * GATE_WORTH > warmMs["classify"]!!) {
             gateSession?.close()
@@ -71,7 +71,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
      * Open [path] on each backend and time [WARM_RUNS] rounds after a first run, one run per backend
      * per round, taking each backend's median. Taking turns means a burst of other work (after an
      * install the old service is often still loading) slows every backend alike instead of whichever
-     * happened to be timed then; on the Pixel two loads six seconds apart chose differently (ADR-057).
+     * happened to be timed then; on the test phone two loads six seconds apart chose differently (ADR-057).
      * Keep the one that costs
      * the least CPU time across all its threads (what the battery pays for), unless it is more than
      * [SLOWER_OK] times slower than the quickest: the plain CPU backend ran two to three cores per run
@@ -135,7 +135,7 @@ class OnnxScorer(classifier: ModelEntry, classifierPath: String, detector: Model
             x.addConfigEntry("session.intra_op.allow_spinning", "0")
             out.add("xnnpack x$THREADS" to x)
         } catch (_: Throwable) { }
-        // Spinning keeps worker threads busy-waiting between runs: barely faster, and on the Pixel it
+        // Spinning keeps worker threads busy-waiting between runs: barely faster, and on the test phone it
         // was most of the app's battery use.
         out.add("cpu x$THREADS" to OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(THREADS)

@@ -11,11 +11,11 @@ This page tracks build status; `docs/DECISIONS.md` has the reasons behind it.
 | Server: API, intake, second opinion, blur store, portal, digest, alerts, settings, Compose | `main` | built, 27 tests; dev server used by the extension end-to-end run; not yet deployed |
 | Browser extension: hold-back blur, pairing, events | `main` | built; 21 unit tests; end to end in Chromium with the real model |
 | Windows: service, helper with capture and overlay, installer | `main` | built; 19 Core tests; self-test on a desktop PC (17 ms per pass, spread over the interval; game mode on the CPU); MSI built in CI; not yet installed as a service |
-| Android: setup, accessibility, capture, overlay, scoring, queue | `main` | built; Dart and Kotlin unit tests; debug APK builds; not yet run on the Pixel |
+| Android: setup, accessibility, capture, overlay, scoring, queue | `main` | built; Dart and Kotlin unit tests; debug APK builds; not yet run on the test phone |
 | iOS: app and Safari extension (broadcast extension removed, ADR-049), CI build | `main` | built; Swift core tests and the unsigned simulator build pass in CI; untested on a device |
-| Integration hardening: OIDC sign-in (ADR-027), gitleaks, Dependabot, `/healthz` for Gatus and Homepage, setup scripts, the `watchman-models` artifact | `slice/hardening` | built; server and models tests pass; OIDC tested against a fake provider only, not yet against Pocket ID |
+| Integration hardening: OIDC sign-in (ADR-027), gitleaks, Dependabot, `/healthz` for Gatus and Homepage, setup scripts, the `watchman-models` artifact | `slice/hardening` | built; server and models tests pass; OIDC tested against a fake provider only, not yet against a real provider |
 | First household integration: server, Windows, Android, extension | | in progress |
-| Hard to get around (ADR-050 to 054): loosening gated and loud, devices fail closed and prove they judge, a hash-chained record, partner keys with signed approvals and sealed evidence, households watching each other | `main` | built; server tests, the real `seal.js` against the server in Node, key setup and an approval in a browser; Android, Windows and extension unit tests; not yet on the Pixel, on a second household, or with a real partner key |
+| Hard to get around (ADR-050 to 054): loosening gated and loud, devices fail closed and prove they judge, a hash-chained record, partner keys with signed approvals and sealed evidence, households watching each other | `main` | built; server tests, the real `seal.js` against the server in Node, key setup and an approval in a browser; Android, Windows and extension unit tests; not yet on the test phone, on a second household, or with a real partner key |
 
 This table is the build log as of that date. The README's status table says where each platform
 stands for someone deciding whether to use it.
@@ -26,27 +26,27 @@ ADR-023 is implemented on every client: viewport gating, in-flight dedupe, hash 
 sampling at the whole-screen interval and a per-source event limit in the extension; a sweep planner with change detection and
 motion mode plus a battery interval on Windows; pulled frames, coalesced region passes, a
 screen-off surface detach, a power budget and the ask band on Android; a judge cache on the server.
-Unmeasured until the devices run: the Pixel's milliseconds per crop and battery per hour, and the
-laptop's. The numbers go in the status pages.
+Unmeasured until the devices run: the test phone's milliseconds per crop and battery per hour,
+and a laptop's. The numbers go in the status pages.
 
-## Tuning in daily use (from 2026-11-02)
+## Tuning in field testing (from 2026-11-02)
 
-The Pixel is the test device; the owner uses it normally and every change is measured, not
+A recent Pixel phone is the test device; it is used normally and every change is measured, not
 guessed. Numbers only: no picture leaves the phone for tuning beyond what the product already sends.
 
-Where we start, on a looping Instagram reel, unplugged:
+Where we start, on a looping short video, unplugged:
 
-| Build | Watchman | Covenant Eyes |
+| Build | Watchman | A commercial accountability app |
 |---|---|---|
 | Before ADR-035 | 110 mAh an hour | about 4 |
 | ADR-035 only | about 225 mAh an hour | |
 | ADR-036 to 039 | 63 mAh an hour, 2 to 4 classifier runs a minute | 5.5 |
 
-Targets: under 30 mAh an hour on a reel and under 10% of the phone's drain in a normal day; a
-false-alarm share in the review queue under 10%; no picture the owner reports as missed.
+Targets: under 30 mAh an hour on a short video and under 10% of the phone's drain in a normal day; a
+false-alarm share in the review queue under 10%; no picture reported as missed.
 
 Week 1, measure and label:
-- The owner marks each review item talked or false alarm (false alarms also clear the known-bad
+- Each review item is marked talked or false alarm (false alarms also clear the known-bad
   list, ADR-035). The digest and Devices page show the false-alarm share per app.
 - A "missed something" action in the phone's notification records the scores, sizes and app of
   what was on screen (numbers only) as a `miss_reported` event, so misses become data.
@@ -60,7 +60,7 @@ Week 1, measure and label:
 Week 2, tune from the data:
 - Thresholds and watch levels per app from the false-alarm share and the cost per app; move
   low-risk apps to checked (ADR-037).
-- Video cadence (5 s today) against battery and misses on reels and YouTube.
+- Video cadence (5 s today) against battery and misses on short videos and video apps.
 - A cheap pixel-difference check per track, so unchanged flat pictures skip the hash and cache.
 
 Week 3, bigger steps:
@@ -69,7 +69,7 @@ Week 3, bigger steps:
   regions, watch levels and strict mode.
 - Extension: strict mode, force-install through browser policy, CSS background images, canvas,
   cross-origin frames.
-- Research: picture embeddings in place of fingerprints, evaluated on the owner's local folder.
+- Research: picture embeddings in place of fingerprints, evaluated on an owner-supplied local folder.
 
 ## Known-bad list (ADR-035)
 
