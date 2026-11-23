@@ -84,11 +84,12 @@ jobs:
           echo "SIGNED=release" >> "$GITHUB_ENV"
       - run: flutter pub get
       - run: flutter test
-      - run: ./gradlew :app:testDebugUnitTest --console=plain
-        working-directory: clients/android/android
       # Build numbers stay above the owner's hand-built 2008 (versionCode 4008 on arm64) and rise
       # with every release run; Flutter adds 1000 per architecture.
       - run: flutter build apk --release --split-per-abi --build-name "$V" --build-number "$((3000 + GITHUB_RUN_NUMBER))"
+      # The Gradle wrapper exists once Flutter has built.
+      - run: ./gradlew :app:testDebugUnitTest --console=plain
+        working-directory: clients/android/android
       - name: Name the APKs
         run: |
           mkdir -p "$GITHUB_WORKSPACE/out"
