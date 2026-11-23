@@ -6,6 +6,9 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # A change to this file is tested by a full dry run.
+  pull_request:
+    paths: [".github/workflows/release.yml"]
   workflow_dispatch:
     inputs:
       version:
@@ -34,7 +37,9 @@ jobs:
           INPUT: ${{ inputs.version }}
           DRY: ${{ inputs.dry_run }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then v="${TAG#v}"; publish=true; else v="$INPUT"; publish=$([ "$DRY" = "false" ] && echo true || echo false); fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then v="${TAG#v}"; publish=true
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then v="$INPUT"; publish=$([ "$DRY" = "false" ] && echo true || echo false)
+          else v="0.0.0-pr.$GITHUB_RUN_NUMBER"; publish=false; fi
           echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "not a version: $v"; exit 1; }
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "numeric=${v%%-*}" >> "$GITHUB_OUTPUT"
