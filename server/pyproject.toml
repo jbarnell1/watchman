@@ -4,15 +4,15 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=42",
-    "fastapi>=0.115",
+    "fastapi>=0.165.0",
     "httpx>=0.27",
     "jinja2>=3.1",
-    "numpy>=1.26",
-    "onnxruntime>=1.18",
+    "numpy>=2.5.5",
+    "onnxruntime>=1.32.0",
     "pillow>=10",
-    "pydantic-settings>=2",
+    "pydantic-settings>=2.16.3",
     "pyjwt[crypto]>=2.9",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.34",
     "segno>=1.6",
     "tzdata>=2024.1",
     "uvicorn[standard]>=0.30",
@@ -22,8 +22,8 @@ dependencies = [
 dev = [
     "httpx>=0.27",
     "pytest>=8",
-    "pytest-asyncio>=0.23",
-    "ruff>=0.5",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.6",
 ]
 
 [tool.pytest.ini_options]
