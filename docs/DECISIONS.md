@@ -8,6 +8,28 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-058 - Email that fails is said on every page, flapping is one email, silence explains itself
+**2026-11-23.** Three weeks on the owner's server showed what a partner would have received once
+email was set up, and what they did receive without it:
+- Email had never been set up. 50 alerts and three digests went nowhere; only the server log said
+  so, and the digests were recorded as sent. Now every portal page, for every viewer, says when
+  email is not set up or failing and how many messages did not go out since when (the admin also
+  sees the last error). A digest counts as sent only when it went out, so the next one covers the
+  missed days; while sending fails it is tried at most once an hour.
+- One evening the phone's accessibility service went off and on 35 times, 16 of them in about a
+  minute. Each heartbeat sent one email per field, three per flap. Now one heartbeat is one email,
+  and after a device's protection email the next 10 minutes are held and counted, then sent as one
+  email with the state the device ended in. Every change is still its own event in the record, and
+  `realert_hours` reminders still run while a device stays off.
+- Five "stopped checking in" alarms in two weeks; in four the phone came back reporting 14 to 98
+  minutes of screen time judged in between: it was working but could not reach the server. A
+  partner reads that alarm as protection turned off. The first heartbeat after a reported silence
+  now raises `silence_ended` and one email saying how long, whether it restarted, how long the
+  screen was on, how much of that was watched and how many checks ran, and whether protection is on
+  now. The numbers come from the device, like every heartbeat; the record keeps both events.
+Rejected: holding the first protection email of a flap until it settles. The first change goes out
+at once, because a device that turns off for good must not wait.
+
 ### ADR-057 - The phone times its backends in turns, and keeps XNNPACK for the classifier
 **2026-11-05.** After installing a build, Android restarted the accessibility service while the old
 one was still loading models, and two loads six seconds apart picked different classifier backends:

@@ -82,6 +82,7 @@ def _page(request: Request, ctx: Context, v: Viewer, template: str, person: sqli
     review_count = len(ctx.events.needing_review(person["id"])) if person else 0
     my_partner = v.partner_rows.get(person["id"]) if person else None
     context = {
+        "mail_warning": _mail_warning(ctx, v, when),
         "sealed_household": keys.sealed(ctx),
         "my_key": keys.key_for(ctx, my_partner["id"]) if my_partner else None,
         "request": request, "viewer": v, "person": person, "people": v.people, "settings": settings,
@@ -90,6 +91,23 @@ def _page(request: Request, ctx: Context, v: Viewer, template: str, person: sqli
         "nav": template.split(".")[0], **extra,
     }
     return templates.TemplateResponse(request, template, context)
+
+
+def _mail_warning(ctx: Context, v: Viewer, when) -> str | None:
+    """Every page says when email is not reaching anyone: an alert nobody receives is protection
+    that failed quietly (ADR-058)."""
+    status = ctx.settings.mail_status()
+    missed = status["missed"]
+    count = (f" {missed} message{'s' if missed != 1 else ''} did not go out since "
+             f"{when(status['missed_since'])}.") if missed else ""
+    if not ctx.mailer.configured():
+        return "Email is not set up, so partners get no alerts and no weekly digest." + count
+    if missed:
+        text = f"Email is failing, so partners are not being told.{count}"
+        if v.is_admin and status["last_error"]:
+            text += f" Last error: {status['last_error']}"
+        return text
+    return None
 
 
 def _need_setup(ctx: Context, v: Viewer) -> bool:

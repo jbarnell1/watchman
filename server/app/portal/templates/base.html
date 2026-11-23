@@ -50,6 +50,7 @@
     </div>
   </nav>
   <main id="main" class="canvas">
+    {% if mail_warning %}<div class="notice bad mailwarn" role="alert">{{ mail_warning }}{% if viewer.is_admin %} <a href="/settings">Email settings</a>{% endif %}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
 </div>

@@ -50,6 +50,9 @@ class SettingsMailer(Mailer):
     def send(self, mail) -> None:
         SmtpMailer(self._ctx().settings.load().smtp).send(mail)
 
+    def configured(self) -> bool:
+        return SmtpMailer(self._ctx().settings.load().smtp).configured()
+
 
 def build_context(config: Config, clock: Clock | None = None, identity: IdentityProvider | None = None,
                   mailer: Mailer | None = None, second_opinion: SecondOpinion | None = None,

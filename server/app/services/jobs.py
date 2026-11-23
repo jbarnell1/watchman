@@ -130,9 +130,10 @@ def retention(ctx: Context) -> tuple[int, int]:
 
 
 def tick(ctx: Context) -> dict:
-    out = {"silent": 0, "reminders": 0, "not_judging": 0, "verify": 0, "watching": 0, "digests": 0,
+    out = {"silent": 0, "held": 0, "reminders": 0, "not_judging": 0, "verify": 0, "watching": 0, "digests": 0,
            "images_removed": 0, "events_purged": 0}
-    for name, fn in (("heartbeat", heartbeat_watch), ("reminders", reminders), ("not_judging", liveness.not_judging),
+    for name, fn in (("heartbeat", heartbeat_watch), ("held", alerts.held_summaries), ("reminders", reminders),
+                     ("not_judging", liveness.not_judging),
                      ("verify", verify_record), ("watching", watch_others),
                      ("digests", digests_due), ("retention", retention)):
         try:
@@ -142,7 +143,7 @@ def tick(ctx: Context) -> dict:
             continue
         if name == "heartbeat":
             out["silent"] = result
-        elif name in ("reminders", "not_judging", "verify", "watching"):
+        elif name in ("held", "reminders", "not_judging", "verify", "watching"):
             out[name] = result
         elif name == "digests":
             out["digests"] = result

@@ -209,6 +209,8 @@ label.check input { width: 16px; height: 16px; margin: 0; }
 .notice { padding: 10px 14px; border-radius: var(--radius-control); font-size: var(--fs-body); }
 .notice.ok { background: var(--pill-pos-bg); color: var(--pill-pos-ink); }
 .notice.bad { background: var(--pill-neg-bg); color: var(--pill-neg-ink); }
+.notice.mailwarn { margin: 0 0 16px; }
+.notice.mailwarn a { color: inherit; font-weight: 500; }
 .row-side input { height: 30px; width: 130px; font-size: var(--fs-small); }
 .row-side form { display: flex; gap: 6px; align-items: center; flex-direction: row; }
 

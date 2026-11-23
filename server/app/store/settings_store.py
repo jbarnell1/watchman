@@ -95,6 +95,24 @@ class SettingsStore(Recorded):
     def mark_changes_reported(self, ids: list[int]) -> None:
         self.conn.executemany("UPDATE settings_changes SET reported = 1 WHERE id = ?", [(i,) for i in ids])
 
+    def mail_sent(self) -> None:
+        self.conn.execute("INSERT OR IGNORE INTO mail_status(id) VALUES (1)")
+        self.conn.execute("UPDATE mail_status SET last_ok_at = ?, missed = 0, missed_since = NULL WHERE id = 1",
+                          (iso(self.clock.now()),))
+
+    def mail_failed(self, error: str) -> None:
+        now = iso(self.clock.now())
+        self.conn.execute("INSERT OR IGNORE INTO mail_status(id) VALUES (1)")
+        self.conn.execute(
+            "UPDATE mail_status SET last_error_at = ?, last_error = ?, missed = missed + 1, "
+            "missed_since = COALESCE(missed_since, ?) WHERE id = 1", (now, error[:300], now))
+
+    def mail_status(self) -> dict:
+        row = self.conn.execute("SELECT * FROM mail_status WHERE id = 1").fetchone()
+        if row is None:
+            return {"last_ok_at": None, "last_error_at": None, "last_error": None, "missed": 0, "missed_since": None}
+        return {k: row[k] for k in ("last_ok_at", "last_error_at", "last_error", "missed", "missed_since")}
+
 
 def on_record(key: str, value: Any) -> Any:
     """The mail settings hold a password: the record keeps a hash of them, enough to show a change."""

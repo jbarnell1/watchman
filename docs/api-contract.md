@@ -96,6 +96,10 @@ The server compares `state` with the previous heartbeat: a field turning off rai
 `protection_changed` event and an alert; `safe_mode: true` after `false` raises `tamper`.
 A field the device reported before and now leaves out or sends as `null` counts as turned off
 (ADR-050). While a device stays off or silent, everyone is reminded every `realert_hours`.
+Everything one heartbeat turns off goes out as one email, and a device's changes are emailed at
+most once per 10 minutes: what turns off in between is counted and sent with the state it ended in
+(ADR-058). The first heartbeat after a device was reported silent raises `silence_ended`; its
+`judge` block, which counts since the last heartbeat that arrived, says what happened meanwhile.
 The client fetches `/api/v1/policy` when `policy_version` changed.
 
 ### GET /api/v1/policy/version
@@ -206,6 +210,7 @@ Event `type` values and their `action`:
 | `protection_changed` | optional from clients; the server derives its own from heartbeats (ADR-015) and only those alert; `detail` has `{"field","from","to"}` | `none` |
 | `block_passed` | the person chose Continue anyway on a whole-screen block; the pictures stay blurred; alerts partners | `none` |
 | `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump; the server raises `silent`, `code_guessing` and `not_judging`; the extension sends `page_unblur` when a page keeps removing its covers | `none` |
+| `silence_ended` | server only: the first heartbeat after `tamper` `silent`. `detail` `{"from","minutes","protection"}` and, when the heartbeat had them, `screen_on_s`, `unwatched_s`, `judged` and `restarted_at` (ADR-058). Severity info; one email says it is back and what it did | `none` |
 | `protection_gap` | sent by a device when it starts again: `detail` `{"from","to","reason": "reboot" or "killed"}`. Severity protection (alerts) at 3 minutes or more, 10 after a reboot (ADR-051) | `none` |
 | `pause_started` / `pause_ended` | an unlock code took effect / expired | `none` |
 | `miss_reported` | the person taps Missed something: the scores of the whole screen and of each picture on it in `detail.regions` (size, classifier, detector, decisive bits, cached verdict), the app's watch level and the thresholds; never an image | `none` |
