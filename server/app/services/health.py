@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from importlib import metadata
 from pathlib import Path
 
@@ -13,6 +14,9 @@ log = logging.getLogger(__name__)
 
 
 def server_version() -> str:
+    # Release images carry the tag (ADR-059); a checkout reports pyproject's version.
+    if os.environ.get("WATCHMAN_VERSION"):
+        return os.environ["WATCHMAN_VERSION"]
     try:
         return metadata.version("watchman-server")
     except metadata.PackageNotFoundError:

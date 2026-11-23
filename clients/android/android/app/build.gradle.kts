@@ -50,6 +50,11 @@ android {
         }
     }
 
+    // The app reports its versionName (the release tag, ADR-059) to the server.
+    buildFeatures {
+        buildConfig = true
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

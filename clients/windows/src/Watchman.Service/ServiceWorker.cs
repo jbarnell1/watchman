@@ -81,7 +81,7 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
             {
             r = await api.HeartbeatAsync(new
             {
-                sent_at = Iso.Format(state.Clock.Now), app_version = "0.1.0", booted_at = Iso.Format(_booted),
+                sent_at = Iso.Format(state.Clock.Now), app_version = AppVersion.Value, booted_at = Iso.Format(_booted),
                 safe_mode = IsSafeMode(), battery_pct = (int?)null, queued_events = state.Queue.Count,
                 state = new
                 {

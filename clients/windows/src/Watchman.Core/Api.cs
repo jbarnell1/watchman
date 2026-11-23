@@ -21,7 +21,7 @@ public sealed class Api : IDisposable
         _http.BaseAddress = new Uri(server.TrimEnd('/') + "/");
         _http.Timeout = TimeSpan.FromSeconds(60);
         if (token is not null) _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("watchman-windows/0.1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd($"watchman-windows/{AppVersion.Value}");
     }
 
     private static async Task<T> Read<T>(HttpResponseMessage res)
@@ -48,7 +48,7 @@ public sealed class Api : IDisposable
     public static async Task<Pairing> PairAsync(string server, string code, string deviceName, HttpMessageHandler? handler = null)
     {
         using var api = new Api(server, null, handler);
-        var body = new { code, device = new { name = deviceName, platform = "windows", kind = "service", app_version = "0.1.0" } };
+        var body = new { code, device = new { name = deviceName, platform = "windows", kind = "service", app_version = AppVersion.Value } };
         var res = await api._http.PostAsJsonAsync("api/v1/pair", body);
         var r = await Read<JsonElement>(res);
         return new Pairing(server, r.GetProperty("token").GetString()!, r.GetProperty("device_id").GetString()!,

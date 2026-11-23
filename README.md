@@ -156,15 +156,18 @@ and updating.
 
 ### Get the clients
 
-There are no releases yet. Clients come from CI artifacts (you need to be signed in to GitHub, and
-artifacts expire after 90 days) or from source.
+Download the clients from the [latest release](https://github.com/jbarnell1/watchman/releases/latest)
+and check each file against its `SHA256SUMS`. Each release is built by CI from its tag.
 
-| Client | Where to get it |
-|---|---|
-| Browser extension (Chrome, Edge, Firefox) | `cd clients/extension && npm ci && node build.mjs`, then load `dist/chrome` unpacked or `dist/firefox` as a temporary add-on. Or the `extension-zips` artifact of the [extension workflow](https://github.com/jbarnell1/watchman/actions/workflows/extension.yml). Not in the stores. |
-| Android (11 and later) | The `watchman-android-debug` artifact of the [android workflow](https://github.com/jbarnell1/watchman/actions/workflows/android.yml) (a debug APK for arm64), or `flutter build apk` in `clients/android`. |
-| Windows 10 and 11 | The `watchman-windows` artifact of the [windows workflow](https://github.com/jbarnell1/watchman/actions/workflows/windows.yml) (an unsigned MSI), or build `clients/windows` with .NET 10. |
-| iPhone | Build `clients/ios` yourself with Xcode and your own Apple developer account. Safari only. |
+| Client | File | Notes |
+|---|---|---|
+| Android (11 and later) | `watchman-android-<version>-arm64-v8a.apk` | Most phones. Allow installs from your browser or file manager. [Obtainium](https://github.com/ImranR98/Obtainium) can watch the releases and update it. |
+| Windows 10 and 11 | `watchman-windows-<version>-x64.msi` | Not code-signed yet, so Windows asks you to confirm an unknown publisher. |
+| Chrome, Edge, Brave | `watchman-extension-chrome-<version>.zip` | Unzip, open `chrome://extensions`, turn on Developer mode, Load unpacked. Not in the stores yet. |
+| Firefox | `watchman-extension-firefox-<version>.zip` | Not signed by Mozilla yet, so release Firefox loads it only as a temporary add-on. |
+| iPhone | none | Build `clients/ios` yourself with Xcode and your own Apple developer account. Safari only. |
+
+Every client can also be built from source; see [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 [docs/RUNBOOK.md](docs/RUNBOOK.md) has the pairing and permission steps for each one.
 
@@ -269,11 +272,11 @@ GPU for the second opinion, add `compose.gpu.yaml` as described in [docs/self-ho
 
 ## Project status and roadmap
 
-Version 0.1.0, no releases yet. Used by one household. Expect rough edges.
+Early releases, used by one household. Expect rough edges.
 
 | Part | Status | What works | What is missing |
 |---|---|---|---|
-| Server | Working | Device API, portal, second opinion, blur store, digests and alerts, pause and settings codes, partner keys, the hash-chained record. In daily use by one household. | No published image or tagged release. OIDC sign-in is tested against a fake provider only. The self-hosting guide has not yet been followed by a second household. |
+| Server | Working | Device API, portal, second opinion, blur store, digests and alerts, pause and settings codes, partner keys, the hash-chained record. In daily use by one household. | OIDC sign-in is tested against a fake provider only. The self-hosting guide has not yet been followed by a second household. |
 | Android | Working, being tuned | Real-time blur in apps and browsers, blocked apps, pause codes, tamper reports. In daily use on one phone. | Debug builds only. It uses clearly more battery than the commercial apps (numbers in the roadmap). Tested on one phone model. |
 | Browser extension | Partial | Holds back and blurs images and sampled video in Chrome, Edge and Firefox, reports, pairs, pauses by code. Unit tests and an end-to-end run in Chromium. | Not in any store, so it can be removed like any unpacked extension. CSS background images, canvas and cross-origin frames are not judged. Little real use so far. |
 | Windows | Partial | Service and tray helper with screen capture, a detector over screen tiles and an overlay. Tests pass, CI builds an MSI, self-tested on one desktop. | Unsigned. Little real use so far. No per-app watch levels. |

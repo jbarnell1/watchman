@@ -16,6 +16,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
     WATCHMAN_BIND_HOST=127.0.0.1 \
     WATCHMAN_BIND_PORT=8030
 
+ARG WATCHMAN_VERSION=""
+ENV WATCHMAN_VERSION=$WATCHMAN_VERSION
+LABEL org.opencontainers.image.source="https://github.com/jbarnell1/watchman" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
 VOLUME ["/data"]
 HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import urllib.request,os;urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"WATCHMAN_BIND_PORT\"]}/healthz').read()" || exit 1
 CMD ["python", "-m", "app.main"]
