@@ -31,6 +31,9 @@ class Mailer:
     def send(self, mail: Mail) -> None:
         raise NotImplementedError
 
+    def configured(self) -> bool:
+        return True
+
 
 class SmtpMailer(Mailer):
     def __init__(self, smtp: Smtp) -> None:
@@ -64,8 +67,12 @@ class SmtpMailer(Mailer):
 
 
 class FakeMailer(Mailer):
-    def __init__(self) -> None:
+    def __init__(self, configured: bool = True) -> None:
         self.sent: list[Mail] = []
+        self.ready = configured
+
+    def configured(self) -> bool:
+        return self.ready
 
     def send(self, mail: Mail) -> None:
         self.sent.append(mail)

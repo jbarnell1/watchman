@@ -39,6 +39,9 @@ COLUMNS = (
     ("images", "sealed", "INTEGER NOT NULL DEFAULT 0"),
     ("unlock_codes", "signed", "INTEGER NOT NULL DEFAULT 0"),
     ("watching", "my_key", "TEXT"),              # ADR-055: the partner key this server holds for them
+    ("devices", "alerted_at", "TEXT"),           # ADR-058: last protection email, for the quiet window
+    ("devices", "alerts_held", "INTEGER NOT NULL DEFAULT 0"),
+    ("devices", "held_since", "TEXT"),
 )
 
 

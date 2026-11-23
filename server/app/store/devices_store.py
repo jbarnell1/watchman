@@ -152,6 +152,15 @@ class DevicesStore(Recorded):
     def set_reminded(self, device_id: str, when: str | None) -> None:
         self.conn.execute("UPDATE devices SET reminded_at = ? WHERE id = ?", (when, device_id))
 
+    def set_alerted(self, device_id: str, when: str) -> None:
+        self.conn.execute("UPDATE devices SET alerted_at = ?, alerts_held = 0, held_since = NULL WHERE id = ?",
+                          (when, device_id))
+
+    def hold_alerts(self, device_id: str, count: int, when: str) -> None:
+        self.conn.execute(
+            "UPDATE devices SET alerts_held = alerts_held + ?, held_since = COALESCE(held_since, ?) WHERE id = ?",
+            (count, when, device_id))
+
     def mark_silent_reported(self, device_id: str) -> None:
         now = iso(self.clock.now())
         self.conn.execute(

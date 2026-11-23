@@ -66,7 +66,10 @@ CREATE TABLE IF NOT EXISTS devices (
   last_state        TEXT,          -- JSON of the heartbeat body
   silent_reported_at TEXT,         -- when a "device silent" tamper event was raised for the current gap
   reminded_at       TEXT,          -- last alert while this device is off or silent (ADR-050)
-  not_judging_at    TEXT           -- when "screen on, watched, nothing judged" was raised (ADR-051)
+  not_judging_at    TEXT,          -- when "screen on, watched, nothing judged" was raised (ADR-051)
+  alerted_at        TEXT,          -- last protection email about this device (ADR-058)
+  alerts_held       INTEGER NOT NULL DEFAULT 0,  -- protection changes since then, not yet emailed
+  held_since        TEXT
 );
 
 -- One row per heartbeat, so the portal can draw coverage and the digest can count protected hours.
@@ -290,6 +293,17 @@ CREATE TABLE IF NOT EXISTS approvals (
   status      TEXT NOT NULL DEFAULT 'waiting',   -- waiting | approved | declined
   decided_by  TEXT,
   decided_at  TEXT
+);
+
+-- One row: whether email is reaching anyone (ADR-058). `missed` counts messages that did not go
+-- out since the last one that did.
+CREATE TABLE IF NOT EXISTS mail_status (
+  id            INTEGER PRIMARY KEY CHECK (id = 1),
+  last_ok_at    TEXT,
+  last_error_at TEXT,
+  last_error    TEXT,
+  missed        INTEGER NOT NULL DEFAULT 0,
+  missed_since  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS digests (

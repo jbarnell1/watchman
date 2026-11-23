@@ -1,8 +1,9 @@
 """Heartbeats, and the protection events the server derives from them.
 
 Every state field that turns off between two heartbeats becomes a `protection_changed` event with
-severity `protection`, which alerts. A safe-mode boot becomes a `tamper` event. Devices that stop
-checking in are caught by the heartbeat watch job (jobs.py).
+severity `protection`, which alerts (one email per heartbeat, ADR-058). A safe-mode boot becomes a
+`tamper` event. Devices that stop checking in are caught by the heartbeat watch job (jobs.py); the
+first heartbeat after that becomes `silence_ended`, which says what the device did meanwhile.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import sqlite3
 import uuid
 from zoneinfo import ZoneInfo
 
-from app.clock import iso
+from app.clock import iso, parse_iso
 from app.services import alerts, liveness, metrics
 from app.services.context import Context
 from app.services.policy import paused_until
@@ -37,9 +38,32 @@ def household_day(ctx: Context, when=None) -> str:
     return (when or ctx.clock.now()).astimezone(tz).strftime("%Y-%m-%d")
 
 
+def _silence_ended(body: dict, silent_since: str, state: dict, now) -> dict:
+    """What the first heartbeat after a reported silence says about the gap. The judge block
+    counts since the device's last heartbeat that arrived, so it covers the silence."""
+    detail: dict = {"from": silent_since, "minutes": int((now - parse_iso(silent_since)).total_seconds() // 60),
+                    "protection": state.get("protection")}
+    judge = body.get("judge")
+    if isinstance(judge, dict):
+        for key in ("screen_on_s", "unwatched_s", "judged"):
+            value = judge.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                detail[key] = int(value)
+    booted = body.get("booted_at")
+    if isinstance(booted, str):
+        try:
+            if parse_iso(booted) > parse_iso(silent_since):
+                detail["restarted_at"] = booted
+        except ValueError:
+            pass
+    return {"id": str(uuid.uuid4()), "type": "silence_ended", "occurred_at": iso(now), "action": "none",
+            "detail": detail}
+
+
 def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
     previous = json.loads(device["last_state"]) if device["last_state"] else None
     now = ctx.clock.now()
+    silent_since = device["last_heartbeat_at"] if device["silent_reported_at"] else None
     work = metrics.clean(body.pop("metrics", None))
     day = household_day(ctx, now)
     with ctx.conn:
@@ -73,11 +97,17 @@ def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
                 "id": str(uuid.uuid4()), "type": "tamper", "occurred_at": iso(now), "action": "none",
                 "detail": {"reason": "safe_mode"}, "severity": SEVERITY_PROTECTION,
             })
+        back = _silence_ended(body, silent_since, new_state, now) if silent_since else None
+        if back:
+            ctx.events.insert(back, device["id"], device["person_id"], SEVERITY_INFO, "none")
+            alerts.back_alert(ctx, device, back)
+        loud = []
         for ev in derived:
             severity = ev.pop("severity")
             ctx.events.insert(ev, device["id"], device["person_id"], severity, "none")
             if severity == SEVERITY_PROTECTION:
-                alerts.protection_alert(ctx, device, ev)
+                loud.append(ev)
+        alerts.protection_alerts(ctx, device, loud)
         # The reminder clock (jobs.reminders) starts when a device goes off and stops when it is whole.
         if off_fields(new_state):
             if not device["reminded_at"] or not off_fields(old_state):

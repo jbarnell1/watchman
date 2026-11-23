@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from app.clients.mailer import Attachment, Mail
 from app.clock import iso, parse_iso
-from app.services import liveness
+from app.services import alerts, liveness
 from app.services.alerts import recipients
 from app.services.context import Context
 
@@ -181,6 +181,9 @@ def render(ctx: Context, person_name: str, summary: dict, start: datetime, end: 
     return "\n".join(lines), "\n".join(html), attachments
 
 
+RETRY = timedelta(hours=1)
+
+
 def send_digest(ctx: Context, person_id: str, now: datetime | None = None) -> bool:
     now = now or ctx.clock.now()
     person = ctx.people.get_person(person_id)
@@ -193,18 +196,23 @@ def send_digest(ctx: Context, person_id: str, now: datetime | None = None) -> bo
     text, html, attachments = render(ctx, person["name"], summary, start, end, tz)
     to = recipients(ctx, person_id)
     subject = f"Watchman digest: {headline(summary)}"
+    if to:
+        # A digest that did not go out is not recorded, so the next one covers its days too. Not
+        # set up: wait for it (the portal says so). Failing: try again at most once an hour (ADR-058).
+        if not ctx.mailer.configured():
+            return False
+        status = ctx.settings.mail_status()
+        if (status["missed"] and status["last_error"] != alerts.NOT_SET_UP and status["last_error_at"]
+                and now - parse_iso(status["last_error_at"]) < RETRY):
+            return False
+        if not alerts.send(ctx, Mail(to=to, subject=subject, text=text, html=html, inline=attachments), "digest"):
+            return False
+    else:
+        log.info("digest for %s has no recipients", person["name"])
     with ctx.conn:
         ctx.codes.record_digest(person_id, start, end)
         ctx.settings.mark_changes_reported([ch["id"] for ch in summary["changes"]])
-    if not to:
-        log.info("digest for %s has no recipients", person["name"])
-        return False
-    try:
-        ctx.mailer.send(Mail(to=to, subject=subject, text=text, html=html, inline=attachments))
-    except Exception as exc:
-        log.warning("digest email failed: %s", exc)
-        return False
-    return True
+    return bool(to)
 
 
 def is_due(ctx: Context, person_id: str, now: datetime) -> bool:

@@ -2,7 +2,11 @@
 
 Sent to the protected person and every partner. Email is the channel; ntfy, when configured,
 is a short extra ping for the household admin. Failures to send never fail the request that
-triggered them; they are logged and the event stays visible on the portal.
+triggered them; they are counted, and every portal page says so until mail goes out again (ADR-058).
+
+Protection changes on one device are emailed at most once per QUIET window: a device whose
+accessibility service flaps sends the first change at once, then a count with the state it ended
+in when the window has passed (ADR-058). Every change is still its own event in the record.
 """
 
 from __future__ import annotations
@@ -11,11 +15,16 @@ import json
 import logging
 import sqlite3
 import urllib.request
+from datetime import timedelta
 
 from app.clients.mailer import Attachment, Mail
+from app.clock import iso, parse_iso
 from app.services.context import Context
 
 log = logging.getLogger(__name__)
+
+QUIET = timedelta(minutes=10)
+NOT_SET_UP = "Email is not set up"
 
 FIELD_WORDS = {
     "protection": "protection", "accessibility": "the accessibility service", "capture": "screen capture",
@@ -32,16 +41,27 @@ def recipients(ctx: Context, person_id: str) -> list[str]:
     return list(dict.fromkeys(e.lower() for e in emails))
 
 
+def send(ctx: Context, mail: Mail, what: str = "alert") -> bool:
+    """Send, and count what did not go out so the portal can say so (ADR-058)."""
+    if not ctx.mailer.configured():
+        log.warning("%s email not sent: email is not set up", what)
+        ctx.settings.mail_failed(NOT_SET_UP)
+        return False
+    try:
+        ctx.mailer.send(mail)
+    except Exception as exc:  # the alert must not break intake
+        log.warning("%s email failed: %s", what, exc)
+        ctx.settings.mail_failed(f"{type(exc).__name__}: {exc}")
+        return False
+    ctx.settings.mail_sent()
+    return True
+
+
 def _send(ctx: Context, mail: Mail) -> bool:
     # Every email carries the record's latest hash: a copy outside the server (ADR-052).
     from app.services.ledger import head_line
     mail.text = mail.text + "\n\n" + head_line(ctx)
-    try:
-        ctx.mailer.send(mail)
-        return True
-    except Exception as exc:  # the alert must not break intake
-        log.warning("alert email failed: %s", exc)
-        return False
+    return send(ctx, mail)
 
 
 def _ntfy(ctx: Context, title: str, body: str) -> None:
@@ -56,8 +76,103 @@ def _ntfy(ctx: Context, title: str, body: str) -> None:
 
 
 def protection_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
+    protection_alerts(ctx, device, [event])
+
+
+def protection_alerts(ctx: Context, device: sqlite3.Row, events: list[dict]) -> None:
+    """One email for everything one heartbeat or report turned off. Changes inside the quiet
+    window after the last email are held and counted for `held_summaries`."""
+    if not events:
+        return
+    fresh = ctx.devices.get(device["id"]) or device
+    now = ctx.clock.now()
+    changes = [e for e in events if e["type"] == "protection_changed"]
+    if (len(changes) == len(events) and fresh["alerted_at"]
+            and now - parse_iso(fresh["alerted_at"]) < QUIET):
+        ctx.devices.hold_alerts(device["id"], 1, iso(now))
+        return
     person = ctx.people.get_person(device["person_id"])
     name = person["name"] if person else "the protected person"
+    lines = [_line(device, e, name) for e in events]
+    subject = f"Watchman: protection changed on {name}'s {device['name']}"
+    if len(events) == 1 and events[0]["type"] == "block_passed":
+        subject = f"Watchman: {name} continued past a block on {device['name']}"
+    held = fresh["alerts_held"] or 0
+    extra = (f"\n\nBefore this, something turned off {held} more time{'s' if held != 1 else ''} since "
+             f"{fresh['held_since']}; every change is on the portal's timeline.") if held else ""
+    text = ("\n".join(lines) + extra + f"\n\nTime: {events[0]['occurred_at']}\n\n"
+            f"This alert goes to {name} and every partner. Nothing pauses protection without a partner code.")
+    to = recipients(ctx, device["person_id"])
+    if to:
+        _send(ctx, Mail(to=to, subject=subject, text=text))
+    _ntfy(ctx, "Watchman: protection changed", lines[0])
+    if changes:
+        ctx.devices.set_alerted(device["id"], iso(now))
+
+
+def held_summaries(ctx: Context) -> int:
+    """After the quiet window, one email per device with how many changes were held and the
+    state the device is in now."""
+    from app.services.heartbeat import off_fields
+
+    now = ctx.clock.now()
+    sent = 0
+    for device in ctx.devices.list_active():
+        held = device["alerts_held"] or 0
+        if not held or (device["alerted_at"] and now - parse_iso(device["alerted_at"]) < QUIET):
+            continue
+        person = ctx.people.get_person(device["person_id"])
+        name = person["name"] if person else "the protected person"
+        state = (json.loads(device["last_state"] or "null") or {}).get("state") or {}
+        off = off_fields(state)
+        now_line = ("Protection is on now." if not off else
+                    "Off now: " + ", ".join(FIELD_WORDS.get(f, f) for f in off) + ".")
+        line = (f"{device['name']}: something turned off {held} more time{'s' if held != 1 else ''} "
+                f"since {device['held_since']}. {now_line}")
+        to = recipients(ctx, device["person_id"])
+        if to:
+            _send(ctx, Mail(to=to, subject=f"Watchman: protection changed on {name}'s {device['name']}",
+                            text=line + "\n\nEvery change is on the portal's timeline. This alert goes to "
+                                        f"{name} and every partner."))
+        _ntfy(ctx, "Watchman: protection changed", line)
+        ctx.devices.set_alerted(device["id"], iso(now))
+        sent += 1
+    return sent
+
+
+def back_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
+    """A device that was reported silent is checking in again: say what it did meanwhile, from
+    what its first heartbeat back reports (ADR-058)."""
+    person = ctx.people.get_person(device["person_id"])
+    name = person["name"] if person else "the protected person"
+    d = event.get("detail") or {}
+    lines = [f"{device['name']} is checking in again after {d.get('minutes')} minutes without a word "
+             f"(from {d.get('from')})."]
+    if d.get("restarted_at"):
+        lines.append(f"It restarted at {d['restarted_at']}, so what follows covers the time since then.")
+    screen = d.get("screen_on_s")
+    if screen is not None:
+        unwatched = d.get("unwatched_s") or 0
+        if screen < 60:
+            lines.append("Its screen was off for that time.")
+        else:
+            lines.append(f"Its screen was on for {screen // 60} minutes and Watchman watched "
+                         f"{max(0, screen - unwatched) // 60} of them, with {d.get('judged') or 0} checks. "
+                         "It was working but could not reach this server, which usually means the device "
+                         "had no network or Tailscale was off.")
+            if unwatched >= 60:
+                lines.append(f"For {unwatched // 60} minutes it was not watching: paused, an app it does "
+                             "not watch, or a screen an app keeps private.")
+    lines.append("Protection is on now." if d.get("protection") is True else
+                 "Protection is not on now; a separate alert says what is off.")
+    to = recipients(ctx, device["person_id"])
+    if to:
+        _send(ctx, Mail(to=to, subject=f"Watchman: {name}'s {device['name']} is checking in again",
+                        text="\n".join(lines)))
+    _ntfy(ctx, "Watchman: device back", lines[0])
+
+
+def _line(device: sqlite3.Row, event: dict, name: str) -> str:
     detail = event.get("detail") or {}
     if event["type"] == "tamper":
         what = {"safe_mode": "booted into safe mode", "silent": "has stopped checking in",
@@ -81,15 +196,7 @@ def protection_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
                     "settings on it without the screen.")
         else:
             line = f"{device['name']}: {word} turned off ({detail.get('from')} to {detail.get('to')})."
-    subject = f"Watchman: protection changed on {name}'s {device['name']}"
-    if event["type"] == "block_passed":
-        subject = f"Watchman: {name} continued past a block on {device['name']}"
-    text = (f"{line}\n\nTime: {event['occurred_at']}\n\n"
-            f"This alert goes to {name} and every partner. Nothing pauses protection without a partner code.")
-    to = recipients(ctx, device["person_id"])
-    if to:
-        _send(ctx, Mail(to=to, subject=subject, text=text))
-    _ntfy(ctx, "Watchman: protection changed", line)
+    return line
 
 
 def explicit_alert(ctx: Context, event: sqlite3.Row, heavy_webp: bytes | None) -> None:
