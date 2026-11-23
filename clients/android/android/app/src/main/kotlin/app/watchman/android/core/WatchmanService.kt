@@ -192,7 +192,7 @@ class WatchmanService : Service() {
                 val secure = SecureApps.shared.take()
                 val r = try {
                     api.heartbeat(mapOf(
-                        "sent_at" to Iso.now(), "app_version" to "0.1.0", "booted_at" to booted, "safe_mode" to packageManager.isSafeMode,
+                        "sent_at" to Iso.now(), "app_version" to app.watchman.android.BuildConfig.VERSION_NAME, "booted_at" to booted, "safe_mode" to packageManager.isSafeMode,
                         "battery_pct" to battery, "queued_events" to state.queue.size, "state" to current,
                         "metrics" to (if (work.isEmpty) null else work.toMap()),
                         "device" to deviceFlags(),

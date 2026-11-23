@@ -1,0 +1,223 @@
+# A version tag (v0.2.0, or v0.2.0-rc.1 for a pre-release) builds every client, stamps it with that
+# version, and publishes a GitHub Release with checksums and a server image (ADR-059).
+# Run it by hand with dry_run to build everything without publishing.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp, without the v (dry runs only)"
+        default: "0.0.0-dry"
+      dry_run:
+        description: "Build only: no release, no image push"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      numeric: ${{ steps.v.outputs.numeric }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - id: v
+        env:
+          TAG: ${{ github.ref_name }}
+          INPUT: ${{ inputs.version }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then v="${TAG#v}"; publish=true; else v="$INPUT"; publish=$([ "$DRY" = "false" ] && echo true || echo false); fi
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "not a version: $v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "numeric=${v%%-*}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([ "$v" != "${v%%-*}" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/android
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.4"
+          channel: stable
+          cache: true
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PUBLISH: ${{ needs.version.outputs.publish }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            # A published APK signed with a throwaway key could never be updated: refuse.
+            if [ "$PUBLISH" = "true" ]; then echo "::error::ANDROID_KEYSTORE_B64 is not set; see docs/RUNBOOK.md, Releasing"; exit 1; fi
+            echo "SIGNED=debug" >> "$GITHUB_ENV"; exit 0
+          fi
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/release.jks" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+          echo "SIGNED=release" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - run: flutter test
+      - run: ./gradlew :app:testDebugUnitTest --console=plain
+        working-directory: clients/android/android
+      # Build numbers stay above the owner's hand-built 2008 (versionCode 4008 on arm64) and rise
+      # with every release run; Flutter adds 1000 per architecture.
+      - run: flutter build apk --release --split-per-abi --build-name "$V" --build-number "$((3000 + GITHUB_RUN_NUMBER))"
+      - name: Name the APKs
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          suffix=$([ "$SIGNED" = "debug" ] && echo "-debugsigned" || echo "")
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "build/app/outputs/flutter-apk/app-$abi-release.apk" "$GITHUB_WORKSPACE/out/watchman-android-$V-$abi$suffix.apk"
+          done
+          rm -f android/key.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*.apk
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: clients/windows
+    env:
+      V: ${{ needs.version.outputs.version }}
+      N: ${{ needs.version.outputs.numeric }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test --configuration Release
+      - run: dotnet publish src/Watchman.Service -c Release -r win-x64 --self-contained false -p:Version=${{ env.V }} -o publish/service
+      - run: dotnet publish src/Watchman.Helper -c Release -r win-x64 --self-contained false -p:Version=${{ env.V }} -o publish/helper
+      - run: dotnet tool install --global wix --version 5.0.2
+      - run: wix extension add -g WixToolset.UI.wixext/5.0.2
+      - run: New-Item -ItemType Directory -Force "${{ github.workspace }}/out" | Out-Null
+      # MSI versions are numbers only.
+      - run: >
+          wix build installer/Watchman.wxs -arch x64
+          -d Version=${{ env.N }}
+          -d ServicePublish=${{ github.workspace }}/clients/windows/publish/service
+          -d HelperPublish=${{ github.workspace }}/clients/windows/publish/helper
+          -d Brand=${{ github.workspace }}/docs/brand
+          -o ${{ github.workspace }}/out/watchman-windows-${{ env.V }}-x64.msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/*.msi
+
+  extension:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/extension
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clients/extension/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: node build.mjs --zip
+        env:
+          WATCHMAN_VERSION: ${{ env.V }}
+      - run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp dist/watchman-chrome.zip "$GITHUB_WORKSPACE/out/watchman-extension-chrome-$V.zip"
+          cp dist/watchman-firefox.zip "$GITHUB_WORKSPACE/out/watchman-extension-firefox-$V.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: out/*.zip
+
+  server:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.2"
+      - run: uv sync --frozen && uv run pytest -q
+        working-directory: server
+      - uses: docker/login-action@v3
+        if: needs.version.outputs.publish == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the server image
+        env:
+          PUBLISH: ${{ needs.version.outputs.publish }}
+          PRE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/watchman-server"
+          tags="-t $image:$V"
+          [ "$PRE" = "false" ] && tags="$tags -t $image:latest"
+          docker build --build-arg WATCHMAN_VERSION="$V" $tags server
+          [ "$PUBLISH" = "true" ] && docker push --all-tags "$image" || echo "dry run: not pushed"
+
+  release:
+    needs: [version, android, windows, extension, server]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      V: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Checksums
+        run: cd out && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish
+        env:
+          PRE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=$([ "$PRE" = "true" ] && echo "--prerelease" || echo "--latest")
+          {
+            echo "To install or update, see [Get the clients](https://github.com/$GITHUB_REPOSITORY/blob/v$V/README.md#get-the-clients). Check each download against \`SHA256SUMS\`."
+            echo
+            echo "Server image: \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/watchman-server:$V\`, or build the server from this tag as the README describes."
+          } > notes.md
+          # The generated list of merged pull requests is appended to these notes.
+          gh release create "v$V" out/* --verify-tag --generate-notes --notes-file notes.md $flags --title "Watchman $V"

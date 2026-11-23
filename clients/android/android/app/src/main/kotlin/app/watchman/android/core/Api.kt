@@ -1,5 +1,6 @@
 package app.watchman.android.core
 
+import app.watchman.android.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,7 +19,7 @@ class Api(private val server: String, private val token: String?, private val cl
 
         fun pair(server: String, code: String, deviceName: String, client: OkHttpClient = defaultClient): Pairing {
             val api = Api(server, null, client)
-            val body = mapOf("code" to code, "device" to mapOf("name" to deviceName, "platform" to "android", "kind" to "app", "app_version" to "0.1.0"))
+            val body = mapOf("code" to code, "device" to mapOf("name" to deviceName, "platform" to "android", "kind" to "app", "app_version" to BuildConfig.VERSION_NAME))
             val r = api.call("POST", "/api/v1/pair", gson.toJson(body))
             val m = gson.fromJson(r, Map::class.java)
             return Pairing(server.trimEnd('/'), m["token"] as String, m["device_id"] as String, m["person_id"] as String, m["server_name"] as String)
@@ -26,7 +27,7 @@ class Api(private val server: String, private val token: String?, private val cl
     }
 
     private fun call(method: String, path: String, body: String? = null, bytes: ByteArray? = null): String {
-        val builder = Request.Builder().url(server.trimEnd('/') + path).header("User-Agent", "watchman-android/0.1.0")
+        val builder = Request.Builder().url(server.trimEnd('/') + path).header("User-Agent", "watchman-android/${BuildConfig.VERSION_NAME}")
         if (token != null) builder.header("Authorization", "Bearer $token")
         when {
             bytes != null -> builder.method(method, bytes.toRequestBody(jpeg))

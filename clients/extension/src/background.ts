@@ -24,7 +24,9 @@ import type {
   WatchmanEvent,
 } from "./shared/types";
 
-export const VERSION = "0.1.0";
+// The manifest carries the release version (ADR-059); tests run without one.
+export const VERSION: string =
+  typeof chrome !== "undefined" ? (chrome.runtime?.getManifest?.()?.version ?? "0.0.0") : "0.0.0";
 const HEARTBEAT_MINUTES = 5;
 const FLUSH_MINUTES = 0.5;
 const UPLOAD_SIDE = 512;

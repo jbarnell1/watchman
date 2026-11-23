@@ -29,7 +29,7 @@ public sealed class PipeClient : IDisposable
                 _pipe = pipe;
                 _writer = new StreamWriter(pipe) { AutoFlush = true };
                 Connected?.Invoke(true);
-                await SendAsync(new HelloMessage("0.1.0", Environment.UserName));
+                await SendAsync(new HelloMessage(AppVersion.Value, Environment.UserName));
                 using var reader = new StreamReader(pipe);
                 while (pipe.IsConnected && !_cts.IsCancellationRequested)
                 {

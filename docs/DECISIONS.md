@@ -8,6 +8,20 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-059 - A tag on main is a release, built and signed by CI
+**2026-11-23.** Until now every client said 0.1.0 and came from CI artifacts, which expire and need
+a GitHub sign-in. A tag `vX.Y.Z` on main now runs `release.yml`: each client's tests, then the
+Android APKs signed with the household release key, the Windows MSI, both extension zips and a
+server image on GHCR, all stamped with the tag's version, published as a GitHub Release with
+`SHA256SUMS`. A suffix makes a pre-release. The clients read their version from the build instead
+of a literal: Android's versionName, the assemblies' informational version on Windows, the
+extension manifest, and `WATCHMAN_VERSION` in the server image.
+The signing key lives in repository secrets so a release does not depend on one machine; the job
+refuses to publish an APK signed any other way, because Android cannot update across keys.
+Rejected for now: store listings (Chrome Web Store, Mozilla signing, Play) and Windows code signing.
+Each needs an account or certificate the owner decides on; the release files work without them,
+with a warning on Windows and a temporary add-on in release Firefox.
+
 ### ADR-058 - Email that fails is said on every page, flapping is one email, silence explains itself
 **2026-11-23.** Three weeks on the owner's server showed what a partner would have received once
 email was set up, and what they did receive without it:

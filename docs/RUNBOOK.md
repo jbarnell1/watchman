@@ -66,11 +66,47 @@ are unaffected because the node name is the same.
 
 ## Releasing
 
-Not automated yet, and there are no releases. Today each workflow keeps its build as an artifact
-(`extension-zips`, `watchman-windows`, `watchman-android-debug`) and households update with
-`git pull` and `docker compose up -d --build`. The plan: tag `vX.Y.Z` on main and have CI build the
-server image, the extension zips, the Windows installer and the Android APK into a GitHub release,
-so households pull the new compose image and phones with Obtainium pick up the APK.
+A tag on main makes a release (ADR-059). `.github/workflows/release.yml` builds every client
+stamped with the tag's version, runs each one's tests, and publishes a GitHub Release with:
+
+- `watchman-android-<version>-arm64-v8a.apk` (most phones), `-armeabi-v7a` and `-x86_64`, signed
+  with the household release key;
+- `watchman-windows-<version>-x64.msi` (unsigned, so Windows warns about an unknown publisher);
+- `watchman-extension-chrome-<version>.zip` and `watchman-extension-firefox-<version>.zip`;
+- `SHA256SUMS`;
+- the server image `ghcr.io/jbarnell1/watchman-server:<version>`, plus `:latest` for a full release.
+
+To release:
+
+```bash
+git switch main && git pull
+git tag -a v0.2.0 -m "Watchman 0.2.0"
+git push origin v0.2.0
+```
+
+A tag with a suffix (`v0.2.0-rc.1`) makes a pre-release and leaves `:latest` alone. To build
+everything without publishing, run the workflow by hand from the Actions tab with `dry_run` on;
+without the signing secrets the APKs then come out signed with a throwaway key and named
+`-debugsigned`.
+
+The release job refuses to publish an APK without the release key, because phones cannot update an
+app from one signing key to another. Four repository secrets hold it (Settings, Secrets and
+variables, Actions). Set them once from the machine that holds `clients/android/android/key.properties`:
+
+```bash
+cd clients/android/android
+gh secret set ANDROID_KEYSTORE_B64 < <(base64 -w0 "$(grep ^storeFile key.properties | cut -d= -f2)")
+gh secret set ANDROID_KEY_ALIAS --body "$(grep ^keyAlias key.properties | cut -d= -f2)"
+gh secret set ANDROID_KEYSTORE_PASSWORD   # paste the storePassword when asked
+gh secret set ANDROID_KEY_PASSWORD        # paste the keyPassword when asked
+```
+
+Keep a copy of the keystore and both passwords somewhere safe outside this machine. If the key is
+lost, every phone has to uninstall and reinstall to get the next version.
+
+Version numbers: Android's versionCode is 3000 plus the run number, plus Flutter's 1000 per
+architecture, so it rises with each release and stays above hand-built test installs. Windows MSI
+and the extension manifests take the numbers before any suffix. Builds from source report 0.1.0.
 
 ## Windows
 
