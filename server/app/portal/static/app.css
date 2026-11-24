@@ -210,6 +210,9 @@ label.check input { width: 16px; height: 16px; margin: 0; }
 .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .sactions { display: flex; gap: 8px; padding: 20px 0 0; border-top: 1px solid var(--border); }
 .inline-add { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.timing { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; margin: 8px 0 4px; }
+.timing label { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.timing select, .timing input { width: auto; min-width: 0; }
 .notice { padding: 10px 14px; border-radius: var(--radius-control); font-size: var(--fs-body); }
 .notice.ok { background: var(--pill-pos-bg); color: var(--pill-pos-ink); }
 .notice.bad { background: var(--pill-neg-bg); color: var(--pill-neg-ink); }

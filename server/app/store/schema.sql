@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS people (
   id         TEXT PRIMARY KEY,
   name       TEXT NOT NULL,
   email      TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  image_alerts      TEXT NOT NULL DEFAULT 'now',   -- now | digest (ADR-062)
+  protection_alerts TEXT NOT NULL DEFAULT 'now'
 );
 
 -- Who a Tailscale login is on the portal. A login may hold several rows.
@@ -41,7 +43,9 @@ CREATE TABLE IF NOT EXISTS partners (
   link_type   TEXT NOT NULL,       -- linked | email
   login       TEXT,                -- Tailscale login for linked partners
   created_at  TEXT NOT NULL,
-  trusted_at  TEXT                 -- settings codes from this partner count from here (ADR-050)
+  trusted_at  TEXT,                -- settings codes from this partner count from here (ADR-050)
+  image_alerts      TEXT NOT NULL DEFAULT 'now',   -- now | digest (ADR-062)
+  protection_alerts TEXT NOT NULL DEFAULT 'now'
 );
 
 CREATE TABLE IF NOT EXISTS pairing_codes (

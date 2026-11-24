@@ -34,6 +34,8 @@
   <div class="srow"><div class="slabel"><h2>Extras {{ lock('ntfy_url') }}</h2><p>Optional. ntfy gets a short push for the admin on every alert.</p></div><div class="spanel">
     <label for="ntfy_url">ntfy topic URL</label><input id="ntfy_url" name="ntfy_url" value="{{ settings.ntfy_url }}" placeholder="https://ntfy.example/homelab">
     <label for="adguard_url">AdGuard Home URL</label><input id="adguard_url" name="adguard_url" value="{{ settings.adguard_url }}" placeholder="http://adguard.lan:3053">
+    <label class="check"><input type="checkbox" name="push_images" {% if settings.push_images %}checked{% endif %}> Push explicit images right away</label>
+    <label class="check"><input type="checkbox" name="push_protection" {% if settings.push_protection %}checked{% endif %}> Push protection turning off right away</label>
   </div></div>
   <div class="srow"><div class="slabel"><h2>Updates</h2><p>This server carries the clients of its own version. A device that is older installs it: Windows on its own, Android after one tap.</p></div><div class="spanel">
     <label class="check"><input type="checkbox" name="auto_update" {% if settings.auto_update %}checked{% endif %}> Update devices from this server</label>
@@ -167,11 +169,25 @@
 </form>
 
 {% elif area == 'people' %}
+{% macro timing(who, row) %}
+<form class="timing" method="post" action="/settings/people/alerts">
+  <input type="hidden" name="who" value="{{ who }}"><input type="hidden" name="id" value="{{ row.id }}">
+  {% for key, label in [('image_alerts', 'Explicit images'), ('protection_alerts', 'Protection off or tamper')] %}
+  <label>{{ label }}<select name="{{ key }}">
+    <option value="now" {% if row[key] == 'now' %}selected{% endif %}>Email right away</option>
+    <option value="digest" {% if row[key] == 'digest' %}selected{% endif %}>Weekly digest only</option>
+  </select></label>{% endfor %}
+  {% if locked %}<input name="partner_code" placeholder="settings code" inputmode="numeric" autocomplete="off" aria-label="settings code">{% endif %}
+  <button class="btn small">Save</button>
+</form>
+{% endmacro %}
 <div class="settings">
   {% for p in people_rows %}
   <div class="srow"><div class="slabel"><h2>{{ p.name }}</h2><p>{{ p.email or 'no email' }}<br>Logins: {{ logins[p.id]|join(', ') or 'none' }}</p></div><div class="spanel">
+    {% if p.email %}<h3>{{ p.name }}'s own email</h3>{{ timing('person', p) }}{% endif %}
     <h3>Partners</h3>
-    {% if partners[p.id] %}<ul class="rows">{% for pr in partners[p.id] %}<li class="row"><div class="row-main"><div class="t1">{{ pr.name }}</div><div class="t2">{{ pr.email }} · {{ 'linked, ' ~ pr.login if pr.link_type == 'linked' else 'email only' }}</div></div>
+    <p class="t2">Everyone gets the weekly digest. Each person chooses whether explicit images and protection turning off also come by email right away. Moving either to the digest needs a partner's settings code when locks are on, and everyone hears about it.</p>
+    {% if partners[p.id] %}<ul class="rows">{% for pr in partners[p.id] %}<li class="row"><div class="row-main"><div class="t1">{{ pr.name }}</div><div class="t2">{{ pr.email }} · {{ 'linked, ' ~ pr.login if pr.link_type == 'linked' else 'email only' }}</div>{{ timing('partner', pr) }}</div>
       <form class="row-side" method="post" action="/settings/partners/{{ pr.id }}/remove">{% if locked %}<input name="partner_code" placeholder="settings code" inputmode="numeric" autocomplete="off" aria-label="settings code">{% endif %}<button class="btn small">Remove</button></form></li>{% endfor %}</ul>
     {% else %}<p class="empty">No partners yet. Add at least one.</p>{% endif %}
     <form method="post" action="/settings/partners/add" class="form inline-add">

@@ -466,7 +466,8 @@ async def issue_code(request: Request, ctx: Context = Depends(get_ctx)) -> Respo
 
 AREAS: dict[str, list[str]] = {
     "general": ["household_name", "timezone", "digest_day", "digest_time", "image_retention_days",
-                "event_retention_days", "ntfy_url", "adguard_url", "auto_update"],
+                "event_retention_days", "ntfy_url", "adguard_url", "auto_update", "push_images",
+                "push_protection"],
     "protection": ["locks_on", "unlocked_groups", "cover_on_device", "ask_server", "strict_mode", "coverage",
                    "follow_scroll", "block_whole_screen",
                    "thresholds", "covered_reports",
@@ -517,7 +518,7 @@ def _parse_setting(key: str, form) -> object:
     if key in ("risky_apps", "blocked_apps", "exempt_apps", "realtime_apps", "checked_apps"):
         return [line.strip() for line in str(form.get(key, "")).splitlines() if line.strip()]
     if key in ("strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll", "block_whole_screen",
-               "self_peek", "auto_update"):
+               "self_peek", "auto_update", "push_images", "push_protection"):
         return form.get(key) == "on"
     if key == "unlocked_groups":
         # Checked means locked; the setting stores the groups left unlocked.
@@ -753,6 +754,52 @@ async def add_partner(request: Request, ctx: Context = Depends(get_ctx)) -> Resp
         return RedirectResponse(f"/settings?area=people&error={exc.message}", status_code=303)
     except (ValueError, sqlite3.IntegrityError) as exc:
         return RedirectResponse(f"/settings?area=people&error={exc}", status_code=303)
+    return RedirectResponse("/settings?area=people&saved=1", status_code=303)
+
+
+TIMING_WORDS = {"image_alerts": "explicit images", "protection_alerts": "protection turning off"}
+
+
+@router.post("/settings/people/alerts")
+async def alert_timing(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    """Right away or in the weekly digest, per person and partner (ADR-062). Moving anything to the
+    digest is loosening: it is locked with the partners and everyone hears about it at once."""
+    v = require_viewer(ctx, request)
+    if not v.is_admin:
+        raise Forbidden("only the admin can change who gets which emails")
+    form = await request.form()
+    who, row_id = str(form.get("who", "")), str(form.get("id", ""))
+    row = (ctx.people.get_person(row_id) if who == "person" else
+           ctx.people.get_partner(row_id) if who == "partner" else None)
+    if row is None:
+        raise NotFound("no such person or partner")
+    person_id = row_id if who == "person" else row["person_id"]
+    new = {k: str(form.get(k, row[k])) for k in TIMING_WORDS}
+    if any(value not in ("now", "digest") for value in new.values()):
+        return RedirectResponse("/settings?area=people&error=unknown choice", status_code=303)
+    later = [TIMING_WORDS[k] for k in TIMING_WORDS if row[k] == "now" and new[k] == "digest"]
+    try:
+        if later:
+            try:
+                with ctx.conn:
+                    _check_settings_code(ctx, form, {}, group="partners")
+            except approvals.NeedsApproval:
+                approvals.request(ctx, "alert_timing", person_id, {"who": who, "id": row_id, **new},
+                                  f"{row['name']} hears about {' and '.join(later)} only in the weekly digest",
+                                  v.login, pairlink.portal_url(request))
+                return RedirectResponse("/settings?area=people&saved=pending", status_code=303)
+            alerts.change_alert(ctx, f"{row['name']} will hear about some alerts only in the digest", [
+                f"{v.login} set {row['name']} ({row['email'] or 'no email'}) to hear about "
+                f"{' and '.join(later)} only in the weekly digest, not by email at once."], person_id)
+        with ctx.conn:
+            ctx.people.set_alert_timing(who, row_id, new["image_alerts"], new["protection_alerts"])
+            ctx.conn.execute(
+                "INSERT INTO settings_changes(at, login, key, old_value, new_value) VALUES (?, ?, ?, ?, ?)",
+                (iso(ctx.clock.now()), v.login, f"alerts for {row['name']}",
+                 json.dumps({k: row[k] for k in TIMING_WORDS}), json.dumps(new)),
+            )
+    except ApiError as exc:
+        return RedirectResponse(f"/settings?area=people&error={exc.message}", status_code=303)
     return RedirectResponse("/settings?area=people&saved=1", status_code=303)
 
 

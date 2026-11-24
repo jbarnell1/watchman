@@ -129,6 +129,9 @@ class Settings(BaseModel):
     realert_hours: int = Field(default=6, ge=1, le=48)
     smtp: Smtp = Field(default_factory=Smtp)
     ntfy_url: str = ""                  # optional push for the household admin
+    # Which alerts the ntfy push carries right away (ADR-062); the weekly digest is email only.
+    push_images: bool = True
+    push_protection: bool = True
     adguard_url: str = ""               # informational, shown on the devices page
     second_opinion_device: str = "cpu"  # cpu | cuda
     # Devices install the client this server carries when theirs is older (ADR-061). Off, they are
