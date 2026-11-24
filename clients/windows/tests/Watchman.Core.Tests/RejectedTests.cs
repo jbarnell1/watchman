@@ -83,6 +83,22 @@ public class RejectedTests
     }
 
     [Fact]
+    public void APairingWrittenByThePairCommandIsNoticed()
+    {
+        var store = new MemoryStore();
+        var service = new ServiceState(store, new FakeClock());
+        Assert.False(service.ConfigChangedOnDisk());
+        Assert.False(service.Config().Paired);
+
+        // The pair command is another process with its own ServiceState over the same files.
+        new ServiceState(store, new FakeClock()).Pairing = new Pairing("https://watchman.test", "tok", "d", "p", "Example household");
+
+        Assert.True(service.ConfigChangedOnDisk());
+        Assert.True(service.Config().Paired);
+        Assert.False(service.ConfigChangedOnDisk());
+    }
+
+    [Fact]
     public void WithNoPolicyTheHelperGetsTheDefaults()
     {
         var state = new ServiceState(new MemoryStore(), new FakeClock());

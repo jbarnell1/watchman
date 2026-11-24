@@ -16,6 +16,11 @@ public static class Cli
                 var server = Arg(args, "--server");
                 var code = Arg(args, "--code");
                 if (server is null || code is null) { Console.Error.WriteLine("usage: pair --server URL --code CODE [--name NAME]"); return 2; }
+                if (!Uri.TryCreate(server, UriKind.Absolute, out var url) || url.Scheme is not ("https" or "http"))
+                {
+                    Console.Error.WriteLine($"not a server address: {server}. Use the portal's address, for example https://watchman.example.ts.net");
+                    return 2;
+                }
                 var name = Arg(args, "--name") ?? Environment.MachineName;
                 try
                 {
@@ -28,6 +33,7 @@ public static class Cli
                     return 0;
                 }
                 catch (ApiException ex) { Console.Error.WriteLine($"{ex.Code}: {ex.Message}"); return 1; }
+                catch (HttpRequestException ex) { Console.Error.WriteLine($"could not reach {server}: {ex.Message}"); return 1; }
             }
             case "unpair":
                 state.Pairing = null;

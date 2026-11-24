@@ -23,6 +23,7 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
         {
             try
             {
+                if (state.ConfigChangedOnDisk()) state.NotifyChanged();
                 await FlushAsync(ct);
                 await CheckPolicyAsync();
                 var reported = CurrentState();
