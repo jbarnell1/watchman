@@ -30,29 +30,32 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
 
     /// <summary>Stops the outdated helper and starts the installed one. The helper allows one copy of
     /// itself, so the old one must be gone first: the process that connected, or failing that every
-    /// running helper. Each step is logged as a warning so the event log shows what happened.</summary>
+    /// running helper. Each step is logged as a warning so the event log shows what happened.
+    /// The connected process is stopped whatever its name: the installer renames a running helper's
+    /// file to its rollback copy (Config.Msi\*.rbf), and the process then goes by that name.</summary>
     private void Restart(int pid)
     {
-        var stopped = Stop(pid, "connected");
+        var stopped = Stop(pid, "connected", anyName: true);
         if (!stopped)
             foreach (var p in Process.GetProcessesByName("WatchmanHelper")) stopped |= Stop(p.Id, "running");
         if (!stopped && HelperRunning()) { log.LogWarning("could not stop the outdated helper; it keeps running"); return; }
         Launch(alwaysLog: true);
     }
 
-    private bool Stop(int pid, string which)
+    private bool Stop(int pid, string which, bool anyName = false)
     {
         try
         {
             using var p = Process.GetProcessById(pid);
-            if (!string.Equals(p.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase))
+            if (!anyName && !string.Equals(p.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase))
             {
                 log.LogWarning("the {Which} process {Pid} is {Name}, not the helper", which, pid, p.ProcessName);
                 return false;
             }
             p.Kill();
             var gone = p.WaitForExit(10_000);
-            log.LogWarning("stopped the {Which} helper {Pid}: {Result}", which, pid, gone ? "exited" : "still running after 10 s");
+            log.LogWarning("stopped the {Which} helper {Pid} ({Name}): {Result}", which, pid, p.ProcessName,
+                gone ? "exited" : "still running after 10 s");
             return gone;
         }
         catch (ArgumentException)
