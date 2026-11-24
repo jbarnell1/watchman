@@ -23,7 +23,7 @@ public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : Ba
             {
                 using var pipe = Create();
                 await pipe.WaitForConnectionAsync(ct);
-                _clientPid = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid) ? (int)pid : 0;
+                _clientPid = ClientPid(pipe);
                 log.LogInformation("helper connected (pid {Pid})", _clientPid);
                 using var reader = new StreamReader(pipe);
                 _writer = new StreamWriter(pipe) { AutoFlush = true };
@@ -142,6 +142,10 @@ public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : Ba
         catch (ApiException ex) { await SendAsync(new ResultMessage(what, false, ex.Message)); }
         catch (Exception ex) { await SendAsync(new ResultMessage(what, false, ex.Message)); }
     }
+
+    /// <summary>The process at the other end of the pipe, or 0 when Windows will not say.</summary>
+    public static int ClientPid(NamedPipeServerStream pipe) =>
+        GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid) ? (int)pid : 0;
 
     [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
