@@ -122,8 +122,8 @@ dotnet build
 src/Watchman.Helper/bin/Debug/net10.0-windows10.0.19041.0/WatchmanHelper.exe selftest ../../models/cache/nudenet-640m.onnx
 ```
 
-Install from the MSI CI builds (Actions, windows, artifact `watchman-windows`), then pair from an
-elevated prompt:
+Install the MSI from the latest release. It shows only a progress bar and closes; the helper's tray
+icon appears within 15 seconds. Then pair from an elevated prompt with a code from the portal:
 
 ```
 "C:\Program Files\Watchman\service\WatchmanService.exe" pair --server https://watchman.<tailnet>.ts.net --code K7Q-4MZ-P2D

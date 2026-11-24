@@ -162,7 +162,7 @@ and check each file against its `SHA256SUMS`. Each release is built by CI from i
 | Client | File | Notes |
 |---|---|---|
 | Android (11 and later) | `watchman-android-<version>-arm64-v8a.apk` | Most phones. Allow installs from your browser or file manager. [Obtainium](https://github.com/ImranR98/Obtainium) can watch the releases and update it. |
-| Windows 10 and 11 | `watchman-windows-<version>-x64.msi` | Not code-signed yet, so Windows asks you to confirm an unknown publisher. |
+| Windows 10 and 11 | `watchman-windows-<version>-x64.msi` | Not code-signed yet, so Windows asks you to confirm an unknown publisher. Pair it from an elevated prompt as [the runbook](docs/RUNBOOK.md#windows) shows. |
 | Chrome, Edge, Brave | `watchman-extension-chrome-<version>.zip` | Unzip, open `chrome://extensions`, turn on Developer mode, Load unpacked. Not in the stores yet. |
 | Firefox | `watchman-extension-firefox-<version>.zip` | Not signed by Mozilla yet, so release Firefox loads it only as a temporary add-on. |
 | iPhone | none | Build `clients/ios` yourself with Xcode and your own Apple developer account. Safari only. |
