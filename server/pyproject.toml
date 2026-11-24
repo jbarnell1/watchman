@@ -15,7 +15,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "segno>=1.6",
     "tzdata>=2024.1",
-    "uvicorn[standard]>=0.30",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
