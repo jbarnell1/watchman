@@ -98,6 +98,18 @@ public sealed class ServiceState(IStore store, IClock clock)
 
     public void NotifyChanged() => Changed?.Invoke();
 
+    private string? _lastConfig;
+
+    /// <summary>The pair command runs in its own process and only writes files. The service calls this
+    /// every loop so a new pairing, model or policy reaches the helper without a restart.</summary>
+    public bool ConfigChangedOnDisk()
+    {
+        var now = Wire.Encode(Config());
+        var changed = _lastConfig is not null && now != _lastConfig;
+        _lastConfig = now;
+        return changed;
+    }
+
     /// <summary>Download the detectors named in the server's manifest unless the cached copies match
     /// their hashes: the large one for the GPU sweep, the small one for game mode on the CPU.</summary>
     public async Task EnsureDetectorAsync(Api api, Action<string> log)
