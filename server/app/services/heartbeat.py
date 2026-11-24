@@ -14,7 +14,7 @@ import uuid
 from zoneinfo import ZoneInfo
 
 from app.clock import iso, parse_iso
-from app.services import alerts, liveness, metrics
+from app.services import alerts, downloads, liveness, metrics
 from app.services.context import Context
 from app.services.policy import paused_until
 from app.store.events_store import SEVERITY_INFO, SEVERITY_PROTECTION
@@ -92,6 +92,13 @@ def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
                     "action": "none", "detail": {"field": field, "from": old, "to": "not reported"},
                     "severity": SEVERITY_PROTECTION,
                 })
+        # A new version is worth a line on the timeline, never an alert (ADR-061).
+        old_version = (previous or {}).get("app_version")
+        if previous is not None and old_version and body.get("app_version") and body["app_version"] != old_version:
+            derived.append({
+                "id": str(uuid.uuid4()), "type": "app_updated", "occurred_at": iso(now), "action": "none",
+                "detail": {"from": old_version, "to": body["app_version"]}, "severity": SEVERITY_INFO,
+            })
         if body.get("safe_mode") and not (previous or {}).get("safe_mode"):
             derived.append({
                 "id": str(uuid.uuid4()), "type": "tamper", "occurred_at": iso(now), "action": "none",
@@ -120,4 +127,6 @@ def record(ctx: Context, device: sqlite3.Row, body: dict) -> dict:
         "policy_version": settings.policy_version,
         "paused_until": paused_until(ctx, device["person_id"]),
         "server_time": iso(now),
+        "update": downloads.offer(downloads.load(ctx.config.downloads_dir), device["platform"],
+                                  body.get("app_version")) if settings.auto_update else None,
     }

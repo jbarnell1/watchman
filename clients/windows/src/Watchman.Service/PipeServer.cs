@@ -11,6 +11,7 @@ namespace Watchman.Service;
 public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : BackgroundService
 {
     private StreamWriter? _writer;
+    private int _clientPid;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -22,7 +23,8 @@ public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : Ba
             {
                 using var pipe = Create();
                 await pipe.WaitForConnectionAsync(ct);
-                log.LogInformation("helper connected");
+                _clientPid = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid) ? (int)pid : 0;
+                log.LogInformation("helper connected (pid {Pid})", _clientPid);
                 using var reader = new StreamReader(pipe);
                 _writer = new StreamWriter(pipe) { AutoFlush = true };
                 await SendConfigAsync();
@@ -81,9 +83,12 @@ public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : Ba
         {
             case HelloMessage hello:
                 log.LogInformation("helper {Version} for {User}", hello.Version, hello.User);
+                if (state.RestartOutdatedHelper(hello.Version, _clientPid, AppVersion.Value))
+                    log.LogWarning("helper {Old} is not this version ({New}); restarting it", hello.Version, AppVersion.Value);
                 break;
             case StateMessage s:
                 var next = new ProtectionState(s.Capture && s.Overlay, s.Capture ? "granted" : "denied", s.Overlay);
+                state.HelperStateAt = state.Clock.Now;
                 if (next != state.Helper) { state.Helper = next; state.NotifyChanged(); }
                 break;
             case FindingMessage f:
@@ -137,4 +142,7 @@ public sealed class PipeServer(ServiceState state, ILogger<PipeServer> log) : Ba
         catch (ApiException ex) { await SendAsync(new ResultMessage(what, false, ex.Message)); }
         catch (Exception ex) { await SendAsync(new ResultMessage(what, false, ex.Message)); }
     }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
 }

@@ -78,7 +78,13 @@ public sealed record EventsResponse(List<string> Accepted, List<string> Duplicat
     List<RejectedEvent>? Rejected = null);
 
 public sealed record HeartbeatResponse([property: JsonPropertyName("policy_version")] int PolicyVersion,
-    [property: JsonPropertyName("paused_until")] string? PausedUntil, [property: JsonPropertyName("server_time")] string ServerTime);
+    [property: JsonPropertyName("paused_until")] string? PausedUntil, [property: JsonPropertyName("server_time")] string ServerTime,
+    UpdateOffer? Update = null);
+
+/// <summary>The client the household server carries, when it is newer than this one (ADR-061).</summary>
+public sealed record UpdateOffer(string Version, List<UpdateFile> Files);
+
+public sealed record UpdateFile(string Name, string Variant, string Sha256, long Size, string Url);
 
 /// <summary>What the helper tells the service about itself, and what the service puts in heartbeats.</summary>
 public sealed record ProtectionState(bool Protection, string Capture, bool? Overlay)

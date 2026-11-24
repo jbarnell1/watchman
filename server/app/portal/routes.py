@@ -466,7 +466,7 @@ async def issue_code(request: Request, ctx: Context = Depends(get_ctx)) -> Respo
 
 AREAS: dict[str, list[str]] = {
     "general": ["household_name", "timezone", "digest_day", "digest_time", "image_retention_days",
-                "event_retention_days", "ntfy_url", "adguard_url"],
+                "event_retention_days", "ntfy_url", "adguard_url", "auto_update"],
     "protection": ["locks_on", "unlocked_groups", "cover_on_device", "ask_server", "strict_mode", "coverage",
                    "follow_scroll", "block_whole_screen",
                    "thresholds", "covered_reports",
@@ -517,7 +517,7 @@ def _parse_setting(key: str, form) -> object:
     if key in ("risky_apps", "blocked_apps", "exempt_apps", "realtime_apps", "checked_apps"):
         return [line.strip() for line in str(form.get(key, "")).splitlines() if line.strip()]
     if key in ("strict_mode", "cover_on_device", "ask_server", "locks_on", "follow_scroll", "block_whole_screen",
-               "self_peek"):
+               "self_peek", "auto_update"):
         return form.get(key) == "on"
     if key == "unlocked_groups":
         # Checked means locked; the setting stores the groups left unlocked.

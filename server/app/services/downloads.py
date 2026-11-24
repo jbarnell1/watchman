@@ -113,3 +113,15 @@ def update_for(bundle: Bundle | None, platform: str, app_version: str | None) ->
     if have is None or latest is None or have >= latest:
         return None
     return bundle.version
+
+
+def offer(bundle: Bundle | None, platform: str, app_version: str | None) -> dict | None:
+    """What the heartbeat response tells a device that is behind (ADR-061): the version and every
+    variant of its client, so the device picks its own architecture and checks the SHA-256 itself."""
+    version = update_for(bundle, platform, app_version)
+    if version is None:
+        return None
+    client = _PLATFORM_CLIENT[platform]
+    return {"version": version,
+            "files": [{"name": f.name, "variant": f.variant, "sha256": f.sha256, "size": f.size,
+                       "url": f"/downloads/{f.name}"} for f in bundle.of(client)]}

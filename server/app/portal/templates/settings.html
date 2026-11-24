@@ -35,6 +35,9 @@
     <label for="ntfy_url">ntfy topic URL</label><input id="ntfy_url" name="ntfy_url" value="{{ settings.ntfy_url }}" placeholder="https://ntfy.example/homelab">
     <label for="adguard_url">AdGuard Home URL</label><input id="adguard_url" name="adguard_url" value="{{ settings.adguard_url }}" placeholder="http://adguard.lan:3053">
   </div></div>
+  <div class="srow"><div class="slabel"><h2>Updates</h2><p>This server carries the clients of its own version. A device that is older installs it: Windows on its own, Android after one tap.</p></div><div class="spanel">
+    <label class="check"><input type="checkbox" name="auto_update" {% if settings.auto_update %}checked{% endif %}> Update devices from this server</label>
+  </div></div>
   {% if locked %}<div class="srow"><div class="slabel"><h2>Partner code</h2><p>Only needed when a locked value changes.</p></div><div class="spanel"><label for="partner_code">Settings code</label><input id="partner_code" name="partner_code" inputmode="numeric" autocomplete="off"></div></div>{% endif %}
   <div class="sactions"><button class="btn primary">Save</button>
     {% if person %}<button class="btn" formaction="/settings/digest/send" name="person" value="{{ person.id }}" formnovalidate>Send the digest now</button>{% endif %}</div>

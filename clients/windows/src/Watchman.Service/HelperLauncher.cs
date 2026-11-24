@@ -11,6 +11,7 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        state.HelperRestartRequested += pid => _ = Task.Run(() => Restart(pid), ct);
         while (!ct.IsCancellationRequested)
         {
             try
@@ -25,6 +26,21 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
             }
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
         }
+    }
+
+    /// <summary>Stops the helper that connected from <paramref name="pid"/> and starts the installed one.</summary>
+    private void Restart(int pid)
+    {
+        try
+        {
+            using var old = Process.GetProcessById(pid);
+            if (!string.Equals(old.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase)) return;
+            old.Kill();
+            old.WaitForExit(10_000);
+        }
+        catch (ArgumentException) { }   // already gone
+        catch (Exception ex) { log.LogWarning(ex, "stop helper {Pid}", pid); }
+        Launch();
     }
 
     private static bool HelperRunning() => Process.GetProcessesByName("WatchmanHelper").Length > 0;

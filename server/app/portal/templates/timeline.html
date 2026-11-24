@@ -99,6 +99,7 @@
           {% elif e.type == 'protection_changed' %}{% set dt = json.loads(e.detail) %}{{ dt.field|replace('_',' ')|capitalize }} {{ 'off' if dt.to in (False, 'denied', 'revoked') else 'changed' }}
           {% elif e.type == 'tamper' %}{% set dt = json.loads(e.detail) %}{{ 'Device silent' if dt.reason == 'silent' else 'Safe mode boot' if dt.reason == 'safe_mode' else 'Tamper' }}
           {% elif e.type == 'silence_ended' %}{% set dt = json.loads(e.detail) %}Checking in again after {{ dt.minutes }} min{% if dt.screen_on_s is defined and dt.screen_on_s >= 60 %}<span class="dim"> · screen on {{ dt.screen_on_s // 60 }} min, watched {{ ((dt.screen_on_s - (dt.unwatched_s or 0)) // 60) if dt.screen_on_s > (dt.unwatched_s or 0) else 0 }}</span>{% endif %}
+          {% elif e.type == 'app_updated' %}{% set dt = json.loads(e.detail) %}Updated to {{ dt.to }}<span class="dim"> · from {{ dt.from }}</span>
           {% elif e.type == 'pause_started' %}Pause started{% elif e.type == 'pause_ended' %}Pause ended
           {% elif e.type == 'daily_stats' %}Daily summary{% else %}{{ e.type }}{% endif %}
           {% if e.app %}<span class="dim">· {{ e.app }}</span>{% endif %}

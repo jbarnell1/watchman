@@ -10,11 +10,13 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
 {
     private static readonly TimeSpan HeartbeatEvery = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan FlushEvery = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan HelperGrace = TimeSpan.FromMinutes(2);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private DateTimeOffset _lastHeartbeat = DateTimeOffset.MinValue;
     private ProtectionState _lastReported = ProtectionState.Off;
     private readonly DateTimeOffset _booted = DateTimeOffset.UtcNow;
+
+    /// <summary>Installs the client the server offers in a heartbeat response (ADR-061).</summary>
+    public Updater Updater { get; init; } = new(state, log);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -26,9 +28,9 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
                 if (state.ConfigChangedOnDisk()) state.NotifyChanged();
                 await FlushAsync(ct);
                 await CheckPolicyAsync();
-                var reported = CurrentState();
+                var reported = state.Reported();
                 var due = state.Clock.Now - _lastHeartbeat >= HeartbeatEvery;
-                if (due || reported != _lastReported) await HeartbeatAsync(force: true, ct);
+                if (reported is not null && (due || reported != _lastReported)) await HeartbeatAsync(force: true, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -59,14 +61,6 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
         }
     }
 
-    /// <summary>What the service tells the server. No helper for two minutes means capture is off.</summary>
-    private ProtectionState CurrentState()
-    {
-        var seen = state.HelperSeenAt;
-        if (seen is null || state.Clock.Now - seen > HelperGrace) return new ProtectionState(false, "denied", false);
-        return state.Helper;
-    }
-
     public async Task HeartbeatAsync(bool force, CancellationToken ct)
     {
         using var api = state.Api();
@@ -74,7 +68,8 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
         if (!await _gate.WaitAsync(0, ct)) return;
         try
         {
-            var reported = CurrentState();
+            var reported = state.Reported();
+            if (reported is null) return;   // the helper is (re)connecting
             if (!force && reported == _lastReported && state.Clock.Now - _lastHeartbeat < HeartbeatEvery) return;
             var work = state.TakeMetrics();
             HeartbeatResponse r;
@@ -100,6 +95,8 @@ public sealed class ServiceWorker(ServiceState state, ILogger<ServiceWorker> log
             _lastHeartbeat = state.Clock.Now;
             _lastReported = reported;
             state.Rejected = false;
+            try { await Updater.ConsiderAsync(api, r.Update); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "update"); }
             var policy = state.Policy;
             if (policy is null || policy.Version != r.PolicyVersion || policy.PausedUntil != r.PausedUntil)
             {

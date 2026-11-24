@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
+from app.clock import iso
 from app.services import digest, downloads
 
 V = "0.2.1"
@@ -25,6 +26,7 @@ def bundle_dir(path, files=FILES, sums=None):
 
 
 def use_bundle(ctx, tmp_path, **kw):
+    downloads.load.cache_clear()   # read once per server run; a test changes it mid-run
     ctx.config.downloads_dir = bundle_dir(tmp_path / "downloads", **kw)
 
 
@@ -93,3 +95,43 @@ def test_devices_and_the_digest_name_a_device_that_is_behind(ctx, client, device
     assert summary["outdated"] == [("Pixel", "0.1.0", V)]
     text, html, _ = digest.render(ctx, "Alex", summary, start, end, digest.ZoneInfo("UTC"))
     assert f"Pixel: 0.1.0, {V} is available" in text
+
+
+def beat(client, headers, clock, version):
+    state = {"protection": True, "accessibility": True, "capture": "granted", "overlay": True, "device_admin": True}
+    r = client.post("/api/v1/heartbeat", headers=headers, json={
+        "sent_at": iso(clock.now()), "app_version": version, "booted_at": iso(clock.now()),
+        "safe_mode": False, "battery_pct": 80, "queued_events": 0, "state": state})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_the_heartbeat_offers_a_device_that_is_behind_its_files(ctx, client, device, clock, tmp_path):
+    _, headers = device
+    assert beat(client, headers, clock, "0.1.0")["update"] is None      # a source build carries nothing
+    use_bundle(ctx, tmp_path)
+    offer = beat(client, headers, clock, "0.1.0")["update"]
+    assert offer["version"] == V
+    assert [f["variant"] for f in offer["files"]] == ["arm64-v8a", "armeabi-v7a"]
+    first = offer["files"][0]
+    assert first["url"] == f"/downloads/watchman-android-{V}-arm64-v8a.apk"
+    assert first["sha256"] == hashlib.sha256(b"apk arm64").hexdigest() and first["size"] == len(b"apk arm64")
+    assert client.get(first["url"]).content == b"apk arm64"
+
+    assert beat(client, headers, clock, V)["update"] is None             # current
+    with ctx.conn:
+        ctx.settings.set("auto_update", False)
+    assert beat(client, headers, clock, "0.1.0")["update"] is None       # the household turned it off
+
+
+def test_a_new_version_is_a_line_on_the_timeline_and_no_alert(ctx, client, device, household, clock, mailer):
+    dev, headers = device
+    beat(client, headers, clock, "0.1.0")
+    beat(client, headers, clock, "0.1.0")
+    beat(client, headers, clock, V)
+    rows = ctx.conn.execute("SELECT type, detail, severity FROM events WHERE device_id = ? AND type = 'app_updated'",
+                            (dev["id"],)).fetchall()
+    assert [(r["detail"], r["severity"]) for r in rows] == [(f'{{"from": "0.1.0", "to": "{V}"}}', "info")]
+    assert mailer.sent == []
+    page = client.get("/", params={"person": household["person_id"]})
+    assert f"Updated to {V}" in page.text
