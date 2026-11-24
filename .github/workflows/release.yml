@@ -166,8 +166,9 @@ jobs:
           name: extension
           path: out/*.zip
 
+  # The server image carries this release's clients (ADR-060), so it is built after them.
   server:
-    needs: version
+    needs: [version, android, windows, extension]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -181,6 +182,17 @@ jobs:
           version: "0.11.2"
       - run: uv sync --frozen && uv run pytest -q
         working-directory: server
+      - uses: actions/download-artifact@v4
+        with:
+          path: server/downloads
+          merge-multiple: true
+      # x86_64 is for emulators and Chromebooks; it stays on the GitHub release only.
+      - name: Clients for the image
+        working-directory: server/downloads
+        run: |
+          rm -f ./*x86_64*.apk
+          sha256sum watchman-* > SHA256SUMS
+          cat SHA256SUMS
       - uses: docker/login-action@v3
         if: needs.version.outputs.publish == 'true'
         with:
@@ -196,6 +208,15 @@ jobs:
           tags="-t $image:$V"
           [ "$PRE" = "false" ] && tags="$tags -t $image:latest"
           docker build --build-arg WATCHMAN_VERSION="$V" $tags server
+          # The image must offer its clients before anyone pulls it.
+          cid=$(docker run -d -e WATCHMAN_FAKE_SECOND_OPINION=true "$image:$V")
+          page=""
+          for i in $(seq 1 30); do
+            page=$(docker exec "$cid" python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8030/downloads').read().decode())" 2>/dev/null) && break
+            sleep 2
+          done
+          docker rm -f "$cid" >/dev/null
+          echo "$page" | grep -q "watchman-windows-$V-x64.msi" || { echo "::error::the image does not offer its clients on /downloads"; exit 1; }
           # A refused push must fail the release, not read as a dry run.
           if [ "$PUBLISH" = "true" ]; then docker push --all-tags "$image"; else echo "dry run: not pushed"; fi
 

@@ -8,6 +8,20 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-060 - The server carries its clients, and says which devices are behind
+**2026-11-24.** Devices need updates, but a device asking GitHub for them would phone home
+(working agreement 6). The release image now carries its own version's clients: the release job
+builds them first, copies them with `SHA256SUMS` into `server/downloads`, and the image serves
+them at `/downloads` with no sign-in, like `/pair`, because a device being set up is not signed
+in and the files are the public release. The server offers only files that match `SHA256SUMS`
+and share one version. Updating the server image (watched by whatever the household uses for
+images) is then the one update step; the Devices page marks each device older than the bundle
+with "update to X", and the partner digest lists them. A server built from source carries no
+clients and links to the releases page.
+The x86_64 APK stays on the GitHub release only, to keep about 60 MB out of the image.
+Next (not in this change): the heartbeat response names the bundled version and file, so the
+Windows service can install it silently and Android can offer it in one tap.
+
 ### ADR-059 - A tag on main is a release, built and signed by CI
 **2026-11-23.** Until now every client said 0.1.0 and came from CI artifacts, which expire and need
 a GitHub sign-in. A tag `vX.Y.Z` on main now runs `release.yml`: each client's tests, then the

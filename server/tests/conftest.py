@@ -44,7 +44,8 @@ def identity() -> FakeIdentity:
 
 @pytest.fixture
 def ctx(tmp_path, clock, mailer, opinion, identity):
-    config = Config(data_dir=tmp_path / "data", models_dir=tmp_path / "models", fake_second_opinion=True)
+    config = Config(data_dir=tmp_path / "data", models_dir=tmp_path / "models",
+                    downloads_dir=tmp_path / "downloads", fake_second_opinion=True)
     return build_context(config, clock=clock, identity=identity, mailer=mailer, second_opinion=opinion,
                          db_path=":memory:")
 

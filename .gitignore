@@ -56,3 +56,7 @@ DerivedData/
 .taste-skill/
 # The server's database and sealed images when run from the repository root (compose).
 /data/
+
+# Client files the release copies into the server image (ADR-060)
+server/downloads/*
+!server/downloads/README.md

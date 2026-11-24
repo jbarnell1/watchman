@@ -156,8 +156,11 @@ and updating.
 
 ### Get the clients
 
-Download the clients from the [latest release](https://github.com/jbarnell1/watchman/releases/latest)
-and check each file against its `SHA256SUMS`. Each release is built by CI from its tag.
+A server running a release image offers its own version's clients at `/downloads` on the portal,
+with no sign-in, so devices install and update from the household's server. The Devices page and
+the partner digest name any device running an older version. The same files are on the
+[latest release](https://github.com/jbarnell1/watchman/releases/latest); check each against its
+`SHA256SUMS`. Each release is built by CI from its tag.
 
 | Client | File | Notes |
 |---|---|---|

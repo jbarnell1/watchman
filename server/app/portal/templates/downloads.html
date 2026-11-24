@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Downloads · Watchman</title>
+<link rel="stylesheet" href="/static/fonts/geist.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="plain">
+<main class="plain-main downloads">
+  <img src="/static/mark.svg" alt="" width="40" height="40">
+  <h1>Watchman clients</h1>
+  {% if bundle %}
+  <p>Version <span class="num">{{ bundle.version }}</span>, the same version as this server. Install the client, then pair it with a code from the Devices page. A newer version installs over the old one and keeps its pairing.</p>
+
+  {% macro files(list) %}
+  <ul class="rows">{% for f in list %}
+    <li class="row"><div class="row-main">
+      <div class="t1"><a href="/downloads/{{ f.name }}">{{ f.name }}</a></div>
+      <div class="t2 num">{{ '%.1f'|format(f.size / 1048576) }} MB · SHA-256 {{ f.sha256 }}</div>
+    </div></li>{% endfor %}
+  </ul>
+  {% endmacro %}
+
+  {% if android %}
+  <h2>Android 11 and later</h2>
+  <p class="t2">Most phones need <span class="num">arm64-v8a</span>. Allow installs from your browser when Android asks.</p>
+  {{ files(android) }}
+  {% endif %}
+
+  {% if windows %}
+  <h2>Windows 10 and 11</h2>
+  <p class="t2">The installer shows a progress bar and closes; the tray icon appears within 15 seconds. Pair from an administrator prompt with <span class="num">"C:\Program Files\Watchman\service\WatchmanService.exe" pair --server {{ server }} --code CODE</span>.</p>
+  {{ files(windows) }}
+  {% endif %}
+
+  {% if extension %}
+  <h2>Browser extension</h2>
+  <p class="t2">Chrome, Edge and Brave: unzip, open the extensions page, turn on Developer mode and Load unpacked. Firefox loads the Firefox zip as a temporary add-on until it is signed.</p>
+  {{ files(extension) }}
+  {% endif %}
+
+  {% else %}
+  <p>This server was built from source (version <span class="num">{{ server_version }}</span>), so it carries no client files. Download them from the project's releases page, or build them as the runbook describes.</p>
+  <p><a class="btn" href="https://github.com/jbarnell1/watchman/releases/latest" rel="noreferrer">Releases</a></p>
+  {% endif %}
+  <p class="t2">iPhone: build the app yourself with Xcode; it is not in the App Store.</p>
+</main>
+</body>
+</html>

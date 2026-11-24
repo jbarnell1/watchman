@@ -24,6 +24,8 @@ class Config(BaseSettings):
     trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1", "::1"])
     # Set to the models directory holding the ONNX files named in models/manifest.json.
     models_dir: Path = Field(default=Path("models"))
+    # The client files a release image carries, with their SHA256SUMS (ADR-060). Empty from source.
+    downloads_dir: Path = Field(default=Path("downloads"))
     # Use a fake second opinion (score 0.0) instead of the ONNX model. Development only.
     fake_second_opinion: bool = False
 

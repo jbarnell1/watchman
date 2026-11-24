@@ -10,9 +10,14 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
 RUN uv sync --frozen --no-dev
 
+# Release builds put that version's client files here with SHA256SUMS (ADR-060); from source it
+# holds only a README and the Downloads page says where to get the clients.
+COPY downloads /downloads
+
 ENV PATH="/app/.venv/bin:$PATH" \
     WATCHMAN_DATA_DIR=/data \
     WATCHMAN_MODELS_DIR=/models \
+    WATCHMAN_DOWNLOADS_DIR=/downloads \
     WATCHMAN_BIND_HOST=127.0.0.1 \
     WATCHMAN_BIND_PORT=8030
 

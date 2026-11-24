@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from app.clients.mailer import Attachment, Mail
 from app.clock import iso, parse_iso
-from app.services import alerts, liveness
+from app.services import alerts, downloads, liveness
 from app.services.alerts import recipients
 from app.services.context import Context
 
@@ -66,7 +66,10 @@ def summarise(ctx: Context, person_id: str, start: datetime, end: datetime) -> d
     tz = ZoneInfo(ctx.settings.load().timezone)
     hidden = liveness.secure_minutes(ctx, person_id, start.astimezone(tz).strftime("%Y-%m-%d"),
                                      end.astimezone(tz).strftime("%Y-%m-%d"))
-    return {"hidden": hidden,
+    bundle = downloads.load(ctx.config.downloads_dir)
+    outdated = [(d["name"], d["app_version"], latest) for d in ctx.devices.list_for(person_id)
+                if (latest := downloads.update_for(bundle, d["platform"], d["app_version"]))]
+    return {"hidden": hidden, "outdated": outdated,
         "counts": counts, "items": items, "pauses": pauses, "peeks": peeks, "changes": changes,
         "days": days, "hours": protected_hours(ctx, person_id, start, end),
     }
@@ -160,6 +163,15 @@ def render(ctx: Context, person_name: str, summary: dict, start: datetime, end: 
                     "video apps do this. Ask about any you do not recognise.</p>")
         for app, minutes in summary["hidden"]:
             s = f"{app}: {minutes} min"
+            lines.append("  " + s)
+            html.append(f"<p>{escape(s)}</p>")
+        lines.append("")
+    if summary.get("outdated"):
+        lines.append("Devices running an older version (updates are on the server's Downloads page):")
+        html.append("<h3 style='font-weight:500'>Devices running an older version</h3>"
+                    "<p style='color:#5f6b70'>Updates are on the server's Downloads page.</p>")
+        for name, have, latest in summary["outdated"]:
+            s = f"{name}: {have}, {latest} is available"
             lines.append("  " + s)
             html.append(f"<p>{escape(s)}</p>")
         lines.append("")

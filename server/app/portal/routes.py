@@ -10,7 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.clients.mailer import Mail
@@ -22,6 +22,7 @@ from app.services import (
     approvals,
     attempts,
     digest,
+    downloads,
     health,
     heartbeat,
     intake,
@@ -339,6 +340,29 @@ async def pair_page(request: Request) -> Response:
     }, headers={"Cache-Control": "no-store"})
 
 
+# Client downloads (ADR-060). No sign-in, like /pair: a device being set up is not signed in, and
+# the files are the project's public release, the same for every household.
+
+@router.get("/downloads", response_class=HTMLResponse)
+async def downloads_page(request: Request, ctx: Context = Depends(get_ctx)) -> Response:
+    bundle = downloads.load(ctx.config.downloads_dir)
+    return templates.TemplateResponse(request, "downloads.html", {
+        "bundle": bundle, "server_version": health.server_version(), "server": pairlink.portal_url(request),
+        "android": bundle.of("android") if bundle else [], "windows": bundle.of("windows") if bundle else [],
+        "extension": bundle.of("extension") if bundle else [],
+    })
+
+
+@router.get("/downloads/{name}")
+async def download_file(name: str, ctx: Context = Depends(get_ctx)) -> Response:
+    bundle = downloads.load(ctx.config.downloads_dir)
+    f = bundle.get(name) if bundle else None
+    if f is None:
+        raise NotFound("no such download")
+    return FileResponse(ctx.config.downloads_dir / f.name, filename=f.name,
+                        media_type=downloads.MEDIA_TYPES[Path(f.name).suffix])
+
+
 # Devices
 
 @router.get("/devices", response_class=HTMLResponse)
@@ -352,6 +376,9 @@ async def devices(request: Request, ctx: Context = Depends(get_ctx)) -> Response
     new_code = request.query_params.get("code")
     pair_url = pairlink.portal_url(request)
     pair_qr = pairlink.qr_svg(pairlink.pair_link(pair_url, new_code)) if new_code else None
+    bundle = downloads.load(ctx.config.downloads_dir)
+    updates = {d["id"]: latest for d in rows if not d["revoked_at"]
+               and (latest := downloads.update_for(bundle, d["platform"], d["app_version"]))}
     work = {}
     for d in rows:
         m = None if d["revoked_at"] else ctx.devices.metrics_for(d["id"], day)
@@ -360,7 +387,7 @@ async def devices(request: Request, ctx: Context = Depends(get_ctx)) -> Response
     return _page(request, ctx, v, "devices.html", person, devices=rows, pairing_codes=codes, work=work,
                  states=_device_states([d for d in rows if not d["revoked_at"]], now),
                  can_manage=person is not None and (v.is_admin or v.is_protected(person["id"])),
-                 new_code=new_code, pair_qr=pair_qr, pair_url=pair_url)
+                 new_code=new_code, pair_qr=pair_qr, pair_url=pair_url, updates=updates)
 
 
 @router.post("/devices/pairing-code")
