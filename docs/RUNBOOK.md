@@ -104,6 +104,11 @@ gh secret set ANDROID_KEY_PASSWORD        # paste the keyPassword when asked
 Keep a copy of the keystore and both passwords somewhere safe outside this machine. If the key is
 lost, every phone has to uninstall and reinstall to get the next version.
 
+The server image goes to the `watchman-server` package on GHCR. If that package existed before the
+first release, the workflow's token cannot write to it and GHCR answers `denied`. In the package's
+settings on GitHub, under Manage Actions access, add this repository with the Write role, and set the
+package's visibility to Public so households can pull it without signing in.
+
 Version numbers: Android's versionCode is 3000 plus the run number, plus Flutter's 1000 per
 architecture, so it rises with each release and stays above hand-built test installs. Windows MSI
 and the extension manifests take the numbers before any suffix. Builds from source report 0.1.0.
