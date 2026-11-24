@@ -6,6 +6,7 @@ partners. The period runs from the previous digest (or 7 days back) to now.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from html import escape
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MAX_THUMBS = 12
+MAX_PROTECTION_LINES = 50
 
 
 def period_for(ctx: Context, person_id: str, now: datetime) -> tuple[datetime, datetime]:
@@ -39,6 +41,7 @@ def summarise(ctx: Context, person_id: str, start: datetime, end: datetime) -> d
     counts = {"explicit": 0, "review": 0, "info_images": 0, "urls": 0, "searches": 0, "apps": 0,
               "protection": 0, "tamper": 0}
     items = []
+    protection_items = []
     for r in rows:
         t = r["type"]
         if r["severity"] == "explicit":
@@ -57,6 +60,7 @@ def summarise(ctx: Context, person_id: str, start: datetime, end: datetime) -> d
             counts["apps"] += 1
         if r["severity"] == "protection":
             counts["protection"] += 1
+            protection_items.append(r)
         if t == "tamper":
             counts["tamper"] += 1
     pauses = ctx.codes.pauses_between(person_id, start, end)
@@ -70,7 +74,8 @@ def summarise(ctx: Context, person_id: str, start: datetime, end: datetime) -> d
     outdated = [(d["name"], d["app_version"], latest) for d in ctx.devices.list_for(person_id)
                 if (latest := downloads.update_for(bundle, d["platform"], d["app_version"]))]
     return {"hidden": hidden, "outdated": outdated,
-        "counts": counts, "items": items, "pauses": pauses, "peeks": peeks, "changes": changes,
+        "counts": counts, "items": items, "protection_items": protection_items, "pauses": pauses,
+        "peeks": peeks, "changes": changes,
         "days": days, "hours": protected_hours(ctx, person_id, start, end),
     }
 
@@ -139,6 +144,27 @@ def render(ctx: Context, person_name: str, summary: dict, start: datetime, end: 
                     thumb = (f"<img src='cid:{cid}' width='64' height='64' alt='heavily blurred' "
                              "style='vertical-align:middle;margin-right:8px'>")
             html.append(f"<p>{thumb}{escape(_when(r['occurred_at'], tz))} · {sev} · {escape(where)}</p>")
+        lines.append("")
+    if summary.get("protection_items"):
+        # Partners who chose the digest for protection read each change here (ADR-062).
+        from app.services.alerts import _line
+        lines.append("Protection changes:")
+        html.append("<h3 style='font-weight:500'>Protection changes</h3>")
+        shown = summary["protection_items"][:MAX_PROTECTION_LINES]
+        for r in shown:
+            device = ctx.devices.get(r["device_id"])
+            try:
+                detail = json.loads(r["detail"]) if r["detail"] else {}
+            except ValueError:
+                detail = {}
+            event = {"type": r["type"], "detail": detail, "app": r["app"], "url": r["url"]}
+            s = f"{_when(r['occurred_at'], tz)}  " + (_line(device, event, person_name) if device else r["type"])
+            lines.append("  " + s)
+            html.append(f"<p>{escape(s)}</p>")
+        more = len(summary["protection_items"]) - len(shown)
+        if more:
+            lines.append(f"  and {more} more on the portal's timeline")
+            html.append(f"<p>and {more} more on the portal's timeline</p>")
         lines.append("")
     if summary["pauses"]:
         lines.append("Pauses:")

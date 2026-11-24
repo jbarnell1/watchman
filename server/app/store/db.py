@@ -42,6 +42,10 @@ COLUMNS = (
     ("devices", "alerted_at", "TEXT"),           # ADR-058: last protection email, for the quiet window
     ("devices", "alerts_held", "INTEGER NOT NULL DEFAULT 0"),
     ("devices", "held_since", "TEXT"),
+    ("people", "image_alerts", "TEXT NOT NULL DEFAULT 'now'"),        # ADR-062: right away or in the digest
+    ("people", "protection_alerts", "TEXT NOT NULL DEFAULT 'now'"),
+    ("partners", "image_alerts", "TEXT NOT NULL DEFAULT 'now'"),
+    ("partners", "protection_alerts", "TEXT NOT NULL DEFAULT 'now'"),
 )
 
 

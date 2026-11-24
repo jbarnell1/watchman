@@ -8,6 +8,22 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-062 - Each person chooses: alerts right away or in the weekly digest
+**2026-11-24.** Every partner received an email at once for each confirmed explicit image and each
+time protection turned off, plus the weekly digest. Some partners would rather read one calm email
+a week. Now the protected person and each partner have two choices, in Settings, People: explicit
+images, and protection off or tamper (including a device going silent and coming back). Each is
+"email right away" (the default) or "weekly digest only". The digest goes to everyone either way,
+and it now lists each protection change by device and time, not only a count, so a partner on
+the digest misses nothing. Changes that loosen protection or accountability (ADR-050) still reach
+everyone at once, because they are rare and are what a quiet server would otherwise hide.
+Moving anything to the digest is loosening: with locks on it needs a partner's settings code (or a
+signed approval once partners hold keys, ADR-053), and everyone is emailed when it happens.
+Moving back to right away is free. The ntfy push for the admin has the same two switches
+(Settings, General) and no digest.
+Rejected: one household switch (partners differ), and a single "everything weekly" choice (a
+partner who wants images weekly should still hear at once when protection is switched off).
+
 ### ADR-061 - Devices update themselves from the household server
 **2026-11-24.** ADR-060 made the server carry its clients; a person still had to install each one.
 Now every heartbeat response carries `update`: when the device runs an older version of a client

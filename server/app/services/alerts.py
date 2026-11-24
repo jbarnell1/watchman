@@ -33,10 +33,17 @@ FIELD_WORDS = {
 }
 
 
-def recipients(ctx: Context, person_id: str) -> list[str]:
+def recipients(ctx: Context, person_id: str, kind: str | None = None) -> list[str]:
+    """The protected person and every partner. With `kind` (`image` or `protection`), only those
+    who chose to hear about it right away; the rest read it in the weekly digest (ADR-062)."""
+    column = {"image": "image_alerts", "protection": "protection_alerts"}.get(kind or "")
+
+    def now(row: sqlite3.Row) -> bool:
+        return column is None or row[column] == "now"
+
     person = ctx.people.get_person(person_id)
-    emails = [p["email"] for p in ctx.people.partners_for(person_id) if p["email"]]
-    if person and person["email"]:
+    emails = [p["email"] for p in ctx.people.partners_for(person_id) if p["email"] and now(p)]
+    if person and person["email"] and now(person):
         emails.insert(0, person["email"])
     return list(dict.fromkeys(e.lower() for e in emails))
 
@@ -64,9 +71,11 @@ def _send(ctx: Context, mail: Mail) -> bool:
     return send(ctx, mail)
 
 
-def _ntfy(ctx: Context, title: str, body: str) -> None:
-    url = ctx.settings.load().ntfy_url
-    if not url:
+def _ntfy(ctx: Context, title: str, body: str, kind: str | None = None) -> None:
+    settings = ctx.settings.load()
+    url = settings.ntfy_url
+    if not url or (kind == "image" and not settings.push_images) or (
+            kind == "protection" and not settings.push_protection):
         return
     try:
         req = urllib.request.Request(url, data=body.encode(), headers={"Title": title, "Priority": "high"})
@@ -102,10 +111,10 @@ def protection_alerts(ctx: Context, device: sqlite3.Row, events: list[dict]) -> 
              f"{fresh['held_since']}; every change is on the portal's timeline.") if held else ""
     text = ("\n".join(lines) + extra + f"\n\nTime: {events[0]['occurred_at']}\n\n"
             f"This alert goes to {name} and every partner. Nothing pauses protection without a partner code.")
-    to = recipients(ctx, device["person_id"])
+    to = recipients(ctx, device["person_id"], "protection")
     if to:
         _send(ctx, Mail(to=to, subject=subject, text=text))
-    _ntfy(ctx, "Watchman: protection changed", lines[0])
+    _ntfy(ctx, "Watchman: protection changed", lines[0], "protection")
     if changes:
         ctx.devices.set_alerted(device["id"], iso(now))
 
@@ -129,12 +138,12 @@ def held_summaries(ctx: Context) -> int:
                     "Off now: " + ", ".join(FIELD_WORDS.get(f, f) for f in off) + ".")
         line = (f"{device['name']}: something turned off {held} more time{'s' if held != 1 else ''} "
                 f"since {device['held_since']}. {now_line}")
-        to = recipients(ctx, device["person_id"])
+        to = recipients(ctx, device["person_id"], "protection")
         if to:
             _send(ctx, Mail(to=to, subject=f"Watchman: protection changed on {name}'s {device['name']}",
                             text=line + "\n\nEvery change is on the portal's timeline. This alert goes to "
                                         f"{name} and every partner."))
-        _ntfy(ctx, "Watchman: protection changed", line)
+        _ntfy(ctx, "Watchman: protection changed", line, "protection")
         ctx.devices.set_alerted(device["id"], iso(now))
         sent += 1
     return sent
@@ -165,11 +174,11 @@ def back_alert(ctx: Context, device: sqlite3.Row, event: dict) -> None:
                              "not watch, or a screen an app keeps private.")
     lines.append("Protection is on now." if d.get("protection") is True else
                  "Protection is not on now; a separate alert says what is off.")
-    to = recipients(ctx, device["person_id"])
+    to = recipients(ctx, device["person_id"], "protection")
     if to:
         _send(ctx, Mail(to=to, subject=f"Watchman: {name}'s {device['name']} is checking in again",
                         text="\n".join(lines)))
-    _ntfy(ctx, "Watchman: device back", lines[0])
+    _ntfy(ctx, "Watchman: device back", lines[0], "protection")
 
 
 def _line(device: sqlite3.Row, event: dict, name: str) -> str:
@@ -220,11 +229,11 @@ def explicit_alert(ctx: Context, event: sqlite3.Row, heavy_webp: bytes | None) -
                 f"<p><img src=\"cid:heavy\" width=\"160\" alt=\"blurred image\"></p>"
                 f"<p>Device score {scores.get('classifier', 0):.2f}, second opinion "
                 f"{event['second_opinion']:.2f}. The original has been deleted.</p>")
-    to = recipients(ctx, event["person_id"])
+    to = recipients(ctx, event["person_id"], "image")
     if to:
         _send(ctx, Mail(to=to, subject=subject, text=text, html=html, inline=inline))
     ctx.events.mark_alerted(event["id"])
-    _ntfy(ctx, "Watchman: explicit image covered", f"{where}, {event['occurred_at']}")
+    _ntfy(ctx, "Watchman: explicit image covered", f"{where}, {event['occurred_at']}", "image")
 
 
 def household_recipients(ctx: Context) -> list[str]:

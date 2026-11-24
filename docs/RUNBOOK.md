@@ -231,6 +231,14 @@ On the phone: pair, then turn the Watchman extension on under Settings, Apps, Sa
 allowed on every website. Screen Time locks are set by the
 partner with their own passcode.
 
+## Who gets which emails
+
+Everyone (the protected person and each partner) gets the weekly digest. In Settings, People,
+each one chooses whether explicit images and protection turning off also come by email right away
+or only in the digest (ADR-062). Moving either to the digest needs a partner's settings code when
+locks are on, and everyone hears about it. Loosening changes always email everyone at once. The
+ntfy push follows Settings, General, Extras.
+
 ## Locks
 
 Settings, Protection, Locks (ADR-028). Every loosening emails everyone at once, locks on or off

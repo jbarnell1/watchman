@@ -26,7 +26,7 @@ Watchman is for an adult who wants help staying away from explicit images and ha
 more people to walk with them. It judges the images on your screens on the device itself, blurs
 explicit ones as they appear, and tells the accountability partners you chose what happened: a
 calm weekly digest, and an alert at once when something explicit is confirmed or protection is
-turned off.
+turned off. Each partner can choose to get either kind of alert only in the weekly digest.
 
 It is an open alternative to the commercial accountability and filtering apps. The difference is
 where things live: each household runs its own server, reachable only on its own Tailscale

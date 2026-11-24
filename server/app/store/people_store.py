@@ -8,6 +8,8 @@ import uuid
 from app.clock import Clock, iso
 from app.store.ledger_store import Recorded
 
+TIMINGS = ("now", "digest")
+
 
 class PeopleStore(Recorded):
     def __init__(self, conn: sqlite3.Connection, clock: Clock) -> None:
@@ -37,6 +39,25 @@ class PeopleStore(Recorded):
     def update_person(self, person_id: str, name: str, email: str | None) -> None:
         self.conn.execute("UPDATE people SET name = ?, email = ? WHERE id = ?", (name, email, person_id))
         self.record("person_changed", {"name": name, "email": email}, person_id, person_id)
+
+    def set_alert_timing(self, who: str, row_id: str, image_alerts: str, protection_alerts: str,
+                         approval: dict | None = None) -> None:
+        """When a person or partner hears about explicit images and about protection turning off:
+        `now` (an email at once) or `digest` (only in the weekly digest), ADR-062."""
+        if who not in ("person", "partner") or image_alerts not in TIMINGS or protection_alerts not in TIMINGS:
+            raise ValueError("unknown alert timing")
+        table = "people" if who == "person" else "partners"
+        row = self.conn.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"no such {who}")
+        self.conn.execute(f"UPDATE {table} SET image_alerts = ?, protection_alerts = ? WHERE id = ?",
+                          (image_alerts, protection_alerts, row_id))
+        body = {"who": who, "name": row["name"], "image_alerts": image_alerts,
+                "protection_alerts": protection_alerts,
+                "was": {"image_alerts": row["image_alerts"], "protection_alerts": row["protection_alerts"]}}
+        if approval:
+            body["approval"] = approval
+        self.record("alert_timing", body, row_id if who == "person" else row["person_id"], row_id)
 
     # Logins
 

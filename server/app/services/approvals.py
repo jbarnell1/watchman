@@ -21,7 +21,7 @@ from app.services.context import Context
 from app.services.errors import ApiError, Forbidden, NotFound
 from app.store.ledger_store import digest
 
-KINDS = ("settings", "partner_add", "partner_remove")
+KINDS = ("settings", "partner_add", "partner_remove", "alert_timing")
 # A partner added through an approval still waits before their own codes and approvals count.
 PARTNER_WAITING = timedelta(days=3)
 
@@ -107,6 +107,9 @@ def _apply(ctx: Context, kind: str, params: dict, approval: dict, login: str) ->
                                params.get("login"), iso(ctx.clock.now() + PARTNER_WAITING), approval=approval)
     elif kind == "partner_remove":
         ctx.people.remove_partner(params["partner_id"], approval=approval)
+    elif kind == "alert_timing":
+        ctx.people.set_alert_timing(params["who"], params["id"], params["image_alerts"],
+                                    params["protection_alerts"], approval=approval)
 
 
 def waiting(ctx: Context) -> list[sqlite3.Row]:
