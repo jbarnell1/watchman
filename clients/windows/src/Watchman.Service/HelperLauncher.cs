@@ -47,14 +47,15 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
         try
         {
             using var p = Process.GetProcessById(pid);
-            if (!anyName && !string.Equals(p.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase))
+            var name = p.ProcessName;   // read before Kill: an exited process has no name
+            if (!anyName && !string.Equals(name, "WatchmanHelper", StringComparison.OrdinalIgnoreCase))
             {
-                log.LogWarning("the {Which} process {Pid} is {Name}, not the helper", which, pid, p.ProcessName);
+                log.LogWarning("the {Which} process {Pid} is {Name}, not the helper", which, pid, name);
                 return false;
             }
             p.Kill();
             var gone = p.WaitForExit(10_000);
-            log.LogWarning("stopped the {Which} helper {Pid} ({Name}): {Result}", which, pid, p.ProcessName,
+            log.LogWarning("stopped the {Which} helper {Pid} ({Name}): {Result}", which, pid, name,
                 gone ? "exited" : "still running after 10 s");
             return gone;
         }
