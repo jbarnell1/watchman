@@ -196,7 +196,8 @@ jobs:
           tags="-t $image:$V"
           [ "$PRE" = "false" ] && tags="$tags -t $image:latest"
           docker build --build-arg WATCHMAN_VERSION="$V" $tags server
-          [ "$PUBLISH" = "true" ] && docker push --all-tags "$image" || echo "dry run: not pushed"
+          # A refused push must fail the release, not read as a dry run.
+          if [ "$PUBLISH" = "true" ]; then docker push --all-tags "$image"; else echo "dry run: not pushed"; fi
 
   release:
     needs: [version, android, windows, extension, server]
