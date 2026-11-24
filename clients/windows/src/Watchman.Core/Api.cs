@@ -76,7 +76,8 @@ public sealed class Api : IDisposable
 
     public async Task<ModelsManifest> ManifestAsync() => await Read<ModelsManifest>(await _http.GetAsync("api/v1/models/manifest"));
 
-    public async Task<byte[]> ModelBytesAsync(string path)
+    /// <summary>A file the server names by path: a model, or a client in /downloads.</summary>
+    public async Task<byte[]> BytesAsync(string path)
     {
         var res = await _http.GetAsync(path.TrimStart('/'));
         if (!res.IsSuccessStatusCode) await Read<JsonElement>(res);

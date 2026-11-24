@@ -79,8 +79,12 @@ stamped with the tag's version, runs each one's tests, and publishes a GitHub Re
   them on the portal's Downloads page (ADR-060). The release job checks that the page lists them.
 
 To keep a household current, point an image watcher (Diun, What's Up Docker, Renovate) at
-`ghcr.io/jbarnell1/watchman-server` and update the server when it reports a new tag. The Devices
-page then shows which devices to update, and each one gets its installer from the server.
+`ghcr.io/jbarnell1/watchman-server` and update the server when it reports a new tag. Devices then
+update themselves within a heartbeat or two (ADR-061): Windows installs silently; Android shows
+"Watchman X is ready" and installs after one tap (later updates need none once Watchman has
+installed itself). A phone on mobile data waits for Wi-Fi. The Devices page shows any device still
+behind, and the timeline records each update. Settings, General, Updates turns this off.
+On Windows, `C:\ProgramData\Watchman\updates\install-<version>.log` is the installer's log.
 
 To release:
 

@@ -131,6 +131,9 @@ class Settings(BaseModel):
     ntfy_url: str = ""                  # optional push for the household admin
     adguard_url: str = ""               # informational, shown on the devices page
     second_opinion_device: str = "cpu"  # cpu | cuda
+    # Devices install the client this server carries when theirs is older (ADR-061). Off, they are
+    # only flagged on the Devices page and in the digest.
+    auto_update: bool = True
     setup_complete: bool = False
     policy_version: int = 1
 

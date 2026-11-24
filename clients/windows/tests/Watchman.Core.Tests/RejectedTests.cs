@@ -30,6 +30,7 @@ public class RejectedTests
         var state = new ServiceState(new MemoryStore(), new FakeClock()) { ApiFactory = p => new Api(p.Server, p.Token, server) };
         state.Pairing = new Pairing("https://watchman.test", "tok", "d", "p", "Example household");
         state.Policy = Policy.Defaults with { Version = 3 };
+        state.HelperSeenAt = state.HelperStateAt = state.Clock.Now;   // the helper has reported
         state.Queue.Push(new WatchmanEvent { Id = "e1", OccurredAt = "2026-11-01T00:00:00Z" });
         return state;
     }

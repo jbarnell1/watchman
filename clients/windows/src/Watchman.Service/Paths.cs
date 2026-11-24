@@ -4,6 +4,7 @@ public static class Paths
 {
     public static string DataDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchman");
     public static string ModelsDir => Path.Combine(DataDir, "models");
+    public static string UpdatesDir => Path.Combine(DataDir, "updates");
     public static string HelperExe => FindHelper(AppContext.BaseDirectory);
 
     /// <summary>The installer puts the service and the helper in sibling folders

@@ -114,7 +114,13 @@ data class EventsResponse(val accepted: List<String>, val duplicates: List<Strin
 data class JudgeResponse(val score: Double, val verdict: String)
 
 data class HeartbeatResponse(@SerializedName("policy_version") val policyVersion: Int,
-                             @SerializedName("paused_until") val pausedUntil: String?)
+                             @SerializedName("paused_until") val pausedUntil: String?,
+                             val update: UpdateOffer? = null)
+
+/** The client the household server carries, when it is newer than this one (ADR-061). */
+data class UpdateOffer(val version: String, val files: List<UpdateFile>)
+
+data class UpdateFile(val name: String, val variant: String, val sha256: String, val size: Long, val url: String)
 
 /** What the heartbeat reports; every field that turns off is an alert on the server (ADR-015). */
 data class DeviceState(

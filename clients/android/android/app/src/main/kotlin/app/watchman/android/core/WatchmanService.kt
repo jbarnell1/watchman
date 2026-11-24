@@ -210,6 +210,7 @@ class WatchmanService : Service() {
                 lastReported = current
                 lastError = null
                 state.rejected = false
+                Updater.consider(this, api, r.update)
                 val policy = state.policy
                 if (policy == null || policy.version != r.policyVersion || policy.pausedUntil != r.pausedUntil) {
                     state.policy = api.policy()

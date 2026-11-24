@@ -8,6 +8,34 @@ Newest first. Each ADR states the choice, why, and what was rejected.
 
 ## Decisions
 
+### ADR-061 - Devices update themselves from the household server
+**2026-11-24.** ADR-060 made the server carry its clients; a person still had to install each one.
+Now every heartbeat response carries `update`: when the device runs an older version of a client
+the server carries, it names the version and every variant's file, SHA-256, size and path under
+`/downloads`, and the device picks its own. The SHA-256 arrives over the authenticated device API
+and the device checks the file against it before anything runs, so the public `/downloads` route
+is only a carrier.
+- Windows: the service downloads the MSI into `ProgramData\Watchman\updates`, a folder closed to
+  everyone but SYSTEM and administrators (ordinary users may create files in new ProgramData
+  folders, and could otherwise swap the MSI after the check), and runs `msiexec /i /qn /norestart`.
+  The install stops the service and starts the new one. The running helper keeps its old code, so
+  the new service restarts a helper that says hello with another version, once per version.
+- Android: the app downloads its ABI's APK on an unmetered network and hands it to Android's
+  package installer. The first time Android asks for a tap, shown as a notification; once Watchman
+  has installed itself, Android 12 and later let it update without asking. Until the person allows
+  Watchman to install apps, the notification opens that setting instead.
+- A failed install is tried again after six hours, not at every heartbeat.
+- The server records `app_updated` on the timeline when a device's version changes; it is not an
+  alert. Restarts no longer look like protection turning off: after the Windows service starts, and
+  while it replaces the helper, it holds heartbeats until the helper reports its state (two minutes
+  after a start, one minute after a helper restart); a helper that does not come back is reported off.
+- `auto_update` (on by default, in Settings, General) turns the offer off; devices behind are
+  still flagged on the Devices page and in the digest.
+Rejected: devices asking GitHub (phones home, ADR-060); a separate update endpoint (the heartbeat
+already runs every five minutes and is authenticated); Android downloads on mobile data (an APK is
+about 25 MB). Windows code signing would let the service check the publisher as well as the hash;
+it waits on ADR-059's certificate decision.
+
 ### ADR-060 - The server carries its clients, and says which devices are behind
 **2026-11-24.** Devices need updates, but a device asking GitHub for them would phone home
 (working agreement 6). The release image now carries its own version's clients: the release job

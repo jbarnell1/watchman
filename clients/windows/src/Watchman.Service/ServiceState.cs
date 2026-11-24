@@ -13,6 +13,47 @@ public sealed class ServiceState(IStore store, IClock clock)
     public ConcurrentDictionary<string, byte[]> PendingImages { get; } = new();
     public ProtectionState Helper { get; set; } = ProtectionState.Off;
     public DateTimeOffset? HelperSeenAt { get; set; }
+    /// <summary>When the helper last said what it is doing (a state message), as opposed to any message.</summary>
+    public DateTimeOffset? HelperStateAt { get; set; }
+
+    /// <summary>No helper for two minutes means capture is off.</summary>
+    public static readonly TimeSpan HelperGrace = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RestartGrace = TimeSpan.FromSeconds(60);
+    private DateTimeOffset _holdUntil = clock.Now + HelperGrace;
+    private readonly HashSet<string> _restartedFor = new();
+
+    /// <summary>What heartbeats report, or null to hold the heartbeat. After the service starts (an
+    /// update, a reboot) and while an outdated helper is replaced, the helper has a moment to say what
+    /// it is doing before its absence counts as off; after that a missing helper is reported (ADR-061).</summary>
+    public ProtectionState? Reported()
+    {
+        var now = Clock.Now;
+        if (HelperStateAt is null && now < _holdUntil) return null;
+        var seen = HelperSeenAt;
+        if (seen is null || now - seen > HelperGrace) return ProtectionState.Off;
+        return Helper;
+    }
+
+    /// <summary>The installer replaces the helper's files but not the helper that is running, so a
+    /// helper of another version is restarted, once per version (ADR-061).</summary>
+    public event Action<int>? HelperRestartRequested;
+
+    public bool RestartOutdatedHelper(string helperVersion, int pid, string serviceVersion)
+    {
+        if (helperVersion == serviceVersion || pid <= 0) return false;
+        lock (_restartedFor) if (!_restartedFor.Add(helperVersion)) return false;
+        HelperStateAt = null;
+        _holdUntil = Clock.Now + RestartGrace;
+        HelperRestartRequested?.Invoke(pid);
+        return true;
+    }
+
+    /// <summary>The last update this PC tried, so a failing install is retried hours later, not every heartbeat.</summary>
+    public UpdateAttempt? LastUpdateAttempt
+    {
+        get => store.ReadJson<UpdateAttempt>("update.json");
+        set { if (value is null) store.Delete("update.json"); else store.WriteJson("update.json", value); }
+    }
     public event Action? Changed;
     private readonly object _metricsLock = new();
     private MetricsSnapshot _metrics = new();
@@ -125,7 +166,7 @@ public sealed class ServiceState(IStore store, IClock clock)
             if (!(File.Exists(path) && Sha256(path) == entry.Sha256))
             {
                 log($"downloading {entry.File} ({entry.Bytes} bytes)");
-                var bytes = await api.ModelBytesAsync(entry.Url);
+                var bytes = await api.BytesAsync(entry.Url);
                 var digest = Convert.ToHexStringLower(SHA256.HashData(bytes));
                 if (digest != entry.Sha256) throw new InvalidOperationException($"{entry.File} hash mismatch");
                 await File.WriteAllBytesAsync(path + ".tmp", bytes);

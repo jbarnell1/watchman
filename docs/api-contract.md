@@ -91,7 +91,17 @@ counts to the next one.
 `buckets` has 12 counts: samples at or below 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 and 1024 ms, then
 everything slower. The server merges these per device per household day and drops anything not in
 this shape; names are at most 48 characters and 64 of each kind. They are not kept in `last_state`.
-Response 200: `{"policy_version": 7, "paused_until": null, "server_time": "..."}`.
+Response 200: `{"policy_version": 7, "paused_until": null, "server_time": "...", "update": null}`.
+`update` (ADR-061) is null unless the device runs an older version of a client this server carries
+and the `auto_update` setting is on. Then it names the version and every variant's file:
+```json
+"update": {"version": "0.2.3", "files": [
+  {"name": "watchman-android-0.2.3-arm64-v8a.apk", "variant": "arm64-v8a", "sha256": "...",
+   "size": 26214400, "url": "/downloads/watchman-android-0.2.3-arm64-v8a.apk"}]}
+```
+The device picks its variant (Android its first supported ABI, Windows `x64`), downloads `url` from
+the server, and installs the file only if its SHA-256 matches. Clients that cannot install
+themselves (the extension, iOS) ignore it.
 The server compares `state` with the previous heartbeat: a field turning off raises a
 `protection_changed` event and an alert; `safe_mode: true` after `false` raises `tamper`.
 A field the device reported before and now leaves out or sends as `null` counts as turned off
@@ -210,6 +220,7 @@ Event `type` values and their `action`:
 | `protection_changed` | optional from clients; the server derives its own from heartbeats (ADR-015) and only those alert; `detail` has `{"field","from","to"}` | `none` |
 | `block_passed` | the person chose Continue anyway on a whole-screen block; the pictures stay blurred; alerts partners | `none` |
 | `tamper` | safe mode boot, capture declined, extension removed, service killed, clock jump; the server raises `silent`, `code_guessing` and `not_judging`; the extension sends `page_unblur` when a page keeps removing its covers | `none` |
+| `app_updated` | server only: a heartbeat's `app_version` differs from the previous one. `detail` `{"from","to"}`. Severity info, no email (ADR-061) | `none` |
 | `silence_ended` | server only: the first heartbeat after `tamper` `silent`. `detail` `{"from","minutes","protection"}` and, when the heartbeat had them, `screen_on_s`, `unwatched_s`, `judged` and `restarted_at` (ADR-058). Severity info; one email says it is back and what it did | `none` |
 | `protection_gap` | sent by a device when it starts again: `detail` `{"from","to","reason": "reboot" or "killed"}`. Severity protection (alerts) at 3 minutes or more, 10 after a reboot (ADR-051) | `none` |
 | `pause_started` / `pause_ended` | an unlock code took effect / expired | `none` |
