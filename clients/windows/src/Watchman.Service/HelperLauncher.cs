@@ -28,28 +28,56 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
         }
     }
 
-    /// <summary>Stops the helper that connected from <paramref name="pid"/> and starts the installed one.</summary>
+    /// <summary>Stops the outdated helper and starts the installed one. The helper allows one copy of
+    /// itself, so the old one must be gone first: the process that connected, or failing that every
+    /// running helper. Each step is logged as a warning so the event log shows what happened.</summary>
     private void Restart(int pid)
+    {
+        var stopped = Stop(pid, "connected");
+        if (!stopped)
+            foreach (var p in Process.GetProcessesByName("WatchmanHelper")) stopped |= Stop(p.Id, "running");
+        if (!stopped && HelperRunning()) { log.LogWarning("could not stop the outdated helper; it keeps running"); return; }
+        Launch(alwaysLog: true);
+    }
+
+    private bool Stop(int pid, string which)
     {
         try
         {
-            using var old = Process.GetProcessById(pid);
-            if (!string.Equals(old.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase)) return;
-            old.Kill();
-            old.WaitForExit(10_000);
+            using var p = Process.GetProcessById(pid);
+            if (!string.Equals(p.ProcessName, "WatchmanHelper", StringComparison.OrdinalIgnoreCase))
+            {
+                log.LogWarning("the {Which} process {Pid} is {Name}, not the helper", which, pid, p.ProcessName);
+                return false;
+            }
+            p.Kill();
+            var gone = p.WaitForExit(10_000);
+            log.LogWarning("stopped the {Which} helper {Pid}: {Result}", which, pid, gone ? "exited" : "still running after 10 s");
+            return gone;
         }
-        catch (ArgumentException) { }   // already gone
-        catch (Exception ex) { log.LogWarning(ex, "stop helper {Pid}", pid); }
-        Launch();
+        catch (ArgumentException)
+        {
+            log.LogWarning("the {Which} helper {Pid} is not running", which, pid);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "stop the {Which} helper {Pid}", which, pid);
+            return false;
+        }
     }
 
     private static bool HelperRunning() => Process.GetProcessesByName("WatchmanHelper").Length > 0;
 
-    private void Launch()
+    private void Launch(bool alwaysLog = false)
     {
         if (!File.Exists(Paths.HelperExe)) { log.LogWarning("helper not found at {Path}", Paths.HelperExe); return; }
         var session = WTSGetActiveConsoleSessionId();
-        if (session == 0xFFFFFFFF) return; // nobody is signed in
+        if (session == 0xFFFFFFFF)  // nobody is signed in
+        {
+            if (alwaysLog) log.LogWarning("nobody is signed in at the console; the helper starts at the next sign-in");
+            return;
+        }
         if (!WTSQueryUserToken(session, out var token)) { log.LogWarning("no user token for session {Session}", session); return; }
         try
         {
@@ -57,7 +85,12 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
             var si = new STARTUPINFO { cb = Marshal.SizeOf<STARTUPINFO>(), lpDesktop = "winsta0\\default" };
             var ok = CreateProcessAsUser(token, null, $"\"{Paths.HelperExe}\"", IntPtr.Zero, IntPtr.Zero, false,
                 CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE, env, Path.GetDirectoryName(Paths.HelperExe), ref si, out var pi);
-            if (ok) { CloseHandle(pi.hProcess); CloseHandle(pi.hThread); log.LogInformation("helper started in session {Session}", session); }
+            if (ok)
+            {
+                CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+                if (alwaysLog) log.LogWarning("helper restarted as {Pid} in session {Session}", pi.dwProcessId, session);
+                else log.LogInformation("helper started in session {Session}", session);
+            }
             else log.LogWarning("CreateProcessAsUser failed: {Error}", Marshal.GetLastWin32Error());
             if (env != IntPtr.Zero) DestroyEnvironmentBlock(env);
         }
