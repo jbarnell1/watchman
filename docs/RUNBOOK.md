@@ -75,6 +75,12 @@ stamped with the tag's version, runs each one's tests, and publishes a GitHub Re
 - `watchman-extension-chrome-<version>.zip` and `watchman-extension-firefox-<version>.zip`;
 - `SHA256SUMS`;
 - the server image `ghcr.io/jbarnell1/watchman-server:<version>`, plus `:latest` for a full release.
+  The image carries that version's clients (all but the x86_64 APK) under `/downloads` and offers
+  them on the portal's Downloads page (ADR-060). The release job checks that the page lists them.
+
+To keep a household current, point an image watcher (Diun, What's Up Docker, Renovate) at
+`ghcr.io/jbarnell1/watchman-server` and update the server when it reports a new tag. The Devices
+page then shows which devices to update, and each one gets its installer from the server.
 
 To release:
 

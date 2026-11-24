@@ -116,6 +116,10 @@ p { margin: 0; }
 .watch-days { display: grid; grid-template-columns: 160px repeat(7, minmax(0, 1fr)); gap: 12px; font-size: var(--fs-small); color: var(--muted); }
 .watch-days span { padding-left: 2px; }
 
+/* Downloads */
+.downloads .t2.num { overflow-wrap: anywhere; }
+.downloads h2 { margin-top: 24px; }
+
 /* Pills and chips */
 .pill { display: inline-block; font-size: 11px; line-height: 18px; font-weight: 500; padding: 0 7px; border-radius: 4px; white-space: nowrap; background: var(--pill-neu-bg); color: var(--pill-neu-ink); }
 .pill.pos { background: var(--pill-pos-bg); color: var(--pill-pos-ink); }

@@ -32,7 +32,7 @@
     <tr class="{% if d.revoked_at %}dim{% endif %}">
       <td>{{ d.name }}</td>
       <td>{{ d.platform }} <span class="t2">{{ d.kind }}</span></td>
-      <td class="num">{{ d.app_version or '–' }}</td>
+      <td class="num">{{ d.app_version or '–' }}{% if updates.get(d.id) %} <a class="pill warn" href="/downloads">update to {{ updates[d.id] }}</a>{% endif %}</td>
       <td>{{ when(d.last_heartbeat_at) or 'never' }} <span class="t2">{{ ago(d.last_heartbeat_at) if d.last_heartbeat_at }}</span></td>
       <td>
         {% if d.revoked_at %}<span class="pill">Revoked {{ when(d.revoked_at, '%d %b') }}</span>
@@ -48,7 +48,7 @@
   </table>
 </section>
 {% else %}
-<section class="panel"><p class="empty">No devices yet. Create a pairing code, then pair the app, the Windows service or a browser extension with it.</p></section>
+<section class="panel"><p class="empty">No devices yet. Install a client from <a href="/downloads">Downloads</a>, create a pairing code, then pair the app, the Windows service or a browser extension with it.</p></section>
 {% endif %}
 
 {% for d in devices if work.get(d.id) %}{% set w = work[d.id] %}
