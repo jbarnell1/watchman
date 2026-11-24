@@ -144,15 +144,17 @@ public class UpdaterTests : IDisposable
     {
         var clock = new FakeClock();
         var state = new ServiceState(new MemoryStore(), clock);
-        var restarted = new List<int>();
-        state.HelperRestartRequested += restarted.Add;
         state.HelperSeenAt = state.HelperStateAt = clock.Now;
         state.Helper = new ProtectionState(true, "granted", true);
 
         Assert.False(state.RestartOutdatedHelper("0.3.0", 42, "0.3.0"));
+        Assert.Null(state.TakeHelperRestart());
+        // The old helper says hello before the launcher runs; the request waits for it.
         Assert.True(state.RestartOutdatedHelper("0.2.2", 42, "0.3.0"));
         Assert.False(state.RestartOutdatedHelper("0.2.2", 43, "0.3.0"));   // never a restart loop
-        Assert.Equal([42], restarted);
+        Assert.True(state.HelperWake.Wait(0));
+        Assert.Equal(42, state.TakeHelperRestart());
+        Assert.Null(state.TakeHelperRestart());
 
         state.Helper = ProtectionState.Off;                  // the old helper disconnected
         Assert.Null(state.Reported());

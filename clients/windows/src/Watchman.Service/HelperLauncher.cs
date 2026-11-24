@@ -11,11 +11,11 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        state.HelperRestartRequested += pid => _ = Task.Run(() => Restart(pid), ct);
         while (!ct.IsCancellationRequested)
         {
             try
             {
+                if (state.TakeHelperRestart() is int pid) Restart(pid);
                 var seen = state.HelperSeenAt;
                 var stale = seen is null || state.Clock.Now - seen > TimeSpan.FromSeconds(45);
                 if (stale && !HelperRunning()) Launch();
@@ -24,7 +24,7 @@ public sealed class HelperLauncher(ServiceState state, ILogger<HelperLauncher> l
             {
                 log.LogWarning(ex, "launch helper");
             }
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            await state.HelperWake.WaitAsync(TimeSpan.FromSeconds(15), ct);
         }
     }
 

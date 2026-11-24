@@ -35,17 +35,36 @@ public sealed class ServiceState(IStore store, IClock clock)
     }
 
     /// <summary>The installer replaces the helper's files but not the helper that is running, so a
-    /// helper of another version is restarted, once per version (ADR-061).</summary>
-    public event Action<int>? HelperRestartRequested;
-
+    /// helper of another version is restarted, once per version (ADR-061). The request waits here
+    /// for the launcher: right after an install the old helper says hello before the launcher runs.</summary>
     public bool RestartOutdatedHelper(string helperVersion, int pid, string serviceVersion)
     {
         if (helperVersion == serviceVersion || pid <= 0) return false;
-        lock (_restartedFor) if (!_restartedFor.Add(helperVersion)) return false;
+        lock (_restartedFor)
+        {
+            if (!_restartedFor.Add(helperVersion)) return false;
+            _pendingRestart = pid;
+        }
         HelperStateAt = null;
         _holdUntil = Clock.Now + RestartGrace;
-        HelperRestartRequested?.Invoke(pid);
+        HelperWake.Release();
         return true;
+    }
+
+    private int? _pendingRestart;
+
+    /// <summary>Released when the launcher has work, so it need not wait for its next round.</summary>
+    public SemaphoreSlim HelperWake { get; } = new(0);
+
+    /// <summary>The helper process to stop and start again, if one is waiting.</summary>
+    public int? TakeHelperRestart()
+    {
+        lock (_restartedFor)
+        {
+            var pid = _pendingRestart;
+            _pendingRestart = null;
+            return pid;
+        }
     }
 
     /// <summary>The last update this PC tried, so a failing install is retried hours later, not every heartbeat.</summary>
